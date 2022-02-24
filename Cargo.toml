@@ -1,0 +1,26 @@
+[package]
+name = "simplefs"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["staticlib"]
+name = "simplefs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+libc = '*'
+bit-vec = '*'
+downcast-rs = '*'
+lazy_static = '*'
+#syscalls = { version = "0.3", default-features = false }
+rocksdb = '*'
+nix = '0.23.0'
+
+[profile.release]
+panic="abort"
+
+
+[profile.dev]
+panic="abort"
