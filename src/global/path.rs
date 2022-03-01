@@ -1,9 +1,10 @@
 use std::{fs, sync::Arc, path::Components};
 
 use super::{util::path_util::is_absolute, error_msg::error_msg};
-use crate::client::simplefs_context::ClientContext;
+use crate::client::client_context::ClientContext;
 
 static SEPERATOR: char = '/';
+pub static max_length: i64 = 4096;
 pub struct Stat{
     st_dev: u32,
     st_ino: u16,

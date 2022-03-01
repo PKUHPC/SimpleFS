@@ -1,6 +1,5 @@
 use bit_vec::BitVec;
 use std::{sync::{Mutex, atomic::AtomicBool, Arc}, collections::HashMap};
-use downcast_rs::{DowncastSync, impl_downcast};
 
 use crate::global::error_msg::error_msg;
 
@@ -43,6 +42,9 @@ pub struct SFSDirEntry{
     type_: FileType
 }
 impl SFSDirEntry{
+    pub fn new() -> SFSDirEntry{
+        SFSDirEntry { name_: "".to_string(), type_: FileType::SFS_REGULAR }
+    }
     pub fn get_name(&self) -> String{
         self.name_.clone()
     }
@@ -63,53 +65,14 @@ fn to_index(flag: OpenFileFlags) -> usize{
         OpenFileFlags::FlagCount => 7
     }
 }
-pub trait SFSFile: DowncastSync {
-    fn get_path(&self) -> String;
-    fn set_path(&mut self, new_path: String);
-    fn get_pos(&self) -> i64;
-    fn set_pos(&mut self, new_pos: i64);
-    fn get_flag(&self, flag: OpenFileFlags) -> bool;
-    fn set_flag(&mut self, flag: OpenFileFlags, new_value: bool);
-    fn get_type(&self) -> FileType;
-}
-impl_downcast!(sync SFSFile);
 pub struct OpenFile{
     type_: FileType,
     path_: String,
     flags_: Arc<Mutex<BitVec>>,
     pos_: Arc<Mutex<i64>>,
+    entries_: Vec<Arc<SFSDirEntry>> // for directory
     //pos_mutex_: Mutex<i32>,
     //flag_mutex_: Mutex<i32>
-}
-impl SFSFile for OpenFile{
-    fn get_path(&self) -> String{
-        self.path_.clone()
-    }
-    fn set_path(&mut self, new_path: String){
-        self.path_ = new_path;
-    }
-    fn get_pos(&self) -> i64{
-        *self.pos_.lock().unwrap()
-    }
-    fn set_pos(&mut self, new_pos: i64){
-        *self.pos_.lock().unwrap() = new_pos;
-    }
-    fn get_flag(&self, flag: OpenFileFlags) -> bool{
-        let res = self.flags_.lock().unwrap().get(to_index(flag));
-        if let Some(b) = res{
-            return b;
-        }
-        else{
-            print!("error::client::openfile::flag - invlaid flag detected");
-            return false;
-        }
-    }
-    fn set_flag(&mut self, flag: OpenFileFlags, new_value: bool){
-        self.flags_.lock().unwrap().set(to_index(flag), new_value);
-    }
-    fn get_type(&self) -> FileType{
-        self.type_.clone()
-    }
 }
 impl OpenFile{
     pub fn new(_path: String, _flags: i32, _type: FileType) -> OpenFile{
@@ -138,31 +101,25 @@ impl OpenFile{
             path_: _path,
             flags_: Arc::new(Mutex::new(flag_vec)),
             pos_: Arc::new(Mutex::new(0)),
+            entries_: Vec::new()
             //pos_mutex_: Mutex::new(0),
             //flag_mutex_: Mutex::new(0)
         }
     }
-}
-
-pub struct OpenDir{
-    file_info_: OpenFile,
-    entries_: Vec<Arc<SFSDirEntry>>
-}
-impl SFSFile for OpenDir{
-    fn get_path(&self) -> String{
-        self.file_info_.path_.clone()
+    pub fn get_path(&self) -> String{
+        self.path_.clone()
     }
-    fn set_path(&mut self, new_path: String){
-        self.file_info_.path_ = new_path;
+    pub fn set_path(&mut self, new_path: String){
+        self.path_ = new_path;
     }
-    fn get_pos(&self) -> i64{
-        *self.file_info_.pos_.lock().unwrap()
+    pub fn get_pos(&self) -> i64{
+        *self.pos_.lock().unwrap()
     }
-    fn set_pos(&mut self, new_pos: i64){
-        *self.file_info_.pos_.lock().unwrap() = new_pos;
+    pub fn set_pos(&mut self, new_pos: i64){
+        *self.pos_.lock().unwrap() = new_pos;
     }
-    fn get_flag(&self, flag: OpenFileFlags) -> bool{
-        let res = self.file_info_.flags_.lock().unwrap().get(to_index(flag));
+    pub fn get_flag(&self, flag: OpenFileFlags) -> bool{
+        let res = self.flags_.lock().unwrap().get(to_index(flag));
         if let Some(b) = res{
             return b;
         }
@@ -171,32 +128,34 @@ impl SFSFile for OpenDir{
             return false;
         }
     }
-    fn set_flag(&mut self, flag: OpenFileFlags, new_value: bool){
-        self.file_info_.flags_.lock().unwrap().set(to_index(flag), new_value);
+    pub fn set_flag(&mut self, flag: OpenFileFlags, new_value: bool){
+        self.flags_.lock().unwrap().set(to_index(flag), new_value);
     }
-    fn get_type(&self) -> FileType{
-        self.file_info_.type_.clone()
-    }
-}
-impl OpenDir{
-    pub fn new(path: String) -> OpenDir{
-        OpenDir{
-            file_info_: OpenFile::new(path, 0, FileType::SFS_DIRECTORY),
-            entries_: Vec::new()
-        }
+    pub fn get_type(&self) -> FileType{
+        self.type_.clone()
     }
     pub fn add(&mut self, name: String, file_type: FileType){
-        self.entries_.push(Arc::new(SFSDirEntry{name_: name, type_: file_type}));
+        match self.type_ {
+            FileType::SFS_REGULAR => { return; }
+            FileType::SFS_DIRECTORY => { self.entries_.push(Arc::new(SFSDirEntry{name_: name, type_: file_type})); }
+        }
     }
     pub fn getdent(&self, pos: i32) -> Arc<SFSDirEntry>{
-        Arc::clone(&self.entries_[pos as usize])
+        match self.type_ {
+            FileType::SFS_REGULAR => { Arc::new(SFSDirEntry::new()) }
+            FileType::SFS_DIRECTORY => { Arc::clone(&self.entries_[pos as usize]) }
+        }
     }
     pub fn get_size(&self) -> usize{
-        self.entries_.len()
+        match self.type_ {
+            FileType::SFS_REGULAR => { 0 }
+            FileType::SFS_DIRECTORY => {self.entries_.len()}
+        }
     }
 }
+
 pub struct OpenFileMap{
-    files_: Arc<Mutex<HashMap<i32, Arc<dyn SFSFile>>>>,
+    files_: Arc<Mutex<HashMap<i32, Arc<Mutex<OpenFile>>>>>,
     //files_mutex_: Mutex<i32>,
     fd_idx_: Arc<Mutex<i32>>,
     //fd_idx_mutex_: Mutex<i32>,
@@ -211,7 +170,7 @@ impl OpenFileMap {
             fd_validation_needed_ : AtomicBool::new(false)
         }
     }
-    pub fn get(&self, fd: i32) -> Option<Arc<dyn SFSFile>>{
+    pub fn get(&self, fd: i32) -> Option<Arc<Mutex<OpenFile>>>{
         if let Some(f) = self.files_.lock().unwrap().get(&fd){
             Some(Arc::clone(f))
         }
@@ -220,11 +179,11 @@ impl OpenFileMap {
             None
         }
     }
-    pub fn get_dir(&self, dirfd: i32) -> Option<Arc<OpenDir>>{
+    pub fn get_dir(&self, dirfd: i32) -> Option<Arc<Mutex<OpenFile>>>{
         if let Some(f) = self.get(dirfd){
-            match f.get_type() {
+            match f.lock().unwrap().get_type() {
                 FileType::SFS_REGULAR => None,
-                FileType::SFS_DIRECTORY => Some(f.downcast_arc::<OpenDir>().map_err(|_| "Shouldn't happen.").unwrap())
+                FileType::SFS_DIRECTORY => Some(Arc::clone(&f))
             }
 
         }
@@ -257,7 +216,7 @@ impl OpenFileMap {
     pub fn get_fd_idx(&self) -> i32{
         return *self.fd_idx_.lock().unwrap()
     }
-    pub fn add(&mut self, file: Arc<OpenFile>) -> i32{
+    pub fn add(&mut self, file: Arc<Mutex<OpenFile>>) -> i32{
         let fd = self.safe_generate_fd_idx();
         (*self.files_.lock().unwrap()).insert(fd, file);
         return fd;

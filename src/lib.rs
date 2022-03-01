@@ -5,24 +5,9 @@ mod server;
 
 #[cfg(test)]
 mod tests {
-    use std::fs;
+    use std::sync::Mutex;
 
-    use bit_vec::*;
-
-    use crate::global::error_msg::error_msg;
-    use crate::server;
-    use crate::{global::util::path_util, client::simplefs_context::ClientContext};
-    use crate::global::path;
-
-    fn get_param_for_increase_size(op_s: &String) -> Option<(i64, bool)>{
-        let s = op_s.split('|');
-        let vec = s.collect::<Vec<&str>>();
-        if vec.len() != 3{
-            error_msg("server::merge::get_param_for_increase_size".to_string(), "invalid string format".to_string());
-            return None;
-        }
-        Some((vec[1].parse::<i64>().unwrap(), vec[2].parse::<bool>().unwrap()))
-    }
+    use crate::{server::{storage::data::chunk_storage::{ChunkStorage, ChunkStat}, self}, client::client_openfile::OpenFile};
     #[test]
     fn it_works() {
         /* 
@@ -46,6 +31,28 @@ mod tests {
         let resolve_res = path::resolve("/temp/./sfs/../sfs/./data/file.txt".to_string(), true);
         print!("{}, {}", resolve_res.0, resolve_res.1);
         */
-        print!("{}\n", "a/b/b/c/s/e/f/d/s".to_string().replace("/", ":"));
+        /*
+        let cs = ChunkStorage::new(&"/home/dev/Desktop/storage".to_string(), 4096).unwrap();
+        let s = String::from("hello file system");
+        let buf = s.as_bytes();
+        //println!("{}", cs.absolute(&ChunkStorage::get_chunks_dir(&"/data/cnk".to_string())));
+        let file_path = "/data/cnk".to_string();
+        cs.init_chunk_space(&file_path);
+        if let Ok(wrote) = cs.write_chunk(&file_path, 1, buf, buf.len() as u64, 0){
+            assert_eq!(wrote, buf.len() as u64);
+            let mut read_buf = [0 as u8; 12];
+            cs.read_chunk(&file_path, 1, &mut read_buf, 12, 0);
+            print!("{}\n", String::from_utf8(read_buf.to_vec()).unwrap());
+        }
+        else{
+            print!("????\n");
+        }
+        */
+        //server::main::main();
+        let f = OpenFile::new("".to_string(), 0, crate::client::client_openfile::FileType::SFS_REGULAR);
+        let s = Mutex::new(f);
+        let a = s.lock().unwrap().get_pos();
+        s.lock().unwrap().set_pos(a + 20);
+        print!("{}\n", s.lock().unwrap().get_pos());
     }
 }

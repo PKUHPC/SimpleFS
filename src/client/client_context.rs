@@ -4,15 +4,14 @@ use std::sync::{Mutex, Arc, MutexGuard};
 
 use bit_vec::*;
 
-use crate::client::simplefs_openfile::OpenFileMap;
-use crate::client::simplefs_distributor::SimpleHashDistributor;
-use crate::client::simplefs_config::SFSConfig;
-use crate::client::simplefs_endpoint::SFSEndpoint;
+use crate::client::client_openfile::OpenFileMap;
+use crate::client::client_distributor::SimpleHashDistributor;
+use crate::client::client_config::SFSConfig;
+use crate::client::client_endpoint::SFSEndpoint;
 use crate::global::error_msg::error_msg;
 use crate::global::path;
 use crate::global::util::path_util::{is_absolute, has_trailing_slash, split_path, is_relative};
 
-use super::simplefs_openfile::SFSFile;
 
 /*
 #[link(name = "syscall_no_intercept", kind = "static")]
@@ -39,7 +38,7 @@ pub enum RelativizeStatus {
 }
 
 pub struct ClientContext{
-    open_file_map_: Arc<OpenFileMap>,
+    open_file_map_: Arc<Mutex<OpenFileMap>>,
     distributor_: Arc<SimpleHashDistributor>,
     fs_config_: Arc<SFSConfig>,
 
@@ -62,7 +61,7 @@ pub struct ClientContext{
 }
 lazy_static!{
     static ref CTX: Mutex<ClientContext> = Mutex::new(ClientContext{
-        open_file_map_: Arc::new(OpenFileMap::new()),
+        open_file_map_: Arc::new(Mutex::new(OpenFileMap::new())),
         distributor_: Arc::new(SimpleHashDistributor::init()),
         fs_config_: Arc::new(SFSConfig::init()),
         cwd_: "".to_string(),
@@ -162,12 +161,12 @@ impl ClientContext{
                 path = self.cwd_.clone() + &raw_path.clone();
             }
             else{
-                if !self.open_file_map_.exist(dirfd){
+                if !self.open_file_map_.lock().unwrap().exist(dirfd){
                     return (RelativizeStatus::FdUnknown, "".to_string());
                 }
-                if let Some(dir) = self.open_file_map_.get_dir(dirfd){
+                if let Some(dir) = self.open_file_map_.lock().unwrap().get_dir(dirfd){
                     path = self.get_mountdir().clone();
-                    path = dir.get_path() + &path;
+                    path = dir.lock().unwrap().get_path() + &path;
                     path.push(SEPERATOR);
                     path.push_str(&raw_path);
                 }
@@ -207,7 +206,7 @@ impl ClientContext{
         }
         path::resolve(path, resolve_last_link)
     }
-    pub fn get_ofm(&self) -> Arc<OpenFileMap>{
+    pub fn get_ofm(&self) -> Arc<Mutex<OpenFileMap>>{
         Arc::clone(&self.open_file_map_)
     }
     pub fn set_distributor(&mut self, d: SimpleHashDistributor){

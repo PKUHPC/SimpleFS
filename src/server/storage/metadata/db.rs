@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use rocksdb::{DB, Options, WriteOptions};
 
-use crate::{server::storage::metadata::merge, global::{util::path_util::{is_absolute, has_trailing_slash}, error_msg::error_msg, metadata::{Metadata, self}}};
+use crate::{server::storage::metadata::merge, global::{util::path_util::{is_absolute, has_trailing_slash}, error_msg::error_msg, metadata::{Metadata, self, S_ISDIR}}};
 static use_write_ahead_log: bool = false;
 
 pub struct MetadataDB{
@@ -34,6 +34,7 @@ impl MetadataDB{
             })
         }
         else{
+            error_msg("server::storage::metadata_db::new".to_string(), "fail to open database".to_string());
             None
         }
     }
@@ -117,8 +118,8 @@ impl MetadataDB{
             if name.len() == 0{
                 continue;
             }
-            if let Ok(md) = Metadata::deserialize(String::from_utf8(v.to_vec()).unwrap()){
-                entries.push((name, md.get_mode() & metadata::S_IFDIR != 0));
+            if let Ok(md) = Metadata::deserialize(&String::from_utf8(v.to_vec()).unwrap()){
+                entries.push((name, S_ISDIR(md.get_mode())));
             }
             else {continue;}
         }

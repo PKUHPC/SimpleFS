@@ -1,6 +1,6 @@
 use rocksdb::MergeOperands;
 
-use crate::{client::simplefs_openfile::OpenDir, global::{error_msg::error_msg, metadata::Metadata}};
+use crate::{global::{error_msg::error_msg, metadata::Metadata}};
 enum OperandID{
     Create,
     IncreaseSize,
@@ -42,7 +42,7 @@ pub fn full_merge(new_key: &[u8],
     -> Option<Vec<u8>> {
     let mut md = Metadata::new();
     if let Some(val) = existing_val{
-        if let Ok(data) = Metadata::deserialize(String::from_utf8((&val).to_vec()).unwrap()){
+        if let Ok(data) = Metadata::deserialize(&String::from_utf8((&val).to_vec()).unwrap()){
             md = data;
         }
         else{
@@ -59,7 +59,7 @@ pub fn full_merge(new_key: &[u8],
         let op_s = String::from_utf8(iter.next().unwrap().to_vec()).unwrap();
         match get_id_from_op(&op_s){
             OperandID::Create => {
-                if let Ok(data) = Metadata::deserialize(op_s){
+                if let Ok(data) = Metadata::deserialize(&op_s){
                     md = data;
                 }
                 else{

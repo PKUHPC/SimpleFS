@@ -52,7 +52,7 @@ pub fn absolute_to_relative(mut root_path: String, absolute_path: String) -> Str
     }
     sliced[1..sliced.len()].to_string()
 }
-pub fn dirname(path: String) -> String{
+pub fn dirname(path: &String) -> String{
     if path.len() > 1 && has_trailing_slash(&path){
         error_msg("global::util::path_util::dirname".to_string(), "path can't end with seperator".to_string());
         return "".to_string();

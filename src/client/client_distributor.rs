@@ -1,10 +1,10 @@
 use std::{collections::HashMap, sync::Arc};
 
-trait Distributor{
+pub trait Distributor{
     fn localhost(&self, ) -> u32;
-    fn locate_date(&self, path: String, chunk_id: u32) -> u32;
-    fn locate_file_metadata(&self, path: String) -> u32;
-    fn locate_dir_metadata(&self, path: String) -> Arc<Vec<u32>>;
+    fn locate_date(&self, path: &String, chunk_id: u32) -> u32;
+    fn locate_file_metadata(&self, path: &String) -> u32;
+    fn locate_dir_metadata(&self, path: &String) -> Arc<Vec<u32>>;
 }
 
 pub struct SimpleHashDistributor{
@@ -18,15 +18,15 @@ impl Distributor for SimpleHashDistributor{
         self.localhost_
     }
 
-    fn locate_date(&self, path: String, chunk_id: u32) -> u32 {
-        self.str_hash_.get(&(path + &chunk_id.to_string())).unwrap() % self.hosts_size_
+    fn locate_date(&self, path: &String, chunk_id: u32) -> u32 {
+        self.str_hash_.get(&(path.clone() + &chunk_id.to_string())).unwrap() % self.hosts_size_
     }
 
-    fn locate_file_metadata(&self, path: String) -> u32 {
-        self.str_hash_.get(&path).unwrap() % self.hosts_size_
+    fn locate_file_metadata(&self, path: &String) -> u32 {
+        self.str_hash_.get(path).unwrap() % self.hosts_size_
     }
 
-    fn locate_dir_metadata(&self, path: String) -> Arc<Vec<u32>> {
+    fn locate_dir_metadata(&self, path: &String) -> Arc<Vec<u32>> {
         Arc::clone(&self.all_hosts_)
     }
 }
@@ -49,15 +49,15 @@ impl Distributor for LocalOnlyDistributor{
         self.localhost_
     }
 
-    fn locate_date(&self, path: String, chunk_id: u32) -> u32 {
+    fn locate_date(&self, path: &String, chunk_id: u32) -> u32 {
         self.localhost_
     }
 
-    fn locate_file_metadata(&self, path: String) -> u32 {
+    fn locate_file_metadata(&self, path: &String) -> u32 {
         self.localhost_
     }
 
-    fn locate_dir_metadata(&self, path: String) -> Arc<Vec<u32>> {
+    fn locate_dir_metadata(&self, path: &String) -> Arc<Vec<u32>> {
         Arc::new(vec![self.localhost_])
     }
 }
@@ -73,15 +73,15 @@ impl Distributor for ForwardDistributor{
         self.fwd_host_
     }
 
-    fn locate_date(&self, path: String, chunk_id: u32) -> u32 {
+    fn locate_date(&self, path: &String, chunk_id: u32) -> u32 {
         self.fwd_host_
     }
 
-    fn locate_file_metadata(&self, path: String) -> u32 {
-        self.str_hash_.get(&path).unwrap() % self.hosts_size_
+    fn locate_file_metadata(&self, path: &String) -> u32 {
+        self.str_hash_.get(path).unwrap() % self.hosts_size_
     }
 
-    fn locate_dir_metadata(&self, path: String) -> Arc<Vec<u32>> {
+    fn locate_dir_metadata(&self, path: &String) -> Arc<Vec<u32>> {
         Arc::clone(&self.all_hosts_)
     }
 }

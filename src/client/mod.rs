@@ -1,6 +1,9 @@
-pub mod simplefs_syscall;
-pub mod simplefs_context;
-pub mod simplefs_openfile;
-pub mod simplefs_distributor;
-pub mod simplefs_config;
-pub mod simplefs_endpoint;
+pub mod client_syscall;
+pub mod client_context;
+pub mod client_openfile;
+pub mod client_distributor;
+pub mod client_config;
+pub mod client_endpoint;
+pub mod client_util;
+
+pub mod network;

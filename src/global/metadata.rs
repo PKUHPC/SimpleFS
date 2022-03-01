@@ -1,29 +1,35 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::fmt;
 
-pub static S_IFMT: i32 = 0170000;  /* type of file */
-pub static S_IFIFO: i32 = 0010000;  /* named pipe (fifo) */
-pub static S_IFCHR: i32 = 0020000;  /* character special */
-pub static S_IFDIR: i32 = 0040000;  /* directory */
-pub static S_IFBLK: i32 = 0060000;  /* block special */
-pub static S_IFREG: i32 = 0100000;  /* regular */
-pub static S_IFLNK: i32 = 0120000;  /* symbolic link */
-pub static S_IFSOCK: i32 = 0140000;  /* socket */
-pub static S_IFWHT: i32 = 0160000;  /* whiteout */
-pub static S_ISUID: i32 = 0004000;  /* set user id on execution */
-pub static S_ISGID: i32 = 0002000;  /* set group id on execution */
-pub static S_ISVTX: i32 = 0001000;  /* save swapped text even after use */
-pub static S_IRUSR: i32 = 0000400;  /* read permission, owner */
-pub static S_IWUSR: i32 = 0000200;  /* write permission, owner */
-pub static S_IXUSR: i32 = 0000100;  /* execute/search permission, owner */
+pub static S_IFMT: u32 = 0170000;  /* type of file */
+pub static S_IFIFO: u32 = 0010000;  /* named pipe (fifo) */
+pub static S_IFCHR: u32 = 0020000;  /* character special */
+pub static S_IFDIR: u32 = 0040000;  /* directory */
+pub static S_IFBLK: u32 = 0060000;  /* block special */
+pub static S_IFREG: u32 = 0100000;  /* regular */
+pub static S_IFLNK: u32 = 0120000;  /* symbolic link */
+pub static S_IFSOCK: u32 = 0140000;  /* socket */
+pub static S_IFWHT: u32 = 0160000;  /* whiteout */
+pub static S_ISUID: u32 = 0004000;  /* set user id on execution */
+pub static S_ISGID: u32 = 0002000;  /* set group id on execution */
+pub static S_ISVTX: u32 = 0001000;  /* save swapped text even after use */
+pub static S_IRUSR: u32 = 0000400;  /* read permission, owner */
+pub static S_IWUSR: u32 = 0000200;  /* write permission, owner */
+pub static S_IXUSR: u32 = 0000100;  /* execute/search permission, owner */
 
+pub fn S_ISREG(mode: u32) -> bool{
+    mode & S_IFREG != 0
+}
+pub fn S_ISDIR(mode: u32) -> bool{
+    mode & S_IFDIR != 0
+}
 #[derive(Debug)]
 pub struct Metadata{
     access_time_: i64,
     modify_time_: i64,
     change_time_: i64,
-    mode_: i32,
-    link_count_: i32,
+    mode_: u32,
+    link_count_: u64,
     size_: i64,
     blocks_: i64
 }
@@ -44,7 +50,7 @@ impl Metadata{
             blocks_: 0
         }
     }
-    pub fn deserialize(binary_str: String) -> Result<Metadata, i32>{
+    pub fn deserialize(binary_str: &String) -> Result<Metadata, i32>{
         let s = binary_str.split('|');
         let vec = s.collect::<Vec<&str>>();
         if vec.len() != 7{
@@ -55,8 +61,8 @@ impl Metadata{
             let access_time = vec[3].parse::<i64>().unwrap();
             let modify_time = vec[4].parse::<i64>().unwrap();
             let change_time = vec[5].parse::<i64>().unwrap();
-            let mode = vec[1].parse::<i32>().unwrap();
-            let link_count = vec[6].parse::<i32>().unwrap();
+            let mode = vec[1].parse::<u32>().unwrap();
+            let link_count = vec[6].parse::<u64>().unwrap();
             let size = vec[2].parse::<i64>().unwrap();
             let blocks = vec[7].parse::<i64>().unwrap();
             Ok(
@@ -117,16 +123,16 @@ impl Metadata{
     pub fn set_change_time(&mut self, ctime: i64){
         self.change_time_ = ctime;
     }
-    pub fn get_mode(&self) -> i32{
+    pub fn get_mode(&self) -> u32{
         self.mode_
     }
-    pub fn set_mode(&mut self, mode:i32){
+    pub fn set_mode(&mut self, mode:u32){
         self.mode_ = mode;
     }
-    pub fn get_link_count(&self) -> i32{
+    pub fn get_link_count(&self) -> u64{
         self.link_count_
     }
-    pub fn set_link_count(&mut self, link_count: i32){
+    pub fn set_link_count(&mut self, link_count: u64){
         self.link_count_ = link_count;
     }
     pub fn get_size(&self) -> i64{

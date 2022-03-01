@@ -1,0 +1,7 @@
+{
+    "mountdir": "/home/dev/Desktop/storage1",
+    "rootdir": "/home/dev/Desktop/storage2",
+    "metadir": "/home/dev/Desktop/storage3",
+    "hosts_file": "/home/dev/Desktop/storage4",
+    "listen": "/home/dev/Desktop/storage5"
+}
