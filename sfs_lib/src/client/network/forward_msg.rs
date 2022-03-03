@@ -1,3 +1,6 @@
+use std::sync::{Arc, Mutex};
+
+use crate::client::client_openfile::OpenFile;
 use crate::client::{client_context::ClientContext, client_distributor::Distributor, network::network_service::NetworkService};
 use crate::client::network::network_service::*;
 use crate::global::error_msg::error_msg;
@@ -58,5 +61,8 @@ pub fn forward_write(path: &String, buf: * const char, append_flag: bool, in_off
     todo!();
 }
 pub fn forward_read(path: &String, buf: * mut char, offset: i64, read_size: i64) -> (i32, i64){
+    todo!();
+}
+pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>){
     todo!();
 }

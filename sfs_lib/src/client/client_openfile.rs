@@ -140,7 +140,7 @@ impl OpenFile{
             FileType::SFS_DIRECTORY => { self.entries_.push(Arc::new(SFSDirEntry{name_: name, type_: file_type})); },
         }
     }
-    pub fn getdent(&self, pos: i32) -> Arc<SFSDirEntry>{
+    pub fn getdent(&self, pos: i64) -> Arc<SFSDirEntry>{
         match self.type_ {
             FileType::SFS_REGULAR => { Arc::new(SFSDirEntry::new()) },
             FileType::SFS_DIRECTORY => { Arc::clone(&self.entries_[pos as usize]) },

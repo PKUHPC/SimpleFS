@@ -13,7 +13,7 @@ use super::client_config;
 use super::client_context::ClientContext;
 use super::client_openfile::{OpenFile, FileType};
 use super::client_util::{get_metadata, metadata_to_stat};
-use super::network::forward_msg::{forward_create, forward_remove, forward_get_chunk_stat, forward_get_metadentry_size, forward_get_decr_size, forward_truncate, forward_update_metadentry_size, forward_write, forward_read};
+use super::network::forward_msg::{forward_create, forward_remove, forward_get_chunk_stat, forward_get_metadentry_size, forward_get_decr_size, forward_truncate, forward_update_metadentry_size, forward_write, forward_read, forward_get_dirents};
 
 #[no_mangle]
 pub extern "C" fn sfs_open(path: * const c_char, mode: u32, flag: i32) -> i32{
@@ -360,16 +360,88 @@ pub extern "C" fn sfs_read(fd: i32, buf: * mut char, count: i64) -> i64{
 
 #[no_mangle]
 pub extern "C" fn sfs_rmdir(path: * const c_char) -> i32{
+    
+    let path = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
+    let md_res = get_metadata(&path, false);
+    if let Err(e) = md_res{
+        error_msg("client::sfs_rmdir".to_string(), "file not exist".to_string());
+        return -1;
+    }
+    let md = md_res.unwrap();
+    if !S_ISDIR(md.get_mode()){
+        error_msg("client::sfs_rmdir".to_string(), "path is not directory".to_string());
+        return -1;
+    }
+    let dirent_res = forward_get_dirents(&path);
+    if dirent_res.0 != 0{
+        error_msg("client::sfs_rmdir".to_string(), format!("forward get dirents with error {}", dirent_res.0));
+        return -1;
+    }
+    let opendir = dirent_res.1;
+    if opendir.lock().unwrap().get_size() != 0{
+        error_msg("client::sfs_rmdir".to_string(), "directory not empty".to_string());
+        return -1;
+    }
+    let rm_res = forward_remove(&path, true, 0);
+    if let Err(e) = rm_res{
+        error_msg("client::sfs_rmdir".to_string(), format!("forward remove directory with error {}", dirent_res.0));
+        return -1;
+    }
     return 0;
 }
 
 #[no_mangle]
 pub extern "C" fn sfs_opendir(path: * const c_char) -> i32{
-    return 0;
+    let path = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
+    let md_res = get_metadata(&path, false);
+    if let Err(e) = md_res{
+        error_msg("client::sfs_opendir".to_string(), "file not exist".to_string());
+        return -1;
+    }
+    let md = md_res.unwrap();
+    if !S_ISDIR(md.get_mode()){
+        error_msg("client::sfs_opendir".to_string(), "path is not directory".to_string());
+        return -1;
+    }
+    let dirent_res = forward_get_dirents(&path);
+    if dirent_res.0 != 0{
+        error_msg("client::sfs_opendir".to_string(), format!("forward get dirents with error {}", dirent_res.0));
+        return -1;
+    }
+    return ClientContext::get_instance().get_ofm().lock().unwrap().add(dirent_res.1);
 }
 
+fn align(size: usize, step: usize) -> usize{
+    (size + step) & (!step + 1)
+}
 #[no_mangle]
 pub extern "C" fn sfs_getdents(fd: i32, mut dirp: * mut dirent, count: i64) -> i32{
+    let opendir = ClientContext::get_instance().get_ofm().lock().unwrap().get(fd);
+    if let None = opendir{
+        error_msg("client::sfs_getdirents".to_string(), "directory not opned".to_string());
+        return -1;
+    }
+    let opendir = opendir.unwrap();
+    let mut pos = opendir.lock().unwrap().get_pos();
+    if pos >= opendir.lock().unwrap().get_size() as i64{
+        return 0;
+    }
+    let mut written = 0;
+    let current_dirp = dirent{
+        d_ino: 0,
+        d_off: 0,
+        d_reclen: 0,
+        d_type: 'd' as u8,
+        d_name: [0; 256],
+    };
+    while pos < opendir.lock().unwrap().get_size() as i64{
+        let de = opendir.lock().unwrap().getdent(pos);
+        let total_size = align(19 + de.get_name().len() + 3, 8);
+    }
+    if written == 0{
+        return -1;
+    }
+    opendir.lock().unwrap().set_pos(pos);
     return 0;
 }
 
