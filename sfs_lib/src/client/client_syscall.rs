@@ -2,17 +2,18 @@ use std::sync::{Arc, Mutex};
 use std::{ffi::CStr};
 use std::os::raw::c_char;
 
-use libc::{O_PATH, O_APPEND, O_CREAT, O_DIRECTORY, S_IFREG, O_EXCL, O_TRUNC, O_RDONLY, O_WRONLY, S_IFMT, S_IFDIR, S_IFCHR, S_IFBLK, S_IFIFO, S_IFSOCK, stat, statfs, fsid_t, ST_NOATIME, ST_NODIRATIME, ST_NOSUID, ST_NODEV, ST_SYNCHRONOUS, statvfs, SEEK_SET, SEEK_CUR, SEEK_DATA, SEEK_END, SEEK_HOLE};
+use libc::{O_PATH, O_APPEND, O_CREAT, O_DIRECTORY, S_IFREG, O_EXCL, O_TRUNC, O_RDONLY, O_WRONLY, S_IFMT, S_IFDIR, S_IFCHR, S_IFBLK, S_IFIFO, S_IFSOCK, stat, statfs, fsid_t, ST_NOATIME, ST_NODIRATIME, ST_NOSUID, ST_NODEV, ST_SYNCHRONOUS, statvfs, SEEK_SET, SEEK_CUR, SEEK_DATA, SEEK_END, SEEK_HOLE, memset, c_void, dirent, dirent64};
 
 use crate::global;
 use crate::global::error_msg::error_msg;
 use crate::global::metadata::{self, S_ISDIR, S_ISREG};
 use crate::global::util::path_util::dirname;
 
+use super::client_config;
 use super::client_context::ClientContext;
 use super::client_openfile::{OpenFile, FileType};
 use super::client_util::{get_metadata, metadata_to_stat};
-use super::network::forward_msg::{forward_create, forward_remove, forward_get_chunk_stat};
+use super::network::forward_msg::{forward_create, forward_remove, forward_get_chunk_stat, forward_get_metadentry_size, forward_get_decr_size, forward_truncate, forward_update_metadentry_size, forward_write, forward_read};
 
 #[no_mangle]
 pub extern "C" fn sfs_open(path: * const c_char, mode: u32, flag: i32) -> i32{
@@ -90,13 +91,13 @@ fn check_parent_dir(path: &String) -> i32{
 pub extern "C" fn sfs_create(path: * const c_char, mut mode: u32) -> i32{
     match mode & S_IFMT{
         0 => { mode |= S_IFREG; }
-        S_IFREG => {}
-        S_IFDIR => {}
-        S_IFCHR => { error_msg("client:sfs_create".to_string(), "unsupported node type".to_string()); return -1; }
-        S_IFBLK => { error_msg("client:sfs_create".to_string(), "unsupported node type".to_string()); return -1; }
-        S_IFIFO => { error_msg("client:sfs_create".to_string(), "unsupported node type".to_string()); return -1; }
-        S_IFSOCK => { error_msg("client:sfs_create".to_string(), "unsupported node type".to_string()); return -1; }
-        _ => { error_msg("client:sfs_create".to_string(), "unsupported node type".to_string()); return -1; }
+        S_IFREG => {},
+        S_IFDIR => {},
+        S_IFCHR => { error_msg("client:sfs_create".to_string(), "unsupported node type".to_string()); return -1; },
+        S_IFBLK => { error_msg("client:sfs_create".to_string(), "unsupported node type".to_string()); return -1; },
+        S_IFIFO => { error_msg("client:sfs_create".to_string(), "unsupported node type".to_string()); return -1; },
+        S_IFSOCK => { error_msg("client:sfs_create".to_string(), "unsupported node type".to_string()); return -1; },
+        _ => { error_msg("client:sfs_create".to_string(), "unsupported node type".to_string()); return -1; },
     }
     let path = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
     if check_parent_dir(&path) != 0{
@@ -211,39 +212,151 @@ pub fn internal_lseek(fd: Arc<Mutex<OpenFile>>, offset: i64, whence: i32) -> i64
                 return -1;
             }
             fd.lock().unwrap().set_pos(offset);
-        }
+        },
         SEEK_CUR => {
             let curr_pos = fd.lock().unwrap().get_pos();
             fd.lock().unwrap().set_pos(curr_pos + offset);
-        }
+        },
         SEEK_END => {
-        }
-        SEEK_DATA => {}
-        SEEK_HOLE => {}
-        _ => {}
+            let ret = forward_get_metadentry_size(&fd.lock().unwrap().get_path());
+            if ret.0 != 0 {
+                return -1;
+            }
+            let file_size = ret.1;
+            if offset < 0 && file_size < - offset {
+                return -1;
+            }
+            fd.lock().unwrap().set_pos(file_size + offset);
+        },
+        SEEK_DATA => { return -1; },
+        SEEK_HOLE => { return -1; },
+        _ => { return -1; },
+    }
+    return fd.lock().unwrap().get_pos();
+}
+
+#[no_mangle]
+pub extern "C" fn sfs_truncate(path: * const c_char, old_size: i64, new_size: i64) -> i32{
+    if new_size < 0 || new_size > old_size {
+        return -1;
+    }
+    if new_size == old_size{
+        return 0;
+    }
+    let path = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
+    if forward_get_decr_size(&path, new_size) != 0{
+        return -1;
+    }
+    if forward_truncate(&path, old_size, new_size) != 0{
+        return -1;
     }
     return 0;
 }
 
 #[no_mangle]
-pub extern "C" fn sfs_truncate(path: * const c_char, offset: i64, new_size: i64) -> i32{
-    return 0;
-}
-
-#[no_mangle]
 pub extern "C" fn sfs_dup(oldfd: i32) -> i32{
-    return 0;
+    return ClientContext::get_instance().get_ofm().lock().unwrap().dup(oldfd);
 }
 
 #[no_mangle]
-pub extern "C" fn sfs_read(fd: i32, buf: * const char, count: u32) -> i32{
-    return 0;
+pub extern "C" fn sfs_dup2(oldfd: i32, newfd: i32) -> i32{
+    return ClientContext::get_instance().get_ofm().lock().unwrap().dup2(oldfd, newfd);
+}
+
+fn internal_pwrite(f: Arc<Mutex<OpenFile>>, buf: * const char, count: i64, offset: i64) -> i64{
+    match f.lock().unwrap().get_type(){
+        FileType::SFS_REGULAR => { error_msg("client::sfs_pwrite".to_string(), "can not write directory".to_string()); return -1 },
+        FileType::SFS_DIRECTORY => {},
+    }
+    let path = f.lock().unwrap().get_path();
+    let append_flag = f.lock().unwrap().get_flag(super::client_openfile::OpenFileFlags::Append);
+    let ret_update_size = forward_update_metadentry_size(&path, count, offset, append_flag);
+    if ret_update_size.0 != 0{
+        error_msg("client::sfs_pwrite".to_string(), format!("update metadentry size with error {}", ret_update_size.0));
+        return -1;
+    }
+    let updated_size = ret_update_size.1;
+    let write_res = forward_write(&path, buf, append_flag, offset, count, updated_size);
+    if write_res.0 != 0{
+        error_msg("client::sfs_pwrite".to_string(), format!("write with error {}", write_res.0));
+        return -1;
+    }
+    return write_res.1;
 }
 
 #[no_mangle]
-pub extern "C" fn sfs_write(fd: i32, buf: * const char, count: u32) -> i32{
-    return 0;
+fn sfs_pwrite(fd: i32, buf: * const char, count: i64, offset: i64) -> i64{
+    let f = ClientContext::get_instance().get_ofm().lock().unwrap().get(fd);
+    if let None = f{
+        error_msg("client::sfs_pwrite".to_string(), "file not exist".to_string());
+        return -1;
+    }
+    let f = f.unwrap();
+    return internal_pwrite(f, buf, count, offset);
 }
+
+#[no_mangle]
+pub extern "C" fn sfs_write(fd: i32, buf: * const char, count: i64) -> i64{
+    let f = ClientContext::get_instance().get_ofm().lock().unwrap().get(fd);
+    if let None = f{
+        error_msg("client::sfs_write".to_string(), "file not exist".to_string());
+        return -1;
+    }
+    let f = f.unwrap();
+    let pos = f.lock().unwrap().get_pos();
+    if f.lock().unwrap().get_flag(super::client_openfile::OpenFileFlags::Append) {
+        internal_lseek(Arc::clone(&f), 0, SEEK_END);
+    }
+    let write_res = internal_pwrite(Arc::clone(&f), buf, count, pos);
+    if write_res > 0{
+        f.lock().unwrap().set_pos(pos + count);
+    }
+    return write_res;
+}
+fn internal_pread(f: Arc<Mutex<OpenFile>>, buf: * mut char, count: i64, offset: i64) -> i64{
+    match f.lock().unwrap().get_type(){
+        FileType::SFS_REGULAR => { error_msg("client::sfs_pread".to_string(), "can not read directory".to_string()); return -1 },
+        FileType::SFS_DIRECTORY => {},
+    }
+    if client_config::ZERO_BUF_BEFORE_READ{
+        unsafe { memset(buf as (* mut c_void), 0, count as usize); }
+    }
+    let path = f.lock().unwrap().get_path();
+    let read_res = forward_read(&path, buf, offset, count);
+    if read_res.0 != 0{
+        error_msg("client::sfs_pread".to_string(), format!("read with error {}", read_res.0));
+        return -1;
+    }
+    return read_res.1;
+}
+
+#[no_mangle]
+pub extern "C" fn sfs_pread(fd: i32, buf: * mut char, count: i64, offset: i64) -> i64{
+    let f = ClientContext::get_instance().get_ofm().lock().unwrap().get(fd);
+    if let None = f{
+        error_msg("client::sfs_pread".to_string(), "file not exist".to_string());
+        return -1;
+    }
+    let f = f.unwrap();
+    return internal_pread(Arc::clone(&f), buf, count, offset);
+}
+
+#[no_mangle]
+pub extern "C" fn sfs_read(fd: i32, buf: * mut char, count: i64) -> i64{
+    let f = ClientContext::get_instance().get_ofm().lock().unwrap().get(fd);
+    if let None = f{
+        error_msg("client::sfs_read".to_string(), "file not exist".to_string());
+        return -1;
+    }
+    let f = f.unwrap();
+    let pos = f.lock().unwrap().get_pos();
+    let read_res = internal_pread(Arc::clone(&f), buf, count, pos);
+    if read_res > 0{
+        f.lock().unwrap().set_pos(pos + count);
+    }
+    return read_res;
+}
+
 
 #[no_mangle]
 pub extern "C" fn sfs_rmdir(path: * const c_char) -> i32{
@@ -252,6 +365,16 @@ pub extern "C" fn sfs_rmdir(path: * const c_char) -> i32{
 
 #[no_mangle]
 pub extern "C" fn sfs_opendir(path: * const c_char) -> i32{
+    return 0;
+}
+
+#[no_mangle]
+pub extern "C" fn sfs_getdents(fd: i32, mut dirp: * mut dirent, count: i64) -> i32{
+    return 0;
+}
+
+#[no_mangle]
+pub extern "C" fn sfs_getdents64(fd: i32, mut dirp: * mut dirent64, count: i64) -> i32{
     return 0;
 }
 

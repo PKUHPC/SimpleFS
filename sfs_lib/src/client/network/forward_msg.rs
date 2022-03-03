@@ -45,3 +45,18 @@ pub fn forward_get_chunk_stat() -> (i32, ChunkStat){
 pub fn forward_get_metadentry_size(path: &String) -> (i32, i64){
     todo!();
 }
+pub fn forward_get_decr_size(path: &String, new_size: i64) -> i32{
+    todo!()
+}
+pub fn forward_truncate(path: &String, old_size: i64, new_size: i64) -> i32{
+    todo!()
+}
+pub fn forward_update_metadentry_size(path: &String, size: i64, offset: i64, append_flag: bool) -> (i32, i64){
+    todo!();
+}
+pub fn forward_write(path: &String, buf: * const char, append_flag: bool, in_offset: i64, write_size: i64, updated_metadentry_size: i64) -> (i32, i64){
+    todo!();
+}
+pub fn forward_read(path: &String, buf: * mut char, offset: i64, read_size: i64) -> (i32, i64){
+    todo!();
+}

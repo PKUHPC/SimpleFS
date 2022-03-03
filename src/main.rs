@@ -1,10 +1,44 @@
-use std::{fs::{self}, io::Read, path::Path};
-use crate::global::error_msg::error_msg;
+use core::time;
+use std::{fs::{self}, io::{Read, Error, Write}, path::Path, net::{TcpListener, TcpStream}, thread};
+use sfs_lib::global::error_msg::error_msg;
 
-use super::{config::ServerConfig, filesystem::storage_context::StorageContext, storage::metadata::db::MetadataDB, storage::data::chunk_storage::*};
+use sfs_lib::server::{config::ServerConfig, filesystem::storage_context::StorageContext, storage::metadata::db::MetadataDB, storage::data::chunk_storage::*};
+
+fn handle_client(mut stream: TcpStream) -> Result<(), Error>{
+    let mut buf = [0; 512];
+    for _ in 0..1000 {
+        let bytes_read = stream.read(&mut buf)?;
+        if bytes_read == 0 {
+            return Ok(());
+        }
+        println!("{}", String::from_utf8(buf.to_vec()).unwrap());
+        stream.write(&buf[..bytes_read])?;
+        thread::sleep(time::Duration::from_secs(1 as u64));
+    }
+
+    Ok(())
+}
 
 fn init_server(addr: &String){
-    todo!()
+    let bind_res = TcpListener::bind(addr);
+    if let Err(e) = bind_res{
+        return ;
+    }
+    let listener = bind_res.unwrap();
+    let mut thread_vec: Vec<thread::JoinHandle<()>> = Vec::new();
+    for stream in listener.incoming() {
+        let stream = stream.expect("failed!");
+        let handle = thread::spawn(move || {
+            handle_client(stream)
+        .unwrap_or_else(|error| eprintln!("{:?}", error));
+        });
+
+        thread_vec.push(handle);
+    }
+
+    for handle in thread_vec {
+        handle.join().unwrap();
+    }
 }
 
 fn init_environment(){
@@ -22,7 +56,8 @@ fn init_environment(){
     }
 }
 pub fn main(){
-    let RPC_PROTOCOL: String = String::from("http");
+    /* 
+    let RPC_PROTOCOL: String = String::from("tcp");
     
     let mut json: Vec<u8> = Vec::new();
     let open_res =  fs::OpenOptions::new().read(true).open("config.json".to_string());
@@ -46,4 +81,6 @@ pub fn main(){
     StorageContext::get_instance().set_bind_addr(format!("{}://{}", RPC_PROTOCOL, config.listen));
 
     init_environment();
+    */
+    init_server(&"192.168.230.137:8082".to_string());
 }

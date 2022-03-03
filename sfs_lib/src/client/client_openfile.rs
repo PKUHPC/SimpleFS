@@ -136,20 +136,20 @@ impl OpenFile{
     }
     pub fn add(&mut self, name: String, file_type: FileType){
         match self.type_ {
-            FileType::SFS_REGULAR => { return; }
-            FileType::SFS_DIRECTORY => { self.entries_.push(Arc::new(SFSDirEntry{name_: name, type_: file_type})); }
+            FileType::SFS_REGULAR => { return; },
+            FileType::SFS_DIRECTORY => { self.entries_.push(Arc::new(SFSDirEntry{name_: name, type_: file_type})); },
         }
     }
     pub fn getdent(&self, pos: i32) -> Arc<SFSDirEntry>{
         match self.type_ {
-            FileType::SFS_REGULAR => { Arc::new(SFSDirEntry::new()) }
-            FileType::SFS_DIRECTORY => { Arc::clone(&self.entries_[pos as usize]) }
+            FileType::SFS_REGULAR => { Arc::new(SFSDirEntry::new()) },
+            FileType::SFS_DIRECTORY => { Arc::clone(&self.entries_[pos as usize]) },
         }
     }
     pub fn get_size(&self) -> usize{
         match self.type_ {
-            FileType::SFS_REGULAR => { 0 }
-            FileType::SFS_DIRECTORY => {self.entries_.len()}
+            FileType::SFS_REGULAR => { 0 },
+            FileType::SFS_DIRECTORY => {self.entries_.len()},
         }
     }
 }

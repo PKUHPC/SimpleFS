@@ -1,7 +1,7 @@
 #![allow(dead_code)]
-mod global;
-mod client;
-mod server;
+pub mod global;
+pub mod client;
+pub mod server;
 
 #[cfg(test)]
 mod tests {

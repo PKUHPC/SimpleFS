@@ -66,11 +66,11 @@ pub fn full_merge(new_key: &[u8],
                     error_msg("server::merge::full_merge".to_string(), "given key has no existing value and the first operand is not a valid create".to_string()); 
                     return None;
                 }
-            }
+            },
             _ => {
                 error_msg("server::merge::full_merge".to_string(), "given key has no existing value and the first operand is not create".to_string()); 
                 return None;
-            }
+            },
         }
     }
     let mut fsize = md.get_size();

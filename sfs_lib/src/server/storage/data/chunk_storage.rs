@@ -1,15 +1,14 @@
-use std::io::{Write, Seek, SeekFrom, self};
 use std::os::unix::prelude::FileExt;
 use std::path::Path;
 use std::{fs, path};
 use std::os::unix::fs::PermissionsExt;
 
-use nix::sys::statfs::{self, statfs};
+use nix::sys::statfs::statfs;
 
 use crate::global::metadata;
 use crate::global::{util::path_util::is_absolute, error_msg::error_msg};
 
-pub static CHUNKSIZE: u64 = 4096 * 4096;
+pub static CHUNKSIZE: u64 = 524288;
 
 pub struct ChunkStat{
     pub chunk_size: u64,
@@ -111,11 +110,11 @@ impl ChunkStorage{
                     buf = &mut tmp[n..];
                     offset += n as u64;
                     read_tot += n as u64;
-                }
+                },
                 Err(e) =>{
                     error_msg("server::storage::chunk_storage::read_chunk".to_string(), "error occurs while reading from chunks".to_string());
                     return Err(-1);
-                }
+                },
             }
         }
         if !buf.is_empty() {

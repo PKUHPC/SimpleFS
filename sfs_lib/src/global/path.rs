@@ -1,6 +1,6 @@
-use std::{fs, sync::Arc, path::Components};
+use std::{fs, sync::Arc};
 
-use super::{util::path_util::is_absolute, error_msg::error_msg};
+use super::{error_msg::error_msg};
 use crate::client::client_context::ClientContext;
 
 static SEPERATOR: char = '/';

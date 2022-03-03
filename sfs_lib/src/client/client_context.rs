@@ -70,7 +70,7 @@ lazy_static!{
         hosts_: Vec::new(),
         local_host_id: 0,
         fwd_host_id: 0,
-        rpc_protocol_: "https".to_string(),
+        rpc_protocol_: "tcp".to_string(),
         auto_sm_: false,
         interception_enabled_: false,
         internal_fds_: Mutex::new(BitVec::new()),

@@ -7,5 +7,3 @@ pub struct ServerConfig{
     pub hosts_file : String,
     pub listen: String
 }
-
-pub static chunksize: i64 = 524288;

@@ -22,3 +22,4 @@ impl SFSConfig{
         }
     }
 }
+pub static ZERO_BUF_BEFORE_READ: bool = false;
