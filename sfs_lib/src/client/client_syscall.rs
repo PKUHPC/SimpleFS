@@ -1,8 +1,10 @@
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::sync::{Arc, Mutex};
 use std::{ffi::CStr};
 use std::os::raw::c_char;
 
-use libc::{O_PATH, O_APPEND, O_CREAT, O_DIRECTORY, S_IFREG, O_EXCL, O_TRUNC, O_RDONLY, O_WRONLY, S_IFMT, S_IFDIR, S_IFCHR, S_IFBLK, S_IFIFO, S_IFSOCK, stat, statfs, fsid_t, ST_NOATIME, ST_NODIRATIME, ST_NOSUID, ST_NODEV, ST_SYNCHRONOUS, statvfs, SEEK_SET, SEEK_CUR, SEEK_DATA, SEEK_END, SEEK_HOLE, memset, c_void, dirent, dirent64};
+use libc::{O_PATH, O_APPEND, O_CREAT, O_DIRECTORY, S_IFREG, O_EXCL, O_TRUNC, O_RDONLY, O_WRONLY, S_IFMT, S_IFDIR, S_IFCHR, S_IFBLK, S_IFIFO, S_IFSOCK, stat, statfs, fsid_t, ST_NOATIME, ST_NODIRATIME, ST_NOSUID, ST_NODEV, ST_SYNCHRONOUS, statvfs, SEEK_SET, SEEK_CUR, SEEK_DATA, SEEK_END, SEEK_HOLE, memset, c_void, dirent, dirent64, DT_REG, DT_DIR, strcpy};
 
 use crate::global;
 use crate::global::error_msg::error_msg;
@@ -415,8 +417,8 @@ fn align(size: usize, step: usize) -> usize{
     (size + step) & (!step + 1)
 }
 #[no_mangle]
-pub extern "C" fn sfs_getdents(fd: i32, mut dirp: * mut dirent, count: i64) -> i32{
-    let opendir = ClientContext::get_instance().get_ofm().lock().unwrap().get(fd);
+pub extern "C" fn sfs_getdents(fd: i32, dirp: * mut dirent, count: i64) -> i32{
+    let opendir = ClientContext::get_instance().get_ofm().lock().unwrap().get_dir(fd);
     if let None = opendir{
         error_msg("client::sfs_getdirents".to_string(), "directory not opned".to_string());
         return -1;
@@ -427,16 +429,31 @@ pub extern "C" fn sfs_getdents(fd: i32, mut dirp: * mut dirent, count: i64) -> i
         return 0;
     }
     let mut written = 0;
-    let current_dirp = dirent{
-        d_ino: 0,
-        d_off: 0,
-        d_reclen: 0,
-        d_type: 'd' as u8,
-        d_name: [0; 256],
-    };
-    while pos < opendir.lock().unwrap().get_size() as i64{
+    let size = opendir.lock().unwrap().get_size() as i64;
+    while pos < size{
         let de = opendir.lock().unwrap().getdent(pos);
         let total_size = align(19 + de.get_name().len() + 3, 8);
+        if total_size as i64 > count - written{
+            break;
+        }
+        let current_dirp = unsafe {(dirp as *mut c_char).offset(written as isize) as *mut dirent};
+        let mut s = DefaultHasher::new();
+        let p = opendir.lock().unwrap().get_path() + "/" + &de.get_name();
+        p.hash(&mut s);
+        unsafe{ 
+            (*current_dirp).d_ino = s.finish();
+            (*current_dirp).d_reclen = total_size as u16;
+            let mut c = DT_REG;
+            match de.get_type() {
+                FileType::SFS_REGULAR => { c = DT_REG },
+                FileType::SFS_DIRECTORY => { c = DT_DIR },
+            }
+            (*current_dirp).d_type = c;
+            strcpy((*current_dirp).d_name.as_ptr() as *mut i8, de.get_name().as_ptr() as *mut i8);
+            pos += 1;
+            (*current_dirp).d_off = pos;
+            written += total_size as i64;
+        }
     }
     if written == 0{
         return -1;
@@ -446,7 +463,48 @@ pub extern "C" fn sfs_getdents(fd: i32, mut dirp: * mut dirent, count: i64) -> i
 }
 
 #[no_mangle]
-pub extern "C" fn sfs_getdents64(fd: i32, mut dirp: * mut dirent64, count: i64) -> i32{
+pub extern "C" fn sfs_getdents64(fd: i32, dirp: * mut dirent64, count: i64) -> i32{
+    let opendir = ClientContext::get_instance().get_ofm().lock().unwrap().get_dir(fd);
+    if let None = opendir{
+        error_msg("client::sfs_getdirents".to_string(), "directory not opned".to_string());
+        return -1;
+    }
+    let opendir = opendir.unwrap();
+    let mut pos = opendir.lock().unwrap().get_pos();
+    if pos >= opendir.lock().unwrap().get_size() as i64{
+        return 0;
+    }
+    let mut written = 0;
+    let size = opendir.lock().unwrap().get_size() as i64;
+    while pos < size{
+        let de = opendir.lock().unwrap().getdent(pos);
+        let total_size = align(19 + de.get_name().len() + 1, 8);
+        if total_size as i64 > count - written{
+            break;
+        }
+        let current_dirp = unsafe {(dirp as *mut c_char).offset(written as isize) as *mut dirent};
+        let mut s = DefaultHasher::new();
+        let p = opendir.lock().unwrap().get_path() + "/" + &de.get_name();
+        p.hash(&mut s);
+        unsafe{ 
+            (*current_dirp).d_ino = s.finish();
+            (*current_dirp).d_reclen = total_size as u16;
+            let mut c = DT_REG;
+            match de.get_type() {
+                FileType::SFS_REGULAR => { c = DT_REG },
+                FileType::SFS_DIRECTORY => { c = DT_DIR },
+            }
+            (*current_dirp).d_type = c;
+            strcpy((*current_dirp).d_name.as_ptr() as *mut i8, de.get_name().as_ptr() as *mut i8);
+            pos += 1;
+            (*current_dirp).d_off = pos;
+            written += total_size as i64;
+        }
+    }
+    if written == 0{
+        return -1;
+    }
+    opendir.lock().unwrap().set_pos(pos);
     return 0;
 }
 

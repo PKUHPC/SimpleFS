@@ -1,8 +1,6 @@
 use core::time;
 use std::{fs::{self}, io::{Read, Error, Write}, path::Path, net::{TcpListener, TcpStream}, thread};
-use sfs_lib::global::error_msg::error_msg;
-
-use sfs_lib::server::{config::ServerConfig, filesystem::storage_context::StorageContext, storage::metadata::db::MetadataDB, storage::data::chunk_storage::*};
+use sfs_lib::server::{filesystem::storage_context::StorageContext, storage::metadata::db::MetadataDB, storage::data::chunk_storage::*};
 
 fn handle_client(mut stream: TcpStream) -> Result<(), Error>{
     let mut buf = [0; 512];
