@@ -1,19 +1,25 @@
-use core::time;
-use std::{fs::{self}, io::{Read, Error, Write}, path::Path, net::{TcpListener, TcpStream}, thread};
-use sfs_lib::server::{filesystem::storage_context::StorageContext, storage::metadata::db::MetadataDB, storage::data::chunk_storage::*};
+pub mod handle;
+use std::{fs::{self}, io::{Read, Error}, path::Path, net::{TcpListener, TcpStream}, thread};
+use sfs_lib::{global::network::post::PostOption::*, global::network::forward_data::WriteData};
+use sfs_lib::{server::{filesystem::storage_context::StorageContext, storage::metadata::db::MetadataDB, storage::data::chunk_storage::*}, global::network::post::Post};
 
 fn handle_client(mut stream: TcpStream) -> Result<(), Error>{
-    let mut buf = [0; 512];
-    for _ in 0..1000 {
+    let mut buf = [0; 2048];
+    loop {
         let bytes_read = stream.read(&mut buf)?;
         if bytes_read == 0 {
-            return Ok(());
+            break;
         }
-        println!("{}", String::from_utf8(buf.to_vec()).unwrap());
-        stream.write(&buf[..bytes_read])?;
-        thread::sleep(time::Duration::from_secs(1 as u64));
     }
-
+    let post: Post = serde_json::from_str(String::from_utf8(buf.to_vec()).unwrap().as_str()).expect("JSON was not well-formatted");
+    match post.option {
+        Stat => todo!(),
+        Create => todo!(),
+        Remove => todo!(),
+        Write => {
+            let write_data: WriteData = serde_json::from_str(&post.data).unwrap();
+        },
+    }
     Ok(())
 }
 

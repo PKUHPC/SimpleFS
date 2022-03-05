@@ -1,12 +1,12 @@
-use std::{hash::{Hash, Hasher}, collections::hash_map::DefaultHasher};
+use std::{hash::{Hash, Hasher}, collections::hash_map::DefaultHasher, io::Error};
 
 use libc::{stat, makedev, memset};
 
-use crate::{global::metadata::Metadata, client::client_context::ClientContext, server::{config, storage::data::chunk_storage}};
+use crate::{global::metadata::Metadata, client::client_context::ClientContext };
 
-use super::network::{forward_msg};
+use super::network::{forward_msg, self};
 
-pub fn get_metadata(path: &String, follow_link: bool) -> Result<Metadata, i32>{
+pub fn get_metadata(path: &String, follow_link: bool) -> Result<Metadata, Error>{
     let md_res = forward_msg::forward_stat(path);
     if let Err(e) = md_res{
         return Err(e);
@@ -22,7 +22,7 @@ pub fn metadata_to_stat(path: &String, md: Metadata, attr: &mut stat) -> i32{
     attr.st_uid = ClientContext::get_instance().get_fsconfig().uid;
     attr.st_gid = ClientContext::get_instance().get_fsconfig().gid;
     attr.st_rdev = 0;
-    attr.st_blksize = chunk_storage::CHUNKSIZE as i64;
+    attr.st_blksize = network::CHUNK_SIZE as i64;
     attr.st_blocks = 0;
 
     attr.st_atime = 0;
@@ -50,4 +50,19 @@ pub fn metadata_to_stat(path: &String, md: Metadata, attr: &mut stat) -> i32{
         attr.st_blocks = md.get_blocks();
     }
     return 0;
+}
+fn chunk_align_down(offset: i64, chunk_size: u64) -> i64{
+    offset & !(chunk_size - 1) as i64
+}
+fn chunk_align_up(offset: i64, chunk_size: u64) -> i64{
+    chunk_align_down(offset + chunk_size as i64, chunk_size)
+}
+pub fn offset_to_chunk_id(offset: i64, chunk_size: u64) -> u64{
+    (chunk_align_down(offset, chunk_size) >> ((chunk_size as f64).log2() as i64)) as u64
+}
+pub fn chunk_lpad(offset: i64, chunk_size: u64) -> u64{
+    offset as u64 % chunk_size
+}
+pub fn chunk_rpad(offset: i64, chunk_size: u64) -> u64{
+    (- offset % chunk_size as i64) as u64
 }

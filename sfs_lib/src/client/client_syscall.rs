@@ -8,7 +8,7 @@ use libc::{O_PATH, O_APPEND, O_CREAT, O_DIRECTORY, S_IFREG, O_EXCL, O_TRUNC, O_R
 
 use crate::global;
 use crate::global::error_msg::error_msg;
-use crate::global::metadata::{self, S_ISDIR, S_ISREG};
+use crate::global::metadata::{self, S_ISDIR, S_ISREG, Metadata};
 use crate::global::util::path_util::dirname;
 
 use super::client_config;
@@ -28,12 +28,8 @@ pub extern "C" fn sfs_open(path: * const c_char, mode: u32, flag: i32) -> i32{
         error_msg("client::sfs_open".to_string(), "'O_APPEND' not supported".to_string());
         return -1;
     }
-    let mut exists = true;
     let md_res = get_metadata(&s, false);
     if let Err(e) = md_res{
-        exists = false;
-    }
-    if !exists{
         if flag & O_CREAT == 0{
             error_msg("client::sfs_open".to_string(), "file not exists and 'O_CREATE' is not set".to_string());
             return -1;
@@ -74,11 +70,9 @@ fn check_parent_dir(path: &String) -> i32{
     let p_comp = dirname(path);
     let md_res = get_metadata(&p_comp, false);
     if let Err(e) = md_res{
-        if e == 1{
-            error_msg("client::check_parent_dir".to_string(), "parent component doesn't exist".to_string());
-        }
-        else {
-            error_msg("client::check_parent_dir".to_string(), "fail to fetch parent dir metadata".to_string());
+        match e.kind(){
+            NotFound => { error_msg("client::check_parent_dir".to_string(), "parent component doesn't exist".to_string()); },
+            _ => { error_msg("client::check_parent_dir".to_string(), "fail to fetch parent dir metadata".to_string()); }
         }
         return -1;
     }
@@ -265,7 +259,7 @@ pub extern "C" fn sfs_dup2(oldfd: i32, newfd: i32) -> i32{
     return ClientContext::get_instance().get_ofm().lock().unwrap().dup2(oldfd, newfd);
 }
 
-fn internal_pwrite(f: Arc<Mutex<OpenFile>>, buf: * const char, count: i64, offset: i64) -> i64{
+fn internal_pwrite(f: Arc<Mutex<OpenFile>>, buf: * const c_char, count: i64, offset: i64) -> i64{
     match f.lock().unwrap().get_type(){
         FileType::SFS_REGULAR => { error_msg("client::sfs_pwrite".to_string(), "can not write directory".to_string()); return -1 },
         FileType::SFS_DIRECTORY => {},
@@ -287,7 +281,7 @@ fn internal_pwrite(f: Arc<Mutex<OpenFile>>, buf: * const char, count: i64, offse
 }
 
 #[no_mangle]
-fn sfs_pwrite(fd: i32, buf: * const char, count: i64, offset: i64) -> i64{
+fn sfs_pwrite(fd: i32, buf: * const c_char, count: i64, offset: i64) -> i64{
     let f = ClientContext::get_instance().get_ofm().lock().unwrap().get(fd);
     if let None = f{
         error_msg("client::sfs_pwrite".to_string(), "file not exist".to_string());
@@ -298,7 +292,7 @@ fn sfs_pwrite(fd: i32, buf: * const char, count: i64, offset: i64) -> i64{
 }
 
 #[no_mangle]
-pub extern "C" fn sfs_write(fd: i32, buf: * const char, count: i64) -> i64{
+pub extern "C" fn sfs_write(fd: i32, buf: * const c_char, count: i64) -> i64{
     let f = ClientContext::get_instance().get_ofm().lock().unwrap().get(fd);
     if let None = f{
         error_msg("client::sfs_write".to_string(), "file not exist".to_string());
@@ -315,7 +309,7 @@ pub extern "C" fn sfs_write(fd: i32, buf: * const char, count: i64) -> i64{
     }
     return write_res;
 }
-fn internal_pread(f: Arc<Mutex<OpenFile>>, buf: * mut char, count: i64, offset: i64) -> i64{
+fn internal_pread(f: Arc<Mutex<OpenFile>>, buf: * mut c_char, count: i64, offset: i64) -> i64{
     match f.lock().unwrap().get_type(){
         FileType::SFS_REGULAR => { error_msg("client::sfs_pread".to_string(), "can not read directory".to_string()); return -1 },
         FileType::SFS_DIRECTORY => {},
@@ -333,7 +327,7 @@ fn internal_pread(f: Arc<Mutex<OpenFile>>, buf: * mut char, count: i64, offset: 
 }
 
 #[no_mangle]
-pub extern "C" fn sfs_pread(fd: i32, buf: * mut char, count: i64, offset: i64) -> i64{
+pub extern "C" fn sfs_pread(fd: i32, buf: * mut c_char, count: i64, offset: i64) -> i64{
     let f = ClientContext::get_instance().get_ofm().lock().unwrap().get(fd);
     if let None = f{
         error_msg("client::sfs_pread".to_string(), "file not exist".to_string());
@@ -344,7 +338,7 @@ pub extern "C" fn sfs_pread(fd: i32, buf: * mut char, count: i64, offset: i64) -
 }
 
 #[no_mangle]
-pub extern "C" fn sfs_read(fd: i32, buf: * mut char, count: i64) -> i64{
+pub extern "C" fn sfs_read(fd: i32, buf: * mut c_char, count: i64) -> i64{
     let f = ClientContext::get_instance().get_ofm().lock().unwrap().get(fd);
     if let None = f{
         error_msg("client::sfs_read".to_string(), "file not exist".to_string());
