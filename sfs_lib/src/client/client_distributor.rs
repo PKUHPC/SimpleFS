@@ -44,6 +44,13 @@ impl SimpleHashDistributor{
 pub struct LocalOnlyDistributor{
     localhost_: u64
 }
+impl LocalOnlyDistributor{
+    pub fn new() -> LocalOnlyDistributor{
+        LocalOnlyDistributor{
+            localhost_: 0
+        }
+    }
+}
 impl Distributor for LocalOnlyDistributor{
     fn localhost(&self, ) -> u64 {
         self.localhost_

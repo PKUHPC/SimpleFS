@@ -10,10 +10,10 @@ use crate::client::client_util::{offset_to_chunk_id, chunk_lpad, chunk_rpad};
 use crate::client::{client_context::ClientContext, client_distributor::Distributor, network::network_service::NetworkService};
 use crate::client::network::network_service::*;
 use crate::global::error_msg::error_msg;
+use crate::global::network::config::CHUNK_SIZE;
 use crate::global::network::forward_data::WriteData;
 use crate::global::network::post::PostOption;
 
-use super::CHUNK_SIZE;
 
 pub struct ChunkStat{
     pub chunk_size: u64,
@@ -77,8 +77,8 @@ pub fn forward_write(path: &String, buf: * const c_char, append_flag: bool, in_o
         return (-1, 0);
     }
     let offset = if append_flag { in_offset } else {updated_metadentry_size - write_size};
-    let chunk_start = offset_to_chunk_id(offset.clone(), crate::client::network::CHUNK_SIZE);
-    let chunk_end = offset_to_chunk_id(offset + write_size - 1, crate::client::network::CHUNK_SIZE);
+    let chunk_start = offset_to_chunk_id(offset.clone(), CHUNK_SIZE);
+    let chunk_end = offset_to_chunk_id(offset + write_size - 1, CHUNK_SIZE);
     let mut target_chunks: HashMap<u64, Mutex<Vec<u64>>> = HashMap::new();
     let mut targets: Vec<u64> = Vec::new();
 

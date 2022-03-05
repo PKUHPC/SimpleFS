@@ -1,4 +1,5 @@
 pub mod handle;
+pub mod task;
 use std::{fs::{self}, io::{Read, Error}, path::Path, net::{TcpListener, TcpStream}, thread};
 use sfs_lib::{global::network::post::PostOption::*, global::network::forward_data::WriteData};
 use sfs_lib::{server::{filesystem::storage_context::StorageContext, storage::metadata::db::MetadataDB, storage::data::chunk_storage::*}, global::network::post::Post};

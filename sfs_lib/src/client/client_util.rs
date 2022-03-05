@@ -2,7 +2,7 @@ use std::{hash::{Hash, Hasher}, collections::hash_map::DefaultHasher, io::Error}
 
 use libc::{stat, makedev, memset};
 
-use crate::{global::metadata::Metadata, client::client_context::ClientContext };
+use crate::{global::{metadata::Metadata, network::config::CHUNK_SIZE}, client::client_context::ClientContext };
 
 use super::network::{forward_msg, self};
 
@@ -22,7 +22,7 @@ pub fn metadata_to_stat(path: &String, md: Metadata, attr: &mut stat) -> i32{
     attr.st_uid = ClientContext::get_instance().get_fsconfig().uid;
     attr.st_gid = ClientContext::get_instance().get_fsconfig().gid;
     attr.st_rdev = 0;
-    attr.st_blksize = network::CHUNK_SIZE as i64;
+    attr.st_blksize = CHUNK_SIZE as i64;
     attr.st_blocks = 0;
 
     attr.st_atime = 0;
