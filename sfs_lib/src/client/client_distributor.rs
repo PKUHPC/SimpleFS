@@ -8,10 +8,10 @@ pub trait Distributor{
 }
 
 pub struct SimpleHashDistributor{
-    localhost_: u64,
-    hosts_size_: u64,
-    all_hosts_: Arc<Vec<u64>>,
-    str_hash_: HashMap<String, u64>
+    pub localhost_: u64,
+    pub hosts_size_: u64,
+    pub all_hosts_: Arc<Vec<u64>>,
+    pub str_hash_: HashMap<String, u64>
 }
 impl Distributor for SimpleHashDistributor{
     fn localhost(&self, ) -> u64 {
@@ -42,7 +42,7 @@ impl SimpleHashDistributor{
 }
 
 pub struct LocalOnlyDistributor{
-    localhost_: u64
+    pub localhost_: u64
 }
 impl LocalOnlyDistributor{
     pub fn new() -> LocalOnlyDistributor{
@@ -70,10 +70,10 @@ impl Distributor for LocalOnlyDistributor{
 }
 
 pub struct ForwardDistributor{
-    fwd_host_: u64, 
-    hosts_size_: u64,
-    all_hosts_: Arc<Vec<u64>>,
-    str_hash_: HashMap<String, u64>
+    pub fwd_host_: u64, 
+    pub hosts_size_: u64,
+    pub all_hosts_: Arc<Vec<u64>>,
+    pub str_hash_: HashMap<String, u64>
 }
 impl Distributor for ForwardDistributor{
     fn localhost(&self, ) -> u64 {

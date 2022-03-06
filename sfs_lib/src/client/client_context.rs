@@ -46,7 +46,7 @@ pub struct ClientContext{
     mountdir_components_: Arc<Vec<String>>,
     mountdir_: String,
 
-    hosts_: Vec<SFSEndpoint>,
+    hosts_: Arc<Mutex<Vec<SFSEndpoint>>>,
     local_host_id: u64,
     fwd_host_id: u64,
     rpc_protocol_: String,
@@ -67,7 +67,7 @@ lazy_static!{
         cwd_: "".to_string(),
         mountdir_components_: Arc::new(Vec::new()),
         mountdir_: "".to_string(),
-        hosts_: Vec::new(),
+        hosts_: Arc::new(Mutex::new(Vec::new())),
         local_host_id: 0,
         fwd_host_id: 0,
         rpc_protocol_: "tcp".to_string(),
@@ -108,14 +108,14 @@ impl ClientContext{
     pub fn get_cwd(&self) -> &String{
         &self.cwd_
     }
-    pub fn get_hosts(&self) -> Vec<SFSEndpoint>{
-        Vec::new()
+    pub fn get_hosts(&self) -> Arc<Mutex<Vec<SFSEndpoint>>>{
+        Arc::clone(&self.hosts_)
     }
     pub fn set_hosts(&mut self, hosts: Vec<SFSEndpoint>){
-        self.hosts_ = hosts;
+        self.hosts_ = Arc::new(Mutex::new(hosts));
     }
     pub fn clear_hosts(&mut self){
-        self.hosts_.clear();
+        self.hosts_.lock().unwrap().clear();
     }
     pub fn set_local_host_id(&mut self, host_id: u64){
         self.local_host_id = host_id;

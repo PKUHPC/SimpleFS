@@ -64,5 +64,5 @@ pub fn chunk_lpad(offset: i64, chunk_size: u64) -> u64{
     offset as u64 % chunk_size
 }
 pub fn chunk_rpad(offset: i64, chunk_size: u64) -> u64{
-    (- offset % chunk_size as i64) as u64
+    (- offset % chunk_size as i64 + chunk_size as i64) as u64
 }

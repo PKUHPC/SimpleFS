@@ -8,7 +8,7 @@ use nix::sys::statfs::statfs;
 use crate::global::metadata;
 use crate::global::{util::path_util::is_absolute, error_msg::error_msg};
 
-pub static CHUNKSIZE: u64 = 524288;
+pub static CHUNK_SIZE: u64 = 524288;
 
 pub struct ChunkStat{
     pub chunk_size: u64,
@@ -16,8 +16,8 @@ pub struct ChunkStat{
     pub chunk_free: u64
 }
 pub struct ChunkStorage{
-    root_path_: String,
-    chunk_size_: u64,
+    pub root_path_: String,
+    pub chunk_size_: u64,
 }
 impl ChunkStorage{
     pub fn absolute(&self, internel_path: &String) -> String{

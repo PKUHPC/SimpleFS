@@ -22,11 +22,9 @@ pub struct ChunkStat{
 }
 
 pub fn forward_stat(path: &String) -> Result<String, Error>{
-    let hosts = ClientContext::get_instance().get_hosts();
 
     let endp_id = ClientContext::get_instance().get_distributor().locate_file_metadata(path);
-    let endp = hosts.get(endp_id as usize).unwrap();
-    let post_res = NetworkService::get_instance().post(endp, path, PostOption::Stat);
+    let post_res = NetworkService::get_instance().post(ClientContext::get_instance().get_hosts().lock().unwrap().get(endp_id as usize).unwrap(), path, PostOption::Stat);
     if let Err(e) = post_res{
         error_msg("client::network::forward_stat".to_string(), format!("error {} occurs while fetching file stat", e));
         return Err(e);
@@ -35,11 +33,9 @@ pub fn forward_stat(path: &String) -> Result<String, Error>{
     todo!()
 }
 pub fn forward_create(path: &String, mode: u32) -> Result<String, Error>{
-    let hosts = ClientContext::get_instance().get_hosts();
 
     let endp_id = ClientContext::get_instance().get_distributor().locate_file_metadata(path);
-    let endp = hosts.get(endp_id as usize).unwrap();
-    let post_res = NetworkService::get_instance().post(endp, path, PostOption::Create);
+    let post_res = NetworkService::get_instance().post(ClientContext::get_instance().get_hosts().lock().unwrap().get(endp_id as usize).unwrap(), path, PostOption::Create);
     if let Err(e) = post_res{
         error_msg("client::network::forward_create".to_string(), format!("error {} occurs while fetching file stat", e));
         return Err(e);
@@ -48,11 +44,9 @@ pub fn forward_create(path: &String, mode: u32) -> Result<String, Error>{
     todo!()
 }
 pub fn forward_remove(path: &String, remove_metadentry_only: bool, size: i64) -> Result<String, Error>{
-    let hosts = ClientContext::get_instance().get_hosts();
     if remove_metadentry_only{
         let endp_id = ClientContext::get_instance().get_distributor().locate_file_metadata(path);
-        let endp = hosts.get(endp_id as usize).unwrap();
-        let post_res = NetworkService::get_instance().post(endp, path, PostOption::Remove);
+        let post_res = NetworkService::get_instance().post(ClientContext::get_instance().get_hosts().lock().unwrap().get(endp_id as usize).unwrap(), path, PostOption::Remove);
         todo!()
     }
     todo!()
@@ -84,9 +78,9 @@ pub fn forward_write(path: &String, buf: * const c_char, append_flag: bool, in_o
 
     let mut chunk_start_target = 0;
     let mut chunk_end_target = 0;
-    for chunk_id in chunk_start..chunk_end{
+    for chunk_id in chunk_start..(chunk_end + 1){
         let target = ClientContext::get_instance().get_distributor().locate_data(path, chunk_id);
-        if target_chunks.contains_key(&target){
+        if !target_chunks.contains_key(&target){
             target_chunks.insert(target, Mutex::new(Vec::new()));
             target_chunks.get(&target).unwrap().lock().unwrap().push(chunk_id);
             targets.push(chunk_id);
@@ -109,18 +103,25 @@ pub fn forward_write(path: &String, buf: * const c_char, append_flag: bool, in_o
         if target == chunk_end_target{
             tot_chunk_size -= chunk_rpad(offset + write_size, CHUNK_SIZE);
         }
-        let endp = ClientContext::get_instance().get_hosts().get(target as usize);
+        
+        println!("{}", ClientContext::get_instance().get_hosts().lock().unwrap().len() as u64);
         let input = WriteData{
             path: path.clone(),
             offset: chunk_lpad(offset, CHUNK_SIZE) as i64,
             host_id: target,
-            host_size: ClientContext::get_instance().get_hosts().len() as u64,
+            host_size: ClientContext::get_instance().get_hosts().lock().unwrap().len() as u64,
             chunk_n: target_chunks.get(&target).unwrap().lock().unwrap().len() as u64,
             chunk_start: chunk_start,
             chunk_end: chunk_end,
             total_chunk_size: tot_chunk_size,
             buffers: unsafe { CStr::from_ptr(buf).to_string_lossy().into_owned() }
         };
+        if let Ok(h) = NetworkService::get_instance().post::<WriteData>(ClientContext::get_instance().get_hosts().lock().unwrap().get(target as usize).unwrap(), input, PostOption::Write){
+            
+        }
+        else{
+            return (-1, 0);
+        }
     }
     return (0, 0);
 }

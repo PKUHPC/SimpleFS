@@ -1,7 +1,8 @@
 pub mod handle;
 pub mod task;
 use std::{fs::{self}, io::{Read, Error}, path::Path, net::{TcpListener, TcpStream}, thread};
-use sfs_lib::{global::network::post::PostOption::*, global::network::forward_data::WriteData};
+use handle::handle_write;
+use sfs_lib::{global::network::post::PostOption::*, global::network::{forward_data::WriteData, config::CHUNK_SIZE}};
 use sfs_lib::{server::{filesystem::storage_context::StorageContext, storage::metadata::db::MetadataDB, storage::data::chunk_storage::*}, global::network::post::Post};
 
 fn handle_client(mut stream: TcpStream) -> Result<(), Error>{
@@ -19,6 +20,7 @@ fn handle_client(mut stream: TcpStream) -> Result<(), Error>{
         Remove => todo!(),
         Write => {
             let write_data: WriteData = serde_json::from_str(&post.data).unwrap();
+            //handle_write(stream, write_data);
         },
     }
     Ok(())
@@ -52,7 +54,7 @@ fn init_environment(){
 
     let chunk_storage_path = StorageContext::get_instance().get_rootdir().clone() + &"/data/chunks".to_string();
     fs::create_dir_all(Path::new(&chunk_storage_path)).expect("fail to create chunk storage");
-    StorageContext::get_instance().set_storage(ChunkStorage::new(&chunk_storage_path, CHUNKSIZE).expect("fail to create chunk storage"));
+    StorageContext::get_instance().set_storage(ChunkStorage::new(&chunk_storage_path, CHUNK_SIZE).expect("fail to create chunk storage"));
 
     init_server(StorageContext::get_instance().get_bind_addr());
 
@@ -87,5 +89,24 @@ pub fn main(){
 
     init_environment();
     */
-    init_server(&"192.168.230.137:8082".to_string());
+    //init_server(&"192.168.230.137:8082".to_string());
+    /*
+    let s = "hello everyone, this is a sfs write test and will write a small data".to_string();
+    let mut hosts = ClientContext::get_instance().get_hosts();
+    hosts.lock().unwrap().push(SFSEndpoint{
+        addr: "192.168.230.137:8082".to_string(),
+    });
+    println!("trying to write");
+    forward_write(&"/sfs/test/write_chunk/a".to_string(), s.as_ptr() as * const i8, true, 0, s.len() as i64, s.len() as i64);
+    */
+    StorageContext::get_instance().set_storage(ChunkStorage{
+        root_path_: "/home/dev/Desktop/storage".to_string(),
+        chunk_size_: CHUNK_SIZE,
+    });
+
+    let data = String::from("{\"option\":\"Write\",\"data\":\"{\\\"path\\\":\\\"/sfs/test/write_chunk/a\\\",\\\"offset\\\":0,\\\"host_id\\\":0,\\\"host_size\\\":1,\\\"chunk_n\\\":1,\\\"chunk_start\\\":0,\\\"chunk_end\\\":0,\\\"total_chunk_size\\\":68,\\\"buffers\\\":\\\"hello everyone, this is a sfs write test and will write a small data\\\"}\"}");
+    let post: Post = serde_json::from_str(&data).unwrap();
+    let write_data: WriteData = serde_json::from_str(&post.data).unwrap();
+    handle_write(write_data);
+    
 }

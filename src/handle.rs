@@ -1,20 +1,24 @@
-use std::{net::TcpStream, thread};
-use serde_json::Value;
+use std::{net::TcpStream, thread::{self, JoinHandle}};
 use sfs_lib::{global::network::{forward_data::WriteData, config::CHUNK_SIZE}, client::client_distributor::{LocalOnlyDistributor, Distributor}, server::filesystem::storage_context::StorageContext};
 
 use crate::task::WriteChunkTask;
 
-pub fn handle_write(mut stream: TcpStream, input: WriteData){
+pub fn handle_write(input: WriteData){
     let path = input.path;
-    let mut chunk_ids_host: Vec<u64> = Vec::new();
-    chunk_ids_host.reserve(input.chunk_n as usize);
+
+    let mut chunk_ids_host: Vec<u64> = vec![0; input.chunk_n as usize];
+
     let mut chunk_id_curr = 0;
-    let mut chunk_size: Vec<u64> = Vec::new();
-    chunk_size.reserve(input.chunk_n as usize);
-    let mut buf_ptr: Vec<u64> = Vec::new();
-    buf_ptr.reserve(input.chunk_n as usize);
-    let mut task_args: Vec<WriteChunkTask> = Vec::new();
-    task_args.reserve(input.chunk_n as usize);
+
+    let mut chunk_size: Vec<u64> = vec![0; input.chunk_n as usize];
+
+    let mut buf_ptr: Vec<u64> = vec![0; input.chunk_n as usize];
+    
+    let mut task_args: Vec<WriteChunkTask> = vec![WriteChunkTask::new(); input.chunk_n as usize];
+
+    let mut tasks: Vec<JoinHandle<u64>> = Vec::new();
+    tasks.reserve(input.chunk_n as usize);
+
     let host_id = input.host_id;
     let mut chunk_size_left_host = input.total_chunk_size;
 
@@ -24,7 +28,7 @@ pub fn handle_write(mut stream: TcpStream, input: WriteData){
     let mut transfer_size = CHUNK_SIZE;
 
     let distributor = LocalOnlyDistributor::new();
-    for chunk_id_file in input.chunk_start..input.chunk_end{
+    for chunk_id_file in input.chunk_start..(input.chunk_end + 1){
         if chunk_id_curr >= input.chunk_n{
             break;
         }
@@ -65,9 +69,12 @@ pub fn handle_write(mut stream: TcpStream, input: WriteData){
         };
         task_args[chunk_id_curr as usize] = write_task.clone();
         // write to chunk
-        let t = thread::spawn(move || write_file(&write_task));
-        
+
+        tasks.push(thread::spawn(move || write_file(&write_task)));
         chunk_id_curr += 1;
+    }
+    for t in tasks{
+        t.join().unwrap();
     }
 }
 fn write_file(args: &WriteChunkTask) -> u64{
