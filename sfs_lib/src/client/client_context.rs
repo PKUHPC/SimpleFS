@@ -5,7 +5,7 @@ use std::sync::{Mutex, Arc, MutexGuard};
 use bit_vec::*;
 
 use crate::client::client_openfile::OpenFileMap;
-use crate::client::client_distributor::SimpleHashDistributor;
+use crate::global::distributor::SimpleHashDistributor;
 use crate::client::client_config::SFSConfig;
 use crate::client::client_endpoint::SFSEndpoint;
 use crate::global::error_msg::error_msg;
@@ -39,7 +39,7 @@ pub enum RelativizeStatus {
 
 pub struct ClientContext{
     open_file_map_: Arc<Mutex<OpenFileMap>>,
-    distributor_: Arc<SimpleHashDistributor>,
+    distributor_: Arc<Mutex<SimpleHashDistributor>>,
     fs_config_: Arc<SFSConfig>,
 
     cwd_: String,
@@ -62,7 +62,7 @@ pub struct ClientContext{
 lazy_static!{
     static ref CTX: Mutex<ClientContext> = Mutex::new(ClientContext{
         open_file_map_: Arc::new(Mutex::new(OpenFileMap::new())),
-        distributor_: Arc::new(SimpleHashDistributor::init()),
+        distributor_: Arc::new(Mutex::new(SimpleHashDistributor::init())),
         fs_config_: Arc::new(SFSConfig::init()),
         cwd_: "".to_string(),
         mountdir_components_: Arc::new(Vec::new()),
@@ -210,9 +210,9 @@ impl ClientContext{
         Arc::clone(&self.open_file_map_)
     }
     pub fn set_distributor(&mut self, d: SimpleHashDistributor){
-        self.distributor_ = Arc::new(d);
+        self.distributor_ = Arc::new(Mutex::new(d));
     }
-    pub fn get_distributor(&self) -> Arc<SimpleHashDistributor> {
+    pub fn get_distributor(&self) -> Arc<Mutex<SimpleHashDistributor>> {
         Arc::clone(&self.distributor_)
     }
     pub fn get_fsconfig(&self) -> Arc<SFSConfig>{

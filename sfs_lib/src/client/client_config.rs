@@ -1,3 +1,4 @@
+pub static hostfile_path: &str = "/sfs_config.json";
 pub struct SFSConfig{
     pub atime_state: bool,
     pub ctime_state: bool,

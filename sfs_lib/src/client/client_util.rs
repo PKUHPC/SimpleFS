@@ -1,6 +1,6 @@
 use std::{hash::{Hash, Hasher}, collections::hash_map::DefaultHasher, io::Error};
 
-use libc::{stat, makedev, memset};
+use libc::{stat, makedev, gethostname};
 
 use crate::{global::{metadata::Metadata, network::config::CHUNK_SIZE}, client::client_context::ClientContext };
 
@@ -12,6 +12,23 @@ pub fn get_metadata(path: &String, follow_link: bool) -> Result<Metadata, Error>
         return Err(e);
     }
     return Ok(Metadata::deserialize(&md_res.unwrap()).unwrap());
+}
+pub fn get_hostname(short_hostname: bool) -> String{
+    let hostname: [u8; 1024] = [0; 1024];
+    let ret = unsafe {gethostname(hostname.as_ptr() as *mut i8, 1024)};
+    if ret == 0{
+        let mut hostname = String::from_utf8(hostname.to_vec()).unwrap();
+        if !short_hostname{
+            return hostname;
+        }
+        if let Some(pos) = hostname.find(&".".to_string()){
+            hostname = hostname[0..pos].to_string();
+        }
+        return hostname;
+    }
+    else{
+        return "".to_string();
+    }
 }
 pub fn metadata_to_stat(path: &String, md: Metadata, attr: &mut stat) -> i32{
     unsafe{ attr.st_dev = makedev(0, 0) };

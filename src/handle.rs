@@ -1,5 +1,5 @@
 use std::{net::TcpStream, thread::{self, JoinHandle}};
-use sfs_lib::{global::network::{forward_data::WriteData, config::CHUNK_SIZE}, client::client_distributor::{LocalOnlyDistributor, Distributor}, server::filesystem::storage_context::StorageContext};
+use sfs_lib::{global::{network::{forward_data::WriteData, config::CHUNK_SIZE}, distributor::{SimpleHashDistributor, Distributor}}, server::filesystem::storage_context::StorageContext};
 
 use crate::task::WriteChunkTask;
 
@@ -20,6 +20,7 @@ pub fn handle_write(input: WriteData){
     tasks.reserve(input.chunk_n as usize);
 
     let host_id = input.host_id;
+    let host_size = input.host_size;
     let mut chunk_size_left_host = input.total_chunk_size;
 
     let buf = input.buffers.as_bytes();
@@ -27,7 +28,7 @@ pub fn handle_write(input: WriteData){
 
     let mut transfer_size = CHUNK_SIZE;
 
-    let distributor = LocalOnlyDistributor::new();
+    let mut distributor = SimpleHashDistributor::new(host_id, host_size);
     for chunk_id_file in input.chunk_start..(input.chunk_end + 1){
         if chunk_id_curr >= input.chunk_n{
             break;

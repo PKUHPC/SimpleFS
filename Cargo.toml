@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 sfs_lib = { path = "./sfs_lib" }
 serde_json = "*"
+sha2 = '0.10.2'

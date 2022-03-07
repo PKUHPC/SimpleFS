@@ -1,9 +1,9 @@
 pub mod handle;
 pub mod task;
 use std::{fs::{self}, io::{Read, Error}, path::Path, net::{TcpListener, TcpStream}, thread};
-use handle::handle_write;
 use sfs_lib::{global::network::post::PostOption::*, global::network::{forward_data::WriteData, config::CHUNK_SIZE}};
 use sfs_lib::{server::{filesystem::storage_context::StorageContext, storage::metadata::db::MetadataDB, storage::data::chunk_storage::*}, global::network::post::Post};
+use sha2::{Sha256, Digest};
 
 fn handle_client(mut stream: TcpStream) -> Result<(), Error>{
     let mut buf = [0; 2048];
@@ -21,6 +21,10 @@ fn handle_client(mut stream: TcpStream) -> Result<(), Error>{
         Write => {
             let write_data: WriteData = serde_json::from_str(&post.data).unwrap();
             //handle_write(stream, write_data);
+        },
+        Lookup => {
+            let id: u64 = serde_json::from_str(&post.data).unwrap();
+            StorageContext::get_instance().set_host_id(id);
         },
     }
     Ok(())
@@ -99,6 +103,7 @@ pub fn main(){
     println!("trying to write");
     forward_write(&"/sfs/test/write_chunk/a".to_string(), s.as_ptr() as * const i8, true, 0, s.len() as i64, s.len() as i64);
     */
+    /*
     StorageContext::get_instance().set_storage(ChunkStorage{
         root_path_: "/home/dev/Desktop/storage".to_string(),
         chunk_size_: CHUNK_SIZE,
@@ -108,5 +113,16 @@ pub fn main(){
     let post: Post = serde_json::from_str(&data).unwrap();
     let write_data: WriteData = serde_json::from_str(&post.data).unwrap();
     handle_write(write_data);
-    
+    */
+    let mut hasher = Sha256::new();
+    let s1 = "sjfbcakjbsca".to_string();
+    let s2 = "sjfbcakjbsca".to_string();
+    let s3 = "sjfbcakjbsca".to_string();
+    let s4 = "sjfbcakjbsca".to_string();
+    hasher.update(s1);
+    println!("{}", hasher.finalize()[0]);
+
+    let mut hasher = Sha256::new();
+    hasher.update(s2);
+    println!("{}", hasher.finalize()[0]);
 }

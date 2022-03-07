@@ -5,6 +5,7 @@ use crate::server::storage::{metadata::db::MetadataDB, data::chunk_storage::Chun
 
 
 pub struct StorageContext{
+    host_id_: u64,
     rootdir_: String,
     mountdir_: String,
     metadir_: String,
@@ -25,6 +26,7 @@ pub struct StorageContext{
 }
 lazy_static!{
     static ref CTX: Mutex<StorageContext> = Mutex::new(StorageContext{
+        host_id_: 0,
         rootdir_: String::from(""),
         mountdir_: String::from(""),
         metadir_: String::from(""),
@@ -146,6 +148,12 @@ impl StorageContext{
     }
     pub fn set_storage(&mut self, storage_: ChunkStorage){
         self.storage_ = Some(Arc::new(storage_));
+    }
+    pub fn set_host_id(&mut self, id: u64){
+        self.host_id_ = id;
+    }
+    pub fn get_host_id(&self) -> u64{
+        self.host_id_
     }
 }
 

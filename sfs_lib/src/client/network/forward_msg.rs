@@ -7,8 +7,9 @@ use libc::c_char;
 
 use crate::client::client_openfile::OpenFile;
 use crate::client::client_util::{offset_to_chunk_id, chunk_lpad, chunk_rpad};
-use crate::client::{client_context::ClientContext, client_distributor::Distributor, network::network_service::NetworkService};
+use crate::client::{client_context::ClientContext, network::network_service::NetworkService};
 use crate::client::network::network_service::*;
+use crate::global::distributor::Distributor;
 use crate::global::error_msg::error_msg;
 use crate::global::network::config::CHUNK_SIZE;
 use crate::global::network::forward_data::WriteData;
@@ -23,7 +24,7 @@ pub struct ChunkStat{
 
 pub fn forward_stat(path: &String) -> Result<String, Error>{
 
-    let endp_id = ClientContext::get_instance().get_distributor().locate_file_metadata(path);
+    let endp_id = ClientContext::get_instance().get_distributor().lock().unwrap().locate_file_metadata(path);
     let post_res = NetworkService::get_instance().post(ClientContext::get_instance().get_hosts().lock().unwrap().get(endp_id as usize).unwrap(), path, PostOption::Stat);
     if let Err(e) = post_res{
         error_msg("client::network::forward_stat".to_string(), format!("error {} occurs while fetching file stat", e));
@@ -34,7 +35,7 @@ pub fn forward_stat(path: &String) -> Result<String, Error>{
 }
 pub fn forward_create(path: &String, mode: u32) -> Result<String, Error>{
 
-    let endp_id = ClientContext::get_instance().get_distributor().locate_file_metadata(path);
+    let endp_id = ClientContext::get_instance().get_distributor().lock().unwrap().locate_file_metadata(path);
     let post_res = NetworkService::get_instance().post(ClientContext::get_instance().get_hosts().lock().unwrap().get(endp_id as usize).unwrap(), path, PostOption::Create);
     if let Err(e) = post_res{
         error_msg("client::network::forward_create".to_string(), format!("error {} occurs while fetching file stat", e));
@@ -45,7 +46,7 @@ pub fn forward_create(path: &String, mode: u32) -> Result<String, Error>{
 }
 pub fn forward_remove(path: &String, remove_metadentry_only: bool, size: i64) -> Result<String, Error>{
     if remove_metadentry_only{
-        let endp_id = ClientContext::get_instance().get_distributor().locate_file_metadata(path);
+        let endp_id = ClientContext::get_instance().get_distributor().lock().unwrap().locate_file_metadata(path);
         let post_res = NetworkService::get_instance().post(ClientContext::get_instance().get_hosts().lock().unwrap().get(endp_id as usize).unwrap(), path, PostOption::Remove);
         todo!()
     }
@@ -79,7 +80,7 @@ pub fn forward_write(path: &String, buf: * const c_char, append_flag: bool, in_o
     let mut chunk_start_target = 0;
     let mut chunk_end_target = 0;
     for chunk_id in chunk_start..(chunk_end + 1){
-        let target = ClientContext::get_instance().get_distributor().locate_data(path, chunk_id);
+        let target = ClientContext::get_instance().get_distributor().lock().unwrap().locate_data(path, chunk_id);
         if !target_chunks.contains_key(&target){
             target_chunks.insert(target, Mutex::new(Vec::new()));
             target_chunks.get(&target).unwrap().lock().unwrap().push(chunk_id);
@@ -130,4 +131,7 @@ pub fn forward_read(path: &String, buf: * mut c_char, offset: i64, read_size: i6
 }
 pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>){
     todo!();
+}
+pub fn forward_get_fs_config() -> bool{
+    true
 }
