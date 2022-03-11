@@ -1,5 +1,6 @@
 use lazy_static::*;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard};
+use std::sync::Arc;
 
 use crate::server::storage::{metadata::db::MetadataDB, data::chunk_storage::ChunkStorage};
 
@@ -14,9 +15,6 @@ pub struct StorageContext{
     bind_addr_: String,
     hosts_file_: String,
     use_auto_sm_: bool,
-
-    mdb_: Option<Arc<Mutex<MetadataDB>>>,
-    storage_: Option<Arc<ChunkStorage>>,
 
     atime_state_: bool,
     mtime_state_: bool,
@@ -35,9 +33,6 @@ lazy_static!{
         bind_addr_: String::from(""),
         hosts_file_: String::from(""),
         use_auto_sm_: true,
-
-        mdb_: None,
-        storage_: None,
 
         atime_state_: true,
         mtime_state_: true,
@@ -123,31 +118,21 @@ impl StorageContext{
         self.blocks_state_ = blocks_state_;
     }
 
-    pub fn get_mdb(&self) -> Option<Arc<Mutex<MetadataDB>>>{
-        if let Some(mdb) = &self.mdb_{
-            Some(Arc::clone(mdb))
-        }
-        else {
-            None
-        }
+    pub fn get_mdb(&self) -> MutexGuard<'static, MetadataDB>{
+        MetadataDB::get_instance()
     }
-    pub fn set_mdb(&mut self, mdb_: MetadataDB){
-        self.mdb_ = Some(Arc::new(Mutex::new(mdb_)));
+    pub fn set_mdb(mdb_: MetadataDB){
+        MetadataDB::set_mdb(mdb_);
     }
-    pub fn close_db(&mut self){
-        self.mdb_ = None;
+    pub fn close_db(){
+        MetadataDB::get_instance().db = None;
     }
 
-    pub fn get_storage(&self) -> Option<Arc<ChunkStorage>>{
-        if let Some(storage) = &self.storage_{
-            Some(Arc::clone(storage))
-        }
-        else {
-            None
-        }
+    pub fn get_storage() -> MutexGuard<'static, ChunkStorage>{
+        ChunkStorage::get_instance()
     }
-    pub fn set_storage(&mut self, storage_: ChunkStorage){
-        self.storage_ = Some(Arc::new(storage_));
+    pub fn set_storage(storage_: ChunkStorage){
+        ChunkStorage::set_storage(storage_);
     }
     pub fn set_host_id(&mut self, id: u64){
         self.host_id_ = id;

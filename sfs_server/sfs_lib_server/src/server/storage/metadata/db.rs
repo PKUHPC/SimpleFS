@@ -1,17 +1,38 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use rocksdb::{DB, Options, WriteOptions};
 
 use crate::{server::storage::metadata::merge, global::{util::path_util::{is_absolute, has_trailing_slash}, error_msg::error_msg, metadata::{Metadata, self, S_ISDIR}}};
 static use_write_ahead_log: bool = false;
 
+use lazy_static::*;
+
 pub struct MetadataDB{
-    db: Arc<DB>,
+    pub db: Option<Arc<DB>>,
     options: Options,
     write_opts: WriteOptions,
     path: String
 }
+lazy_static!{
+    static ref MDB: Mutex<MetadataDB> = Mutex::new(
+        MetadataDB{
+            db: None,
+            options: Options::default(),
+            write_opts: WriteOptions::default(),
+            path: "".to_string()
+        }
+    );
+}
 impl MetadataDB{
+    pub fn get_instance() -> MutexGuard<'static, MetadataDB>{
+        MDB.lock().unwrap()
+    }
+    pub fn set_mdb(mdb_: MetadataDB){
+        MetadataDB::get_instance().db = mdb_.db;
+        MetadataDB::get_instance().options = mdb_.options;
+        MetadataDB::get_instance().write_opts = mdb_.write_opts;
+        MetadataDB::get_instance().path = mdb_.path;
+    }
     pub fn optimize_rocksdb_options(options:&mut Options){
         options.set_max_successive_merges(128);
     }
@@ -27,7 +48,7 @@ impl MetadataDB{
         write_options.disable_wal(use_write_ahead_log);
         if let Ok(rdb) = DB::open(&options, path.clone()){
             Some(MetadataDB{
-                db: Arc::new(rdb),
+                db: Some(Arc::new(rdb)),
                 options: options,
                 write_opts: write_options,
                 path: path
@@ -39,7 +60,7 @@ impl MetadataDB{
         }
     }
     pub fn get(&self, key: String) -> Option<String>{
-        if let Ok(Some(val)) = self.db.get(key){
+        if let Ok(Some(val)) = self.db.as_ref().unwrap().get(key){
             Some(String::from_utf8(val).unwrap())
         }
         else{
@@ -55,18 +76,18 @@ impl MetadataDB{
             error_msg("server::storage::metadata::db::put".to_string(), "key mustn't have trailing slash".to_string());
             return;
         }
-        if let Err(e) = self.db.merge_opt(key, val, &self.write_opts){
+        if let Err(e) = self.db.as_ref().unwrap().merge_opt(key, val, &self.write_opts){
             error_msg("server::storage::metadata::db::put".to_string(), "fail to merge value".to_string());
         }
         
     }
     pub fn remove(&mut self, key: String){
-        if let Err(e) = self.db.delete(key){
+        if let Err(e) = self.db.as_ref().unwrap().delete(key){
             error_msg("server::storage::metadata::db::delete".to_string(), "fail to delete key".to_string());
         }
     }
     pub fn exists(&self, key: String) -> bool{
-        if let Ok(res) = self.db.get(key){
+        if let Ok(res) = self.db.as_ref().unwrap().get(key){
             if let Some(value) = res{true}
             else{false}
         }
@@ -79,19 +100,19 @@ impl MetadataDB{
         let mut batch = rocksdb::WriteBatch::default();
         batch.delete(old_key);
         batch.put(new_key, val);
-        if let Err(e) = self.db.write_opt(batch, &self.write_opts){
+        if let Err(e) = self.db.as_ref().unwrap().write_opt(batch, &self.write_opts){
             error_msg("server::storage::metadata::db::update".to_string(), "fail to write batch".to_string());
         }
     }
     pub fn increase_size(&mut self, key: String, size: usize, append: bool){
         let op_s = format!("i|{}|{}", size, append);
-        if let Err(e) = self.db.merge_opt(key, op_s, &self.write_opts){
+        if let Err(e) = self.db.as_ref().unwrap().merge_opt(key, op_s, &self.write_opts){
             error_msg("server::storage::metadata::db::increase_size".to_string(), "fail to merge operands".to_string()); 
         }
     }
     pub fn decrease_size(&mut self, key: String, size: usize){
         let op_s = format!("d|{}", size);
-        if let Err(e) = self.db.merge_opt(key, op_s, &self.write_opts){
+        if let Err(e) = self.db.as_ref().unwrap().merge_opt(key, op_s, &self.write_opts){
             error_msg("server::storage::metadata::db::decrease_size".to_string(), "fail to merge operands".to_string()); 
         }
     }
@@ -104,7 +125,7 @@ impl MetadataDB{
         if !has_trailing_slash(&root_path) && root_path.len() == 1{
             root_path.push('/');
         }
-        let iter = self.db.prefix_iterator(root_path.clone());
+        let iter = self.db.as_ref().unwrap().prefix_iterator(root_path.clone());
         let mut entries: Vec<(String, bool)> = Vec::new();
         for (k, v) in iter{
             let s = String::from_utf8(k.to_vec()).unwrap();
@@ -128,7 +149,7 @@ impl MetadataDB{
     pub fn iterate_all(&self){
         let mut key: String;
         let mut value: String;
-        let iter = self.db.iterator(rocksdb::IteratorMode::Start);
+        let iter = self.db.as_ref().unwrap().iterator(rocksdb::IteratorMode::Start);
         for (k, v) in iter{
             key = String::from_utf8(k.to_vec()).unwrap();
             value = String::from_utf8(v.to_vec()).unwrap();

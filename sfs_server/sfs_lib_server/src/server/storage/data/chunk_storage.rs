@@ -4,9 +4,12 @@ use std::{fs, path};
 use std::os::unix::fs::PermissionsExt;
 
 use nix::sys::statfs::statfs;
+use std::sync::{MutexGuard, Mutex};
 
 use crate::global::metadata;
 use crate::global::{util::path_util::is_absolute, error_msg::error_msg};
+
+use lazy_static::*;
 
 pub static CHUNK_SIZE: u64 = 524288;
 
@@ -19,7 +22,20 @@ pub struct ChunkStorage{
     pub root_path_: String,
     pub chunk_size_: u64,
 }
+lazy_static!{
+    static ref CNK: Mutex<ChunkStorage> = Mutex::new(ChunkStorage{
+        root_path_: "".to_string(),
+        chunk_size_: CHUNK_SIZE
+    });
+}
 impl ChunkStorage{
+    pub fn get_instance() -> MutexGuard<'static, ChunkStorage>{
+        CNK.lock().unwrap()
+    }
+    pub fn set_storage(storage_: ChunkStorage){
+        CNK.lock().unwrap().root_path_ = storage_.root_path_;
+        CNK.lock().unwrap().chunk_size_ = storage_.chunk_size_;
+    }
     pub fn absolute(&self, internel_path: &String) -> String{
         if is_absolute(&internel_path) {
             error_msg("server::storage::chunk_storage::absolute".to_string(), "path should be relative".to_string());

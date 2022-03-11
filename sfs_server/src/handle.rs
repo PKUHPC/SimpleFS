@@ -1,9 +1,9 @@
-use std::{net::TcpStream, thread::{self, JoinHandle}};
-use sfs_lib_server::{global::{network::{forward_data::WriteData, config::CHUNK_SIZE}, distributor::{SimpleHashDistributor, Distributor}}, server::filesystem::storage_context::StorageContext};
+use sfs_lib_server::{global::{network::{forward_data::WriteData, config::CHUNK_SIZE, post::PostResult}, distributor::{SimpleHashDistributor, Distributor}}, server::{filesystem::storage_context::StorageContext, storage::data::chunk_storage::ChunkStorage}};
+use tokio::task::JoinHandle;
 
 use crate::task::WriteChunkTask;
 
-pub fn handle_write(input: WriteData) -> String{
+pub async fn handle_write(input: WriteData) -> String{
     let path = input.path;
 
     let mut chunk_ids_host: Vec<u64> = vec![0; input.chunk_n as usize];
@@ -71,17 +71,24 @@ pub fn handle_write(input: WriteData) -> String{
         task_args[chunk_id_curr as usize] = write_task.clone();
         // write to chunk
 
-        tasks.push(thread::spawn(move || write_file(&write_task)));
+        tasks.push(tokio::spawn(async move { 
+            write_file(&write_task).await
+        }));
         chunk_id_curr += 1;
     }
     let mut write_tot = 0;
     for t in tasks{
-        write_tot += t.join().unwrap();
+        write_tot += t.await.unwrap();
     }
-    return write_tot.to_string();
+    let post_res = PostResult{
+        err: false,
+        data: write_tot.to_string(),
+    };
+    return serde_json::to_string(&post_res).unwrap();
 }
-fn write_file(args: &WriteChunkTask) -> u64{
-    if let Ok(nwrite) = StorageContext::get_instance().get_storage().unwrap().write_chunk(&args.path, args.chunk_id, args.buf.as_bytes(), args.size, args.offset){
+async fn write_file(args: &WriteChunkTask) -> u64{
+    println!("writing...");
+    if let Ok(nwrite) = ChunkStorage::get_instance().write_chunk(&args.path, args.chunk_id, args.buf.as_bytes(), args.size, args.offset){
         nwrite
     }
     else { 0 }

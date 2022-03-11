@@ -22,6 +22,7 @@ struct ServerHandler(SocketAddr);
 #[tarpc::server]
 impl SFSServer for ServerHandler {
     async fn handle(self, _: context::Context, post: String) -> String {
+        println!("handling....");
         let post: Post = serde_json::from_str(post.as_str()).unwrap();
         match post.option {
             Stat => todo!(),
@@ -29,7 +30,7 @@ impl SFSServer for ServerHandler {
             Remove => todo!(),
             Write => {
                 let write_data: WriteData = serde_json::from_str(&post.data).unwrap();
-                return handle_write(write_data);
+                return handle_write(write_data).await;
             },
             Lookup => {
                 let id: u64 = serde_json::from_str(&post.data).unwrap();
@@ -82,12 +83,12 @@ fn populates_host_file() -> Option<Error>{
 async fn init_environment() -> Result<(), Error>{
     // init metadata storage
     let metadata_path = StorageContext::get_instance().get_metadir().clone() + &"/rocksdb".to_string();
-    StorageContext::get_instance().set_mdb(MetadataDB::new(metadata_path).expect("fail to create metadata data base"));
+    StorageContext::set_mdb(MetadataDB::new(metadata_path).expect("fail to create metadata data base"));
 
     // init chunk storage
     let chunk_storage_path = StorageContext::get_instance().get_rootdir().clone() + &"/data/chunks".to_string();
     fs::create_dir_all(Path::new(&chunk_storage_path)).expect("fail to create chunk storage");
-    StorageContext::get_instance().set_storage(ChunkStorage::new(&chunk_storage_path, CHUNK_SIZE).expect("fail to create chunk storage"));
+    StorageContext::set_storage(ChunkStorage::new(&chunk_storage_path, CHUNK_SIZE).expect("fail to create chunk storage"));
 
     init_server(StorageContext::get_instance().get_bind_addr()).await?;
 
@@ -107,7 +108,7 @@ async fn init_environment() -> Result<(), Error>{
     Ok(())
 }
 fn create_metadentry(path: &String, md: Metadata){
-    StorageContext::get_instance().get_mdb().unwrap().lock().unwrap().put(path.to_string(), md.serialize());
+    MetadataDB::get_instance().put(path.to_string(), md.serialize());
 }
 fn destroy_environment(){
 
@@ -136,6 +137,8 @@ pub async fn main() -> Result<(), Error>{
 
     init_environment().await?;
     */
+    let chunk_storage_path = "/home/dev/Desktop/storage/data/chunks".to_string();fs::create_dir_all(Path::new(&chunk_storage_path)).expect("fail to create chunk storage");
+    StorageContext::set_storage(ChunkStorage::new(&chunk_storage_path, CHUNK_SIZE).expect("fail to create chunk storage"));
     init_server(&"192.168.230.137".to_string()).await?;
     Ok(())
 }
