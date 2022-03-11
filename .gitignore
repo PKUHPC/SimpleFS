@@ -1,3 +1,4 @@
-/target
-Cargo.lock
-workspace.code-workspace
+/sfs_client/target
+/sfs_server/target
+/sfs_client/cargo.lock
+/sfs_server/cargo.lock

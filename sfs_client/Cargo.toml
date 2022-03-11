@@ -1,0 +1,28 @@
+[package]
+name = "sfs_client"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["staticlib"]
+name = "sfs_client"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+libc = '*'
+bit-vec = '*'
+lazy_static = '*'
+syscalls = { version = "0.3", default-features = false }
+nix = '0.23.0'
+serde = { version = "1.0.104", features = ["derive"] }
+serde_json = "*"
+bindgen = '*'
+regex = '*'
+rand = '0.8.5'
+sha2 = '0.10.2'
+tokio = { version = "1.17", features = ["full"] }
+tarpc = { version = "0.27", features = ["full"] }
+futures = '*'

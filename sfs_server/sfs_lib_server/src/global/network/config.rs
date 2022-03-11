@@ -1,0 +1,1 @@
+pub static CHUNK_SIZE: u64 = 524288;
