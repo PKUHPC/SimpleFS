@@ -60,4 +60,3 @@ pub fn match_components(path: String, components: Arc<Vec<String>>) -> (usize, u
     }
     (matched, processed_components)
 }
-

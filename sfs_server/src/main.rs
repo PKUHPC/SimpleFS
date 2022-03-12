@@ -3,9 +3,9 @@
 #[warn(unused_assignments)]
 pub mod handle;
 pub mod task;
-use std::{fs::{self, OpenOptions}, io::{Read, Error, BufWriter, Write}, path::Path, net::{Ipv4Addr, IpAddr, SocketAddr}};
+use std::{fs::{self, OpenOptions}, io::{Error, BufWriter, Write}, path::Path, net::{Ipv4Addr, IpAddr, SocketAddr}};
 use libc::{S_IFDIR, S_IRWXU, S_IRWXG, S_IRWXO};
-use sfs_lib_server::{global::network::post::PostOption::*, global::{network::{rpc::SFSServer, forward_data::WriteData, config::CHUNK_SIZE}, error_msg::error_msg, util::net_util::get_my_hostname, metadata::Metadata}, server::{config::ServerConfig, network::network_context::NetworkContext}};
+use sfs_lib_server::{global::network::post::PostOption::*, global::{network::{rpc::SFSServer, forward_data::{WriteData, ReadData}, config::CHUNK_SIZE}, error_msg::error_msg, util::net_util::get_my_hostname, metadata::Metadata}, server::{config::ServerConfig, network::network_context::NetworkContext}};
 use sfs_lib_server::{server::{filesystem::storage_context::StorageContext, storage::metadata::db::MetadataDB, storage::data::chunk_storage::*}, global::network::post::Post};
 
 use futures::{future, prelude::*};
@@ -15,7 +15,7 @@ use tarpc::{
     tokio_serde::formats::Json,
 };
 
-use crate::handle::handle_write;
+use crate::handle::{handle_write, handle_read};
 
 #[derive(Clone)]
 struct ServerHandler(SocketAddr);
@@ -28,6 +28,10 @@ impl SFSServer for ServerHandler {
             Stat => todo!(),
             Create => todo!(),
             Remove => todo!(),
+            Read => {
+                let read_data: ReadData = serde_json::from_str(&post.data).unwrap();
+                return handle_read(read_data).await
+            },
             Write => {
                 let write_data: WriteData = serde_json::from_str(&post.data).unwrap();
                 return handle_write(write_data).await;

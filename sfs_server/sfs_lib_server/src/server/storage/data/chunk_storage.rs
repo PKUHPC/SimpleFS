@@ -7,11 +7,10 @@ use nix::sys::statfs::statfs;
 use std::sync::{MutexGuard, Mutex};
 
 use crate::global::metadata;
+use crate::global::network::config::CHUNK_SIZE;
 use crate::global::{util::path_util::is_absolute, error_msg::error_msg};
 
 use lazy_static::*;
-
-pub static CHUNK_SIZE: u64 = 524288;
 
 pub struct ChunkStat{
     pub chunk_size: u64,
@@ -118,12 +117,14 @@ impl ChunkStorage{
         }
         let f = open_res.unwrap();
         let mut read_tot:u64 = 0;
+        let tmp = buf;
+        buf = &mut tmp[0..size as usize];
         while !buf.is_empty() {
             match f.read_at(buf, offset) {
                 Ok(0) => break,
                 Ok(n) => {
                     let tmp = buf;
-                    buf = &mut tmp[n..];
+                    buf = &mut tmp[n..size as usize];
                     offset += n as u64;
                     read_tot += n as u64;
                 },

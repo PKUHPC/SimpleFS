@@ -1,1 +1,1 @@
-pub static CHUNK_SIZE: u64 = 524288;
+pub static CHUNK_SIZE: u64 = 5;

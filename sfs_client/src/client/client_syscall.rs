@@ -323,7 +323,7 @@ fn internal_pread(f: Arc<Mutex<OpenFile>>, buf: * mut c_char, count: i64, offset
         error_msg("client::sfs_pread".to_string(), format!("read with error {}", read_res.0));
         return -1;
     }
-    return read_res.1;
+    return read_res.1 as i64;
 }
 
 #[no_mangle]

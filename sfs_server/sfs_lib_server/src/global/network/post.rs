@@ -8,7 +8,8 @@ pub enum PostOption {
     Create,
     Remove,
     Write,
-    FsConfig
+    FsConfig,
+    Read
 }
 impl Clone for PostOption{
     fn clone(&self) -> Self {
@@ -19,6 +20,7 @@ impl Clone for PostOption{
             Self::Remove => Self::Remove,
             Self::Write => Self::Write,
             Self::FsConfig => Self::FsConfig,
+            Self::Read => Self::Read,
         }
     }
 }
