@@ -5,7 +5,7 @@ pub mod handle;
 pub mod task;
 use std::{fs::{self, OpenOptions}, io::{Error, BufWriter, Write}, path::Path, net::{Ipv4Addr, IpAddr, SocketAddr}};
 use libc::{S_IFDIR, S_IRWXU, S_IRWXG, S_IRWXO};
-use sfs_lib_server::{global::network::post::PostOption::*, global::{network::{rpc::SFSServer, forward_data::{WriteData, ReadData}, config::CHUNK_SIZE}, error_msg::error_msg, util::net_util::get_my_hostname, metadata::Metadata}, server::{config::ServerConfig, network::network_context::NetworkContext}};
+use sfs_lib_server::{global::network::post::PostOption::*, global::{network::{rpc::SFSServer, forward_data::{WriteData, ReadData, CreateData}, config::CHUNK_SIZE, post::PostResult}, error_msg::error_msg, util::net_util::get_my_hostname, metadata::Metadata}, server::{config::ServerConfig, network::network_context::NetworkContext}};
 use sfs_lib_server::{server::{filesystem::storage_context::StorageContext, storage::metadata::db::MetadataDB, storage::data::chunk_storage::*}, global::network::post::Post};
 
 use futures::{future, prelude::*};
@@ -25,12 +25,28 @@ impl SFSServer for ServerHandler {
         println!("handling....");
         let post: Post = serde_json::from_str(post.as_str()).unwrap();
         match post.option {
-            Stat => todo!(),
-            Create => todo!(),
+            Stat => {
+                let path = post.data;
+                let md_res = MetadataDB::get_instance().get(&path);
+                if let Some(md) = md_res{
+                    return serde_json::to_string(&PostResult{err: false, data: md}).unwrap();
+                }
+                else{
+                    return serde_json::to_string(&PostResult{err: true, data: "".to_string()}).unwrap();
+                }
+            },
+            Create => {
+                let create_data: CreateData = serde_json::from_str(post.data.as_str()).unwrap();
+                let mode = create_data.mode;
+                let mut md = Metadata::new();
+                md.set_mode(mode);
+                let create_res = create_metadentry(&create_data.path, md);
+                return serde_json::to_string(&PostResult{err: create_res != 0, data: create_res.to_string()}).unwrap();
+            },
             Remove => todo!(),
             Read => {
                 let read_data: ReadData = serde_json::from_str(&post.data).unwrap();
-                return handle_read(read_data).await
+                return handle_read(read_data).await;
             },
             Write => {
                 let write_data: WriteData = serde_json::from_str(&post.data).unwrap();
@@ -111,8 +127,8 @@ async fn init_environment() -> Result<(), Error>{
     }
     Ok(())
 }
-fn create_metadentry(path: &String, md: Metadata){
-    MetadataDB::get_instance().put(path.to_string(), md.serialize());
+fn create_metadentry(path: &String, md: Metadata) -> i32{
+    MetadataDB::get_instance().put(path.to_string(), md.serialize())
 }
 fn destroy_environment(){
 

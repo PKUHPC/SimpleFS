@@ -1,1 +1,1 @@
-pub const CHUNK_SIZE: u64 = 5;
+pub const CHUNK_SIZE: u64 = 524288;

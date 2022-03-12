@@ -9,16 +9,11 @@ pub struct NetworkService{
 
 }
 lazy_static!{
-    static ref NTS: Mutex<NetworkService> = Mutex::new(
-        NetworkService{}
-    );
+    static ref NTS: NetworkService = NetworkService{};
 }
 impl NetworkService{
-    pub fn get_instance() -> MutexGuard<'static, NetworkService>{
-        NTS.lock().unwrap()
-    }
     #[tokio::main]
-    pub async fn post<T: Serialize>(&self, endp: &SFSEndpoint, data: T, opt: PostOption) -> Result<PostResult, Error>{
+    pub async fn post<T: Serialize>(endp: &SFSEndpoint, data: T, opt: PostOption) -> Result<PostResult, Error>{
         let serialized_data = serde_json::to_string(&data)?;
         let post = Post{
             option: opt.clone(),

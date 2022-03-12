@@ -1,10 +1,12 @@
 use std::collections::HashMap;
 use std::ffi::CStr;
-use std::io::Error;
+use std::io::{Error, ErrorKind};
 use std::sync::{Arc, Mutex};
 
 use libc::{c_char, strncpy};
+use tokio::task::JoinHandle;
 
+use crate::client::client_endpoint::SFSEndpoint;
 use crate::client::client_openfile::OpenFile;
 use crate::client::client_util::{offset_to_chunk_id, chunk_lpad, chunk_rpad};
 use crate::client::{client_context::ClientContext, network::network_service::NetworkService};
@@ -13,8 +15,8 @@ use crate::global::distributor::Distributor;
 use crate::global::error_msg::error_msg;
 use crate::global::fsconfig::SFSConfig;
 use crate::global::network::config::CHUNK_SIZE;
-use crate::global::network::forward_data::{WriteData, ReadData, ReadResult};
-use crate::global::network::post::PostOption;
+use crate::global::network::forward_data::{WriteData, ReadData, ReadResult, CreateData};
+use crate::global::network::post::{PostOption, PostResult};
 
 
 pub struct ChunkStat{
@@ -25,31 +27,68 @@ pub struct ChunkStat{
 
 pub fn forward_stat(path: &String) -> Result<String, Error>{
 
-    let endp_id = ClientContext::get_instance().get_distributor().lock().unwrap().locate_file_metadata(path);
-    let post_res = NetworkService::get_instance().post(ClientContext::get_instance().get_hosts().get(endp_id as usize).unwrap(), path, PostOption::Stat);
+    let endp_id = ClientContext::get_instance().get_distributor().locate_file_metadata(path);
+    let post_res = NetworkService::post::<String>(ClientContext::get_instance().get_hosts().get(endp_id as usize).unwrap(), path.clone(), PostOption::Stat);
     if let Err(e) = post_res{
         error_msg("client::network::forward_stat".to_string(), format!("error {} occurs while fetching file stat", e));
         return Err(e);
     }
-
-    todo!()
+    let result = post_res.unwrap();
+    if result.err{
+        error_msg("client::network::forward_stat".to_string(), "metadata not exist".to_string());
+        return Err(Error::new(std::io::ErrorKind::NotFound, "metadata not exist"));
+    }
+    return Ok(result.data);
 }
-pub fn forward_create(path: &String, mode: u32) -> Result<String, Error>{
+pub fn forward_create(path: &String, mode: u32) -> Result<i32, Error>{
 
-    let endp_id = ClientContext::get_instance().get_distributor().lock().unwrap().locate_file_metadata(path);
-    let post_res = NetworkService::get_instance().post(ClientContext::get_instance().get_hosts().get(endp_id as usize).unwrap(), path, PostOption::Create);
+    let endp_id = ClientContext::get_instance().get_distributor().locate_file_metadata(path);
+    let post_res = NetworkService::post::<CreateData>(ClientContext::get_instance().get_hosts().get(endp_id as usize).unwrap(), CreateData{path: path.clone(), mode: mode}, PostOption::Create);
     if let Err(e) = post_res{
         error_msg("client::network::forward_create".to_string(), format!("error {} occurs while fetching file stat", e));
         return Err(e);
     }
-
-    todo!()
+    else{
+        let result = post_res.unwrap();
+        if result.err{
+            return Ok(result.data.as_str().parse::<i32>().unwrap());
+        }
+        return Ok(0);
+    }
 }
-pub fn forward_remove(path: &String, remove_metadentry_only: bool, size: i64) -> Result<String, Error>{
+pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> Result<i32, Error>{
     if remove_metadentry_only{
-        let endp_id = ClientContext::get_instance().get_distributor().lock().unwrap().locate_file_metadata(path);
-        let post_res = NetworkService::get_instance().post(ClientContext::get_instance().get_hosts().get(endp_id as usize).unwrap(), path, PostOption::Remove);
-        todo!()
+        let endp_id = ClientContext::get_instance().get_distributor().locate_file_metadata(&path);
+        let post_res = NetworkService::post::<String>(ClientContext::get_instance().get_hosts().get(endp_id as usize).unwrap(), path.clone(), PostOption::Remove)?;
+        return Ok(0);
+    }
+    let mut handles: Vec<JoinHandle<Result<PostResult, Error>>> = Vec::new();
+    if (size / CHUNK_SIZE as i64) < ClientContext::get_instance().get_hosts().len() as i64{
+        let path_clone = path.clone();
+        let meta_host_id = ClientContext::get_instance().get_distributor().locate_file_metadata(&path_clone);
+        
+        let chunk_start = 0;
+        let chunk_end = size as u64 / CHUNK_SIZE;
+        handles.push(tokio::spawn(async move{
+            NetworkService::post(&ClientContext::get_instance().get_hosts().get(meta_host_id as usize).unwrap(), path.clone(), PostOption::Remove)
+        }));
+
+        for chunk_id in chunk_start..(chunk_end + 1){
+            let path_clone = path_clone.clone();
+            let chunk_host_id = ClientContext::get_instance().get_distributor().locate_data(&path_clone, chunk_id);
+            handles.push(tokio::spawn(async move{
+                NetworkService::post(&ClientContext::get_instance().get_hosts().get(meta_host_id as usize).unwrap(), path_clone.clone(), PostOption::Remove)
+            }));
+        }
+    }
+    else{
+        let hosts: &'static Vec<SFSEndpoint> = ClientContext::get_instance().get_hosts();
+        for endp in hosts.iter(){
+            let path_clone = path.clone();
+            handles.push(tokio::spawn(async move{
+                NetworkService::post(&endp, path_clone.clone(), PostOption::Remove)
+            }));
+        }
     }
     todo!()
 }
@@ -81,7 +120,7 @@ pub fn forward_write(path: &String, buf: * const c_char, append_flag: bool, in_o
     let mut chunk_start_target = 0;
     let mut chunk_end_target = 0;
     for chunk_id in chunk_start..(chunk_end + 1){
-        let target = ClientContext::get_instance().get_distributor().lock().unwrap().locate_data(path, chunk_id);
+        let target = ClientContext::get_instance().get_distributor().locate_data(path, chunk_id);
         if !target_chunks.contains_key(&target){
             target_chunks.insert(target, Vec::new());
             target_chunks.get_mut(&target).unwrap().push(chunk_id);
@@ -118,7 +157,7 @@ pub fn forward_write(path: &String, buf: * const c_char, append_flag: bool, in_o
             total_chunk_size: tot_chunk_size,
             buffers: unsafe { CStr::from_ptr(buf).to_string_lossy().into_owned() }
         };
-        if let Ok(p) = NetworkService::get_instance().post::<WriteData>(ClientContext::get_instance().get_hosts().get(target as usize).unwrap(), input, PostOption::Write){
+        if let Ok(p) = NetworkService::post::<WriteData>(ClientContext::get_instance().get_hosts().get(target as usize).unwrap(), input, PostOption::Write){
             if p.err{
                 return (-1, 0);
             }
@@ -139,7 +178,7 @@ pub fn forward_read(path: &String, buf: * mut c_char, offset: i64, read_size: i6
     let mut chunk_start_target = 0;
     let mut chunk_end_target = 0;
     for chunk_id in chunk_start..(chunk_end + 1){
-        let target = ClientContext::get_instance().get_distributor().lock().unwrap().locate_data(path, chunk_id);
+        let target = ClientContext::get_instance().get_distributor().locate_data(path, chunk_id);
         if !target_chunks.contains_key(&target){
             target_chunks.insert(target, Vec::new());
             target_chunks.get_mut(&target).unwrap().push(chunk_id);
@@ -177,7 +216,7 @@ pub fn forward_read(path: &String, buf: * mut c_char, offset: i64, read_size: i6
             total_chunk_size: tot_chunk_size
         };
         println!("{:?}", input);
-        if let Ok(p) = NetworkService::get_instance().post::<ReadData>(ClientContext::get_instance().get_hosts().get(target as usize).unwrap(), input, PostOption::Read){
+        if let Ok(p) = NetworkService::post::<ReadData>(ClientContext::get_instance().get_hosts().get(target as usize).unwrap(), input, PostOption::Read){
             if p.err{
                 return (-1, 0);
             }
@@ -201,7 +240,7 @@ pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>){
     todo!();
 }
 pub fn forward_get_fs_config() -> bool{
-    if let Ok(handle) = NetworkService::get_instance().post::<>(ClientContext::get_instance().get_hosts().get(ClientContext::get_instance().get_local_host_id() as usize).unwrap(), (), PostOption::FsConfig){
+    if let Ok(handle) = NetworkService::post::<>(ClientContext::get_instance().get_hosts().get(ClientContext::get_instance().get_local_host_id() as usize).unwrap(), (), PostOption::FsConfig){
         let out: String = "".to_string();
         let config: SFSConfig = serde_json::from_str(out.as_str()).unwrap();
         ClientContext::get_instance().set_mountdir(config.mountdir.clone());

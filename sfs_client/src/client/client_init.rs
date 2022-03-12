@@ -38,7 +38,7 @@ fn load_host_file(path: &String) -> Result<Vec<(String, String)>, Error>{
 fn lookup_endpoint(uri: &String, max_retries: i32, host_id: u64) -> Result<SFSEndpoint, Error>{
     let endp = SFSEndpoint{ addr: uri.clone() };
     for i in 0..max_retries{
-        if let Ok(h) = NetworkService::get_instance().post::<u64>(&endp, host_id, crate::global::network::post::PostOption::Lookup){
+        if let Ok(h) = NetworkService::post::<u64>(&endp, host_id, crate::global::network::post::PostOption::Lookup){
             return Ok(endp);
         }
         else{

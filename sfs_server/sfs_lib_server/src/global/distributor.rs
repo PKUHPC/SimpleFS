@@ -3,8 +3,8 @@ use sha2::{Sha256, Digest};
 
 pub trait Distributor{
     fn localhost(&self, ) -> u64;
-    fn locate_data(&mut self, path: &String, chunk_id: u64) -> u64;
-    fn locate_file_metadata(&mut self, path: &String) -> u64;
+    fn locate_data(&self, path: &String, chunk_id: u64) -> u64;
+    fn locate_file_metadata(&self, path: &String) -> u64;
     fn locate_dir_metadata(&self, path: &String) -> Arc<Vec<u64>>;
 }
 
@@ -19,14 +19,14 @@ impl Distributor for SimpleHashDistributor{
         self.localhost_
     }
 
-    fn locate_data(&mut self, path: &String, chunk_id: u64) -> u64 {
+    fn locate_data(&self, path: &String, chunk_id: u64) -> u64 {
         let s = path.clone() + &chunk_id.to_string();
         let mut hasher = Sha256::new();
         hasher.update(s);
         hasher.finalize()[0] as u64 % self.hosts_size_
     }
 
-    fn locate_file_metadata(&mut self, path: &String) -> u64 {
+    fn locate_file_metadata(&self, path: &String) -> u64 {
         let mut hasher = Sha256::new();
         hasher.update(path);
         hasher.finalize()[0] as u64 % self.hosts_size_
@@ -70,11 +70,11 @@ impl Distributor for LocalOnlyDistributor{
         self.localhost_
     }
 
-    fn locate_data(&mut self, path: &String, chunk_id: u64) -> u64 {
+    fn locate_data(&self, path: &String, chunk_id: u64) -> u64 {
         self.localhost_
     }
 
-    fn locate_file_metadata(&mut self, path: &String) -> u64 {
+    fn locate_file_metadata(&self, path: &String) -> u64 {
         self.localhost_
     }
 
@@ -94,11 +94,11 @@ impl Distributor for ForwardDistributor{
         self.fwd_host_
     }
 
-    fn locate_data(&mut self, path: &String, chunk_id: u64) -> u64 {
+    fn locate_data(&self, path: &String, chunk_id: u64) -> u64 {
         self.fwd_host_
     }
 
-    fn locate_file_metadata(&mut self, path: &String) -> u64 {
+    fn locate_file_metadata(&self, path: &String) -> u64 {
         self.str_hash_.get(path).unwrap() % self.hosts_size_
     }
 

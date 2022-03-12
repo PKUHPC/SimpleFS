@@ -59,7 +59,7 @@ impl MetadataDB{
             None
         }
     }
-    pub fn get(&self, key: String) -> Option<String>{
+    pub fn get(&self, key: &String) -> Option<String>{
         if let Ok(Some(val)) = self.db.as_ref().unwrap().get(key){
             Some(String::from_utf8(val).unwrap())
         }
@@ -67,19 +67,20 @@ impl MetadataDB{
             None
         }
     }
-    pub fn put(&mut self, key: String, val: String){
+    pub fn put(&mut self, key: String, val: String) -> i32{
         if !is_absolute(&key) {
             error_msg("server::storage::metadata::db::put".to_string(), "key must be absolute path".to_string());
-            return;
+            return 1;
         }
         if !key.eq(&"/".to_string()) && has_trailing_slash(&key) {
             error_msg("server::storage::metadata::db::put".to_string(), "key mustn't have trailing slash".to_string());
-            return;
+            return 2;
         }
         if let Err(e) = self.db.as_ref().unwrap().merge_opt(key, val, &self.write_opts){
             error_msg("server::storage::metadata::db::put".to_string(), "fail to merge value".to_string());
+            return 3;
         }
-        
+        return 0;
     }
     pub fn remove(&mut self, key: String){
         if let Err(e) = self.db.as_ref().unwrap().delete(key){

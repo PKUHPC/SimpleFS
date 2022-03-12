@@ -31,3 +31,9 @@ pub struct ReadResult{
     pub nreads: u64,
     pub data: HashMap<u64, String>
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct CreateData{
+    pub path: String,
+    pub mode: u32
+}

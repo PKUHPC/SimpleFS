@@ -39,14 +39,14 @@ pub enum RelativizeStatus {
 
 pub struct ClientContext{
     open_file_map_: Arc<Mutex<OpenFileMap>>,
-    distributor_: Arc<Mutex<SimpleHashDistributor>>,
+    distributor_: Arc<SimpleHashDistributor>,
     fs_config_: Arc<SFSConfig>,
 
     cwd_: String,
     mountdir_components_: Arc<Vec<String>>,
     mountdir_: String,
 
-    hosts_: Arc<Vec<SFSEndpoint>>,
+    hosts_: Vec<SFSEndpoint>,
     local_host_id: u64,
     fwd_host_id: u64,
     rpc_protocol_: String,
@@ -62,12 +62,12 @@ pub struct ClientContext{
 lazy_static!{
     static ref CTX: Mutex<ClientContext> = Mutex::new(ClientContext{
         open_file_map_: Arc::new(Mutex::new(OpenFileMap::new())),
-        distributor_: Arc::new(Mutex::new(SimpleHashDistributor::init())),
+        distributor_: Arc::new(SimpleHashDistributor::init()),
         fs_config_: Arc::new(SFSConfig::new()),
         cwd_: "".to_string(),
         mountdir_components_: Arc::new(Vec::new()),
         mountdir_: "".to_string(),
-        hosts_: Arc::new(Vec::new()),
+        hosts_: Vec::new(),
         local_host_id: 0,
         fwd_host_id: 0,
         rpc_protocol_: "tcp".to_string(),
@@ -108,14 +108,14 @@ impl ClientContext{
     pub fn get_cwd(&self) -> &String{
         &self.cwd_
     }
-    pub fn get_hosts(&self) -> Arc<Vec<SFSEndpoint>>{
-        Arc::clone(&self.hosts_)
+    pub fn get_hosts(&self) -> &Vec<SFSEndpoint>{
+        &self.hosts_
     }
     pub fn set_hosts(&mut self, hosts: Vec<SFSEndpoint>){
-        self.hosts_ = Arc::new(hosts);
+        self.hosts_ = hosts;
     }
     pub fn clear_hosts(&mut self){
-        self.hosts_= Arc::new(Vec::new());
+        self.hosts_= Vec::new();
     }
     pub fn set_local_host_id(&mut self, host_id: u64){
         self.local_host_id = host_id;
@@ -210,9 +210,9 @@ impl ClientContext{
         Arc::clone(&self.open_file_map_)
     }
     pub fn set_distributor(&mut self, d: SimpleHashDistributor){
-        self.distributor_ = Arc::new(Mutex::new(d));
+        self.distributor_ = Arc::new(d);
     }
-    pub fn get_distributor(&self) -> Arc<Mutex<SimpleHashDistributor>> {
+    pub fn get_distributor(&self) -> Arc<SimpleHashDistributor> {
         Arc::clone(&self.distributor_)
     }
     pub fn get_fsconfig(&self) -> Arc<SFSConfig>{

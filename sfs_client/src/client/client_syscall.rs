@@ -1,5 +1,6 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::io::ErrorKind;
 use std::sync::{Arc, Mutex};
 use std::{ffi::CStr};
 use std::os::raw::c_char;
@@ -30,16 +31,22 @@ pub extern "C" fn sfs_open(path: * const c_char, mode: u32, flag: i32) -> i32{
     }
     let md_res = get_metadata(&s, false);
     if let Err(e) = md_res{
-        if flag & O_CREAT == 0{
-            error_msg("client::sfs_open".to_string(), "file not exists and 'O_CREATE' is not set".to_string());
-            return -1;
+        if let ErrorKind::NotFound = e.kind(){
+            if flag & O_CREAT == 0{
+                error_msg("client::sfs_open".to_string(), "file not exists and 'O_CREATE' is not set".to_string());
+                return -1;
+            }
+            if flag & O_DIRECTORY != 0{
+                error_msg("client::sfs_open".to_string(), "'O_DIRECTORY' with 'O_CREATE' not supported".to_string());
+                return -1;
+            }
+            if sfs_create(path, mode | S_IFREG) != 0{
+                error_msg("client::sfs_open".to_string(), "error occurs while creating non-existing file".to_string());
+                return -1;
+            }
         }
-        if flag & O_DIRECTORY != 0{
-            error_msg("client::sfs_open".to_string(), "'O_DIRECTORY' with 'O_CREATE' not supported".to_string());
-            return -1;
-        }
-        if sfs_create(path, mode | S_IFREG) != 0{
-            error_msg("client::sfs_open".to_string(), "error occurs while creating non-existing file".to_string());
+        else{
+            error_msg("client::sfs_open".to_string(), "error occurs while fetching metadata".to_string());
             return -1;
         }
     }
@@ -103,7 +110,9 @@ pub extern "C" fn sfs_create(path: * const c_char, mut mode: u32) -> i32{
     if let Err(e) = create_res{
         return -1;
     }
-    return 0;
+    else{
+        return create_res.unwrap();
+    }
 }
 
 #[no_mangle]
@@ -116,7 +125,7 @@ pub extern "C" fn sfs_remove(path: * const c_char) -> i32{
     }
     let md = md_res.unwrap();
     let has_data = S_ISREG(md.get_mode()) && md.get_size() != 0;
-    let rm_res = forward_remove(&path, !has_data, md.get_size());
+    let rm_res = forward_remove(path.clone(), !has_data, md.get_size());
     if let Err(e) = rm_res{
         error_msg("client::sfs_remove".to_string(), "fail to remove file".to_string());
         return -1;
@@ -378,7 +387,7 @@ pub extern "C" fn sfs_rmdir(path: * const c_char) -> i32{
         error_msg("client::sfs_rmdir".to_string(), "directory not empty".to_string());
         return -1;
     }
-    let rm_res = forward_remove(&path, true, 0);
+    let rm_res = forward_remove(path.clone(), true, 0);
     if let Err(e) = rm_res{
         error_msg("client::sfs_rmdir".to_string(), format!("forward remove directory with error {}", dirent_res.0));
         return -1;
