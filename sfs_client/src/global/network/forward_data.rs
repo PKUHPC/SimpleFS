@@ -37,3 +37,28 @@ pub struct CreateData{
     pub path: String,
     pub mode: u32
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct UpdateMetadentryData{
+    pub path: String,
+    pub size: u64,
+    pub offset: i64,
+    pub append: bool
+}
+#[derive(Serialize, Deserialize, Debug)]
+pub struct ChunkStat{
+    pub chunk_size: u64,
+    pub chunk_total: u64,
+    pub chunk_free: u64
+}
+impl ChunkStat{
+    pub fn new() -> ChunkStat{
+        ChunkStat{ chunk_size: 0, chunk_total: 0, chunk_free: 0 }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DecrData{
+    pub path: String,
+    pub new_size: i64
+}

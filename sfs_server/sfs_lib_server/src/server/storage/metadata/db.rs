@@ -67,12 +67,12 @@ impl MetadataDB{
             None
         }
     }
-    pub fn put(&mut self, key: String, val: String) -> i32{
-        if !is_absolute(&key) {
+    pub fn put(&mut self, key: &String, val: &String) -> i32{
+        if !is_absolute(key) {
             error_msg("server::storage::metadata::db::put".to_string(), "key must be absolute path".to_string());
             return 1;
         }
-        if !key.eq(&"/".to_string()) && has_trailing_slash(&key) {
+        if !key.eq(&"/".to_string()) && has_trailing_slash(key) {
             error_msg("server::storage::metadata::db::put".to_string(), "key mustn't have trailing slash".to_string());
             return 2;
         }
@@ -82,12 +82,12 @@ impl MetadataDB{
         }
         return 0;
     }
-    pub fn remove(&mut self, key: String){
+    pub fn remove(&mut self, key: &String){
         if let Err(e) = self.db.as_ref().unwrap().delete(key){
             error_msg("server::storage::metadata::db::delete".to_string(), "fail to delete key".to_string());
         }
     }
-    pub fn exists(&self, key: String) -> bool{
+    pub fn exists(&self, key: &String) -> bool{
         if let Ok(res) = self.db.as_ref().unwrap().get(key){
             if let Some(value) = res{true}
             else{false}
@@ -97,7 +97,7 @@ impl MetadataDB{
             false
         }
     }
-    pub fn update(&mut self, old_key: String, new_key: String, val: String){
+    pub fn update(&mut self, old_key: &String, new_key: &String, val: &String){
         let mut batch = rocksdb::WriteBatch::default();
         batch.delete(old_key);
         batch.put(new_key, val);
@@ -105,20 +105,20 @@ impl MetadataDB{
             error_msg("server::storage::metadata::db::update".to_string(), "fail to write batch".to_string());
         }
     }
-    pub fn increase_size(&mut self, key: String, size: usize, append: bool){
+    pub fn increase_size(&mut self, key: &String, size: usize, append: bool){
         let op_s = format!("i|{}|{}", size, append);
         if let Err(e) = self.db.as_ref().unwrap().merge_opt(key, op_s, &self.write_opts){
             error_msg("server::storage::metadata::db::increase_size".to_string(), "fail to merge operands".to_string()); 
         }
     }
-    pub fn decrease_size(&mut self, key: String, size: usize){
+    pub fn decrease_size(&mut self, key: &String, size: usize){
         let op_s = format!("d|{}", size);
         if let Err(e) = self.db.as_ref().unwrap().merge_opt(key, op_s, &self.write_opts){
             error_msg("server::storage::metadata::db::decrease_size".to_string(), "fail to merge operands".to_string()); 
         }
     }
-    pub fn get_dirents(&self, dir: String) -> Vec<(String, bool)>{
-        let mut root_path = dir;
+    pub fn get_dirents(&self, dir: &String) -> Vec<(String, bool)>{
+        let mut root_path = dir.clone();
         if !is_absolute(&root_path) {
             error_msg("server::storage::metadata::db::get_dirents".to_string(), "dir is not absolute".to_string()); 
             return Vec::new();

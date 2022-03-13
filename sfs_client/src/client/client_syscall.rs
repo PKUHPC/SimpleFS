@@ -16,7 +16,7 @@ use crate::global::util::path_util::dirname;
 use super::client_context::ClientContext;
 use super::client_openfile::{OpenFile, FileType};
 use super::client_util::{get_metadata, metadata_to_stat};
-use super::network::forward_msg::{forward_create, forward_remove, forward_get_chunk_stat, forward_get_metadentry_size, forward_get_decr_size, forward_truncate, forward_update_metadentry_size, forward_write, forward_read, forward_get_dirents};
+use super::network::forward_msg::{forward_create, forward_remove, forward_get_chunk_stat, forward_get_metadentry_size, forward_truncate, forward_update_metadentry_size, forward_write, forward_read, forward_get_dirents, forward_decr_size};
 
 #[no_mangle]
 pub extern "C" fn sfs_open(path: * const c_char, mode: u32, flag: i32) -> i32{
@@ -249,7 +249,7 @@ pub extern "C" fn sfs_truncate(path: * const c_char, old_size: i64, new_size: i6
         return 0;
     }
     let path = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
-    if forward_get_decr_size(&path, new_size) != 0{
+    if forward_decr_size(&path, new_size) != 0{
         return -1;
     }
     if forward_truncate(&path, old_size, new_size) != 0{
@@ -275,7 +275,7 @@ fn internal_pwrite(f: Arc<Mutex<OpenFile>>, buf: * const c_char, count: i64, off
     }
     let path = f.lock().unwrap().get_path();
     let append_flag = f.lock().unwrap().get_flag(super::client_openfile::OpenFileFlags::Append);
-    let ret_update_size = forward_update_metadentry_size(&path, count, offset, append_flag);
+    let ret_update_size = forward_update_metadentry_size(&path, count as u64, offset, append_flag);
     if ret_update_size.0 != 0{
         error_msg("client::sfs_pwrite".to_string(), format!("update metadentry size with error {}", ret_update_size.0));
         return -1;
@@ -392,7 +392,7 @@ pub extern "C" fn sfs_rmdir(path: * const c_char) -> i32{
         error_msg("client::sfs_rmdir".to_string(), format!("forward remove directory with error {}", dirent_res.0));
         return -1;
     }
-    return 0;
+    return rm_res.unwrap();
 }
 
 #[no_mangle]

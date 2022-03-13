@@ -8,15 +8,11 @@ use std::sync::{MutexGuard, Mutex};
 
 use crate::global::metadata;
 use crate::global::network::config::CHUNK_SIZE;
+use crate::global::network::forward_data::ChunkStat;
 use crate::global::{util::path_util::is_absolute, error_msg::error_msg};
 
 use lazy_static::*;
 
-pub struct ChunkStat{
-    pub chunk_size: u64,
-    pub chunk_total: u64,
-    pub chunk_free: u64
-}
 pub struct ChunkStorage{
     pub root_path_: String,
     pub chunk_size_: u64,
@@ -43,7 +39,7 @@ impl ChunkStorage{
         format!("{}/{}", self.root_path_, internel_path)
     }
     pub fn get_chunks_dir(file_path: &String) -> String{
-        if !is_absolute(&file_path) {
+        if !is_absolute(file_path) {
             error_msg("server::storage::chunk_storage::get_chunks_dir".to_string(), "path should be absolute".to_string());
             return file_path.replace("/", ":");
         }
@@ -79,8 +75,8 @@ impl ChunkStorage{
             chunk_size_: chunk_size
         })
     }
-    pub fn destroy_chunk_space(&self, file_path: String){
-        let chunk_dir = self.absolute(&ChunkStorage::get_chunks_dir(&file_path));
+    pub fn destroy_chunk_space(&self, file_path: &String){
+        let chunk_dir = self.absolute(&ChunkStorage::get_chunks_dir(file_path));
         if let Err(e) = fs::remove_dir_all(path::Path::new(&chunk_dir)){
             error_msg("server::storage::chunk_storage::destroy_chunk_space".to_string(), "fail to remove chunk directory".to_string());
         }
@@ -89,8 +85,8 @@ impl ChunkStorage{
         if size+ offset > self.chunk_size_{
             error_msg("server::storage::chunk_storage::write_chunk".to_string(), "beyond chunk storage range".to_string());
         }
-        self.init_chunk_space(&file_path);
-        let chunk_path = self.absolute(&ChunkStorage::get_chunks_path(&file_path, chunk_id));
+        self.init_chunk_space(file_path);
+        let chunk_path = self.absolute(&ChunkStorage::get_chunks_path(file_path, chunk_id));
         let f = fs::OpenOptions::new().create(true).write(true).read(true).open(chunk_path).unwrap();
         let mut wrote_tot:u64 = 0;
         while wrote_tot != size{
@@ -108,8 +104,8 @@ impl ChunkStorage{
         if size + offset > self.chunk_size_{
             error_msg("server::storage::chunk_storage::read_chunk".to_string(), "beyond chunk storage range".to_string());
         }
-        self.init_chunk_space(&file_path);
-        let chunk_path = self.absolute(&ChunkStorage::get_chunks_path(&file_path, chunk_id));
+        self.init_chunk_space(file_path);
+        let chunk_path = self.absolute(&ChunkStorage::get_chunks_path(file_path, chunk_id));
         let open_res = fs::OpenOptions::new().write(true).read(true).open(chunk_path);
         if let Err(e) = open_res{
             error_msg("server::storage::chunk_storage::read_chunk".to_string(), "fail to open chunk file".to_string());
@@ -142,7 +138,7 @@ impl ChunkStorage{
         }
     }
     pub fn trim_chunk_space(&self, file_path: &String, chunk_start: u64){
-        let chunk_dir = self.absolute(&ChunkStorage::get_chunks_dir(&file_path));
+        let chunk_dir = self.absolute(&ChunkStorage::get_chunks_dir(file_path));
         let dir_iter = fs::read_dir(Path::new(&chunk_dir)).unwrap();
         let mut err = false;
         for entry in dir_iter{

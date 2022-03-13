@@ -6,10 +6,15 @@ pub enum PostOption {
     Lookup,
     Stat,
     Create,
+    RemoveMeta,
     Remove,
     Write,
     FsConfig,
-    Read
+    Read,
+    UpdateMetadentry,
+    GetMetadentry,
+    ChunkStat,
+    DecrSize,
 }
 impl Clone for PostOption{
     fn clone(&self) -> Self {
@@ -18,9 +23,14 @@ impl Clone for PostOption{
             Self::Stat => Self::Stat,
             Self::Create => Self::Create,
             Self::Remove => Self::Remove,
+            Self::RemoveMeta => Self::RemoveMeta,
             Self::Write => Self::Write,
             Self::FsConfig => Self::FsConfig,
             Self::Read => Self::Read,
+            Self::UpdateMetadentry => Self::UpdateMetadentry,
+            Self::GetMetadentry => Self::GetMetadentry,
+            Self::ChunkStat => Self::ChunkStat,
+            Self::DecrSize => Self::DecrSize
         }
     }
 }
