@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::{sync::{Arc, Mutex, MutexGuard}, path::Path};
 
 use rocksdb::{DB, Options, WriteOptions};
 
@@ -36,7 +36,7 @@ impl MetadataDB{
     pub fn optimize_rocksdb_options(options:&mut Options){
         options.set_max_successive_merges(128);
     }
-    pub fn new(path: String) -> Option<MetadataDB>{
+    pub fn new(path: &String) -> Option<MetadataDB>{
         let mut options = Options::default();
         options.increase_parallelism(3);
         options.optimize_level_style_compaction(512 * 1024 * 1024);
@@ -46,12 +46,12 @@ impl MetadataDB{
         MetadataDB::optimize_rocksdb_options(&mut options);
         let mut write_options = WriteOptions::default();
         write_options.disable_wal(use_write_ahead_log);
-        if let Ok(rdb) = DB::open(&options, path.clone()){
+        if let Ok(rdb) = DB::open(&options, Path::new(path)){
             Some(MetadataDB{
                 db: Some(Arc::new(rdb)),
                 options: options,
                 write_opts: write_options,
-                path: path
+                path: path.clone()
             })
         }
         else{
@@ -60,6 +60,7 @@ impl MetadataDB{
         }
     }
     pub fn get(&self, key: &String) -> Option<String>{
+        println!("getting key: {}", key);
         if let Ok(Some(val)) = self.db.as_ref().unwrap().get(key){
             Some(String::from_utf8(val).unwrap())
         }
@@ -68,6 +69,7 @@ impl MetadataDB{
         }
     }
     pub fn put(&mut self, key: &String, val: &String) -> i32{
+        println!("putting key: {} \nvalue: {}", key, val);
         if !is_absolute(key) {
             error_msg("server::storage::metadata::db::put".to_string(), "key must be absolute path".to_string());
             return 1;
@@ -76,7 +78,7 @@ impl MetadataDB{
             error_msg("server::storage::metadata::db::put".to_string(), "key mustn't have trailing slash".to_string());
             return 2;
         }
-        if let Err(e) = self.db.as_ref().unwrap().merge_opt(key, val, &self.write_opts){
+        if let Err(e) = self.db.as_ref().unwrap().put_opt(key, val, &self.write_opts){
             error_msg("server::storage::metadata::db::put".to_string(), "fail to merge value".to_string());
             return 3;
         }

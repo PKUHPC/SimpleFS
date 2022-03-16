@@ -1,4 +1,5 @@
 use lazy_static::*;
+use rocksdb::{DB, Options};
 use std::sync::{Mutex, MutexGuard};
 use std::sync::Arc;
 
@@ -124,10 +125,6 @@ impl StorageContext{
     pub fn set_mdb(mdb_: MetadataDB){
         MetadataDB::set_mdb(mdb_);
     }
-    pub fn close_db(){
-        MetadataDB::get_instance().db = None;
-    }
-
     pub fn get_storage() -> MutexGuard<'static, ChunkStorage>{
         ChunkStorage::get_instance()
     }

@@ -14,7 +14,7 @@ use crate::global::distributor::Distributor;
 use crate::global::error_msg::error_msg;
 use crate::global::fsconfig::SFSConfig;
 use crate::global::network::config::{CHUNK_SIZE, DIRENT_BUF_SIZE};
-use crate::global::network::forward_data::{WriteData, ReadData, ReadResult, CreateData, UpdateMetadentryData, ChunkStat, DecrData, TruncData};
+use crate::global::network::forward_data::{WriteData, ReadData, ReadResult, CreateData, UpdateMetadentryData, ChunkStat, DecrData, TruncData, SerdeString};
 use crate::global::network::post::{PostOption, PostResult, Post};
 use crate::global::util::arith_util::{block_index, offset_to_chunk_id, chunk_lpad, chunk_rpad};
 
@@ -23,7 +23,7 @@ use crate::global::util::arith_util::{block_index, offset_to_chunk_id, chunk_lpa
 pub fn forward_stat(path: &String) -> Result<String, Error>{
 
     let endp_id = ClientContext::get_instance().get_distributor().locate_file_metadata(path);
-    let post_res = NetworkService::post::<String>(ClientContext::get_instance().get_hosts().get(endp_id as usize).unwrap(), path.clone(), PostOption::Stat);
+    let post_res = NetworkService::post::<SerdeString>(ClientContext::get_instance().get_hosts().get(endp_id as usize).unwrap(), SerdeString{str: path.clone()}, PostOption::Stat);
     if let Err(e) = post_res{
         error_msg("client::network::forward_stat".to_string(), format!("error {} occurs while fetching file stat", e));
         return Err(e);
@@ -54,7 +54,7 @@ pub fn forward_create(path: &String, mode: u32) -> Result<i32, Error>{
 pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> Result<i32, Error>{
     if remove_metadentry_only{
         let endp_id = ClientContext::get_instance().get_distributor().locate_file_metadata(&path);
-        let post_res = NetworkService::post::<String>(ClientContext::get_instance().get_hosts().get(endp_id as usize).unwrap(), path.clone(), PostOption::RemoveMeta)?;
+        let post_res = NetworkService::post::<SerdeString>(ClientContext::get_instance().get_hosts().get(endp_id as usize).unwrap(), SerdeString{str: path.clone()}, PostOption::RemoveMeta)?;
         return Ok(0);
     }
     let mut posts: Vec<(SFSEndpoint, Post)> = Vec::new();
@@ -135,9 +135,9 @@ pub fn forward_get_chunk_stat() -> (i32, ChunkStat){
     })
 }
 pub fn forward_get_metadentry_size(path: &String) -> (i32, i64){
-    let post_result = NetworkService::post::<String>(
+    let post_result = NetworkService::post::<SerdeString>(
         ClientContext::get_instance().get_hosts().get(ClientContext::get_instance().get_distributor().locate_file_metadata(&path) as usize).unwrap(),
-        path.clone(), 
+        SerdeString{str: path.clone()}, 
         PostOption::UpdateMetadentry
     );
     if let Err(e) = post_result{

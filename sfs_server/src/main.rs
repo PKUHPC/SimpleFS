@@ -5,7 +5,7 @@ pub mod handle;
 pub mod task;
 use std::{fs::{self, OpenOptions}, io::{Error, BufWriter, Write}, path::Path, net::{Ipv4Addr, IpAddr, SocketAddr}, mem::size_of};
 use libc::{S_IFDIR, S_IRWXU, S_IRWXG, S_IRWXO, getuid, getgid};
-use sfs_lib_server::{global::network::post::PostOption::*, global::{network::{rpc::SFSServer, forward_data::{WriteData, ReadData, CreateData, UpdateMetadentryData, DecrData, TruncData, DirentData}, config::CHUNK_SIZE, post::PostResult}, error_msg::error_msg, util::net_util::get_my_hostname, metadata::Metadata, fsconfig::SFSConfig}, server::{config::ServerConfig, network::network_context::NetworkContext}};
+use sfs_lib_server::{global::network::post::PostOption::*, global::{network::{rpc::SFSServer, forward_data::{WriteData, ReadData, CreateData, UpdateMetadentryData, DecrData, TruncData, DirentData, SerdeString}, config::CHUNK_SIZE, post::PostResult}, error_msg::error_msg, util::net_util::get_my_hostname, metadata::Metadata, fsconfig::SFSConfig}, server::{config::ServerConfig, network::network_context::NetworkContext}};
 use sfs_lib_server::{server::{filesystem::storage_context::StorageContext, storage::metadata::db::MetadataDB, storage::data::chunk_storage::*}, global::network::post::Post};
 
 use futures::{future, prelude::*};
@@ -22,11 +22,12 @@ struct ServerHandler(SocketAddr);
 #[tarpc::server]
 impl SFSServer for ServerHandler {
     async fn handle(self, _: context::Context, post: String) -> String {
-        println!("handling....");
         let post: Post = serde_json::from_str(post.as_str()).unwrap();
         match post.option {
             Stat => {
-                let path = post.data;
+                println!("handling metadata....");
+                let serde_string: SerdeString = serde_json::from_str(&post.data).unwrap();
+                let path = serde_string.str;
                 let md_res = MetadataDB::get_instance().get(&path);
                 if let Some(md) = md_res{
                     return serde_json::to_string(&PostResult{err: false, data: md}).unwrap();
@@ -36,6 +37,7 @@ impl SFSServer for ServerHandler {
                 }
             },
             Create => {
+                println!("handling create....");
                 let create_data: CreateData = serde_json::from_str(post.data.as_str()).unwrap();
                 let mode = create_data.mode;
                 let mut md = Metadata::new();
@@ -44,11 +46,16 @@ impl SFSServer for ServerHandler {
                 return serde_json::to_string(&PostResult{err: create_res != 0, data: create_res.to_string()}).unwrap();
             },
             Remove => {
-                ChunkStorage::get_instance().destroy_chunk_space(&post.data);
+                println!("handling remove....");
+                let serde_string: SerdeString = serde_json::from_str(&post.data).unwrap();
+                let path = serde_string.str;
+                ChunkStorage::get_instance().destroy_chunk_space(&path);
                 return serde_json::to_string(&PostResult{err: false, data: "0".to_string()}).unwrap();
             },
             RemoveMeta => {
-                let path = post.data;
+                println!("handling remove metadata....");
+                let serde_string: SerdeString = serde_json::from_str(&post.data).unwrap();
+                let path = serde_string.str;
                 let md_res = MetadataDB::get_instance().get(&path);
                 if let None = md_res{
                     return serde_json::to_string(&PostResult{
@@ -63,6 +70,7 @@ impl SFSServer for ServerHandler {
                 }).unwrap();
             },
             Read => {
+                println!("handling read....");
                 let read_data: ReadData = serde_json::from_str(&post.data).unwrap();
                 return handle_read(read_data).await;
             },
@@ -71,10 +79,12 @@ impl SFSServer for ServerHandler {
                 return handle_write(write_data).await;
             },
             Lookup => {
+                println!("handling look up....");
                 let id: u64 = serde_json::from_str(&post.data).unwrap();
                 StorageContext::get_instance().set_host_id(id);
             },
             FsConfig => {
+                println!("handling fsconfig....");
                 let mut fs_config = SFSConfig::new();
                 fs_config.mountdir = StorageContext::get_instance().get_mountdir().to_string();
                 fs_config.rootdir = StorageContext::get_instance().get_rootdir().to_string();
@@ -91,6 +101,7 @@ impl SFSServer for ServerHandler {
                 }).unwrap();
             },
             UpdateMetadentry => {
+                println!("handling updata metadentry....");
                 let update_data: UpdateMetadentryData = serde_json::from_str(&post.data).unwrap();
                 MetadataDB::get_instance().increase_size(&update_data.path, update_data.size as usize + update_data.offset as usize, update_data.append);
                 return serde_json::to_string(&PostResult{
@@ -99,7 +110,9 @@ impl SFSServer for ServerHandler {
                 }).unwrap();
             },
             GetMetadentry => {
-                let path = post.data;
+                println!("handling get metadentry....");
+                let serde_string: SerdeString = serde_json::from_str(&post.data).unwrap();
+                let path = serde_string.str;
                 let md_str = MetadataDB::get_instance().get(&path);
                 if let None = md_str{
                     return serde_json::to_string(&PostResult{
@@ -114,6 +127,7 @@ impl SFSServer for ServerHandler {
                 }).unwrap();
             },
             ChunkStat => {
+                println!("handling chunk stat...."); 
                 let chunk_stat = ChunkStorage::get_instance().chunk_stat();
                 let post_result = PostResult{
                     err: false,
@@ -122,6 +136,7 @@ impl SFSServer for ServerHandler {
                 return serde_json::to_string(&post_result).unwrap();
             },
             DecrSize => {
+                println!("handling decrease size....");
                 let data: DecrData = serde_json::from_str(&post.data).unwrap();
                 MetadataDB::get_instance().decrease_size(&data.path, data.new_size as usize);
                 return serde_json::to_string(
@@ -132,10 +147,12 @@ impl SFSServer for ServerHandler {
                 ).unwrap();
             },
             Trunc => {
+                println!("handling truncate....");
                 let trunc_data: TruncData = serde_json::from_str(&post.data).unwrap();
                 return handle_trunc(trunc_data).await;
             },
             GetDirents => {
+                println!("handling get dirents....");
                 let data: DirentData = serde_json::from_str(&post.data).unwrap();
                 let path = data.path;
                 let entries = MetadataDB::get_instance().get_dirents(&path);
@@ -208,11 +225,12 @@ fn populates_host_file() -> Option<Error>{
 async fn init_environment() -> Result<(), Error>{
     // init metadata storage
     let metadata_path = StorageContext::get_instance().get_metadir().clone() + &"/rocksdb".to_string();
-    StorageContext::set_mdb(MetadataDB::new(metadata_path).expect("fail to create metadata data base"));
+    fs::create_dir_all(Path::new(&metadata_path)).expect("fail to create metadata data base directory");
+    StorageContext::set_mdb(MetadataDB::new(&metadata_path).expect("fail to create metadata data base"));
 
     // init chunk storage
     let chunk_storage_path = StorageContext::get_instance().get_rootdir().clone() + &"/data/chunks".to_string();
-    fs::create_dir_all(Path::new(&chunk_storage_path)).expect("fail to create chunk storage");
+    fs::create_dir_all(Path::new(&chunk_storage_path)).expect("fail to create chunk storage directory");
     StorageContext::set_storage(ChunkStorage::new(&chunk_storage_path, CHUNK_SIZE).expect("fail to create chunk storage"));
 
     init_server(StorageContext::get_instance().get_bind_addr()).await?;
@@ -259,8 +277,17 @@ pub async fn main() -> Result<(), Error>{
 
     init_environment().await?;
     */
-    let chunk_storage_path = "/home/dev/Desktop/storage/data/chunks".to_string();fs::create_dir_all(Path::new(&chunk_storage_path)).expect("fail to create chunk storage");
+    let chunk_storage_path = "/home/dev/Desktop/storage/data/chunks".to_string();
+    fs::create_dir_all(Path::new(&chunk_storage_path)).expect("fail to create chunk storage directory");
     StorageContext::set_storage(ChunkStorage::new(&chunk_storage_path, CHUNK_SIZE).expect("fail to create chunk storage"));
+    
+    let metadata_path = "/home/dev/Desktop/metadata/rocksdb".to_string();
+    StorageContext::get_instance().set_metadir(metadata_path.clone());
+    fs::create_dir_all(Path::new(&metadata_path)).expect("fail to create metadata directory");
+    StorageContext::set_mdb(MetadataDB::new(&metadata_path).expect("fail to create metadata data base"));
+
+    //MetadataDB::get_instance().put(&"/sfs/test/async_write/a".to_string(), &"c|32768|0|0|0|0|1|0".to_string());
+    //println!("?");
     init_server(&"192.168.230.137".to_string()).await?;
     Ok(())
 }

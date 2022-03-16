@@ -1,6 +1,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::io::ErrorKind;
+use std::mem::size_of;
 use std::sync::{Arc, Mutex};
 use std::{ffi::CStr};
 use std::os::raw::c_char;
@@ -84,7 +85,7 @@ fn check_parent_dir(path: &String) -> i32{
         return -1;
     }
     let md = md_res.unwrap();
-    if md.get_mode() & metadata::S_IFDIR == 0{
+    if md.get_mode() & S_IFDIR == 0{
         error_msg("client::check_parent_dir".to_string(), "parent is not directory".to_string());
         return -1;
     }
@@ -104,10 +105,12 @@ pub extern "C" fn sfs_create(path: * const c_char, mut mode: u32) -> i32{
     }
     let path = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
     if check_parent_dir(&path) != 0{
+        error_msg("client:sfs_create".to_string(), "check parent failed".to_string());
         return -1;
     }
     let create_res= forward_create(&path, mode);
     if let Err(e) = create_res{
+        error_msg("client:sfs_create".to_string(), "error occurs while creating file".to_string());
         return -1;
     }
     else{

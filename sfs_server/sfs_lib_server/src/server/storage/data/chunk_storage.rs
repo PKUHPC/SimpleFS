@@ -3,6 +3,7 @@ use std::path::Path;
 use std::{fs, path};
 use std::os::unix::fs::PermissionsExt;
 
+use libc::{S_IRUSR, S_IWUSR};
 use nix::sys::statfs::statfs;
 use std::sync::{MutexGuard, Mutex};
 
@@ -67,7 +68,7 @@ impl ChunkStorage{
         }
         let perm = fs::metadata(path).unwrap().permissions();
         let mode: u32 = perm.mode();
-        if mode & metadata::S_IRUSR == 0 || mode & metadata::S_IWUSR == 0{
+        if mode & S_IRUSR == 0 || mode & S_IWUSR == 0{
             error_msg("server::storage::chunk_storage::new".to_string(), "can't create chunk storage with enough permissions".to_string());
         }
         Some(ChunkStorage{

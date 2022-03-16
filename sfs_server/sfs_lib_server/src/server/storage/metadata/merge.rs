@@ -40,6 +40,7 @@ pub fn full_merge(new_key: &[u8],
     existing_val: Option<&[u8]>,
     operands: &MergeOperands)
     -> Option<Vec<u8>> {
+    println!("?\n");
     let mut md = Metadata::new();
     if let Some(val) = existing_val{
         if let Ok(data) = Metadata::deserialize(&String::from_utf8((&val).to_vec()).unwrap()){
@@ -121,5 +122,6 @@ pub fn partial_merge(new_key: &[u8],
     existing_val: Option<&[u8]>,
     operands: &MergeOperands)
     -> Option<Vec<u8>> {
+        println!("!\n");
         None
 }

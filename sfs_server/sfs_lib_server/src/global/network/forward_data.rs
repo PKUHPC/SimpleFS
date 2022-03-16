@@ -73,3 +73,8 @@ pub struct DirentData{
     pub path: String,
     // RDMA buffer?
 }
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SerdeString{
+    pub str: String,
+    // RDMA buffer?
+}

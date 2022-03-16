@@ -1,21 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH, self};
 use std::fmt;
 
-pub static S_IFMT: u32 = 0170000;  /* type of file */
-pub static S_IFIFO: u32 = 0010000;  /* named pipe (fifo) */
-pub static S_IFCHR: u32 = 0020000;  /* character special */
-pub static S_IFDIR: u32 = 0040000;  /* directory */
-pub static S_IFBLK: u32 = 0060000;  /* block special */
-pub static S_IFREG: u32 = 0100000;  /* regular */
-pub static S_IFLNK: u32 = 0120000;  /* symbolic link */
-pub static S_IFSOCK: u32 = 0140000;  /* socket */
-pub static S_IFWHT: u32 = 0160000;  /* whiteout */
-pub static S_ISUID: u32 = 0004000;  /* set user id on execution */
-pub static S_ISGID: u32 = 0002000;  /* set group id on execution */
-pub static S_ISVTX: u32 = 0001000;  /* save swapped text even after use */
-pub static S_IRUSR: u32 = 0000400;  /* read permission, owner */
-pub static S_IWUSR: u32 = 0000200;  /* write permission, owner */
-pub static S_IXUSR: u32 = 0000100;  /* execute/search permission, owner */
+use libc::{S_IFREG, S_IFDIR};
 
 pub fn S_ISREG(mode: u32) -> bool{
     mode & S_IFREG != 0

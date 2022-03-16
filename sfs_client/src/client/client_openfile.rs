@@ -202,6 +202,7 @@ impl OpenFileMap {
             self.fd_validation_needed_ = AtomicBool::new(true);
         }
         *fd_idx = *fd_idx + 1;
+        drop(fd_idx);
         return *self.fd_idx_.lock().unwrap();
     }
     pub fn safe_generate_fd_idx(&mut self) -> i32{
@@ -261,5 +262,8 @@ impl OpenFileMap {
             error_msg("clent::simplefs_openfile::openfilemap::dup2".to_string(), "no such file".to_string());
             return -1;
         }
+    }
+    pub fn get_length(&self) -> usize{
+        self.files_.lock().unwrap().len()
     }
 }
