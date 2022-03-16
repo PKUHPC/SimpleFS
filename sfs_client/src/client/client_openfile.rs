@@ -3,17 +3,17 @@ use std::{sync::{Mutex, atomic::AtomicBool, Arc}, collections::HashMap};
 
 use crate::global::error_msg::error_msg;
 
-static  O_RDONLY:i32 =      0x0000;  // open for reading only
-static  O_WRONLY:i32 =      0x0001;  // open for writing only
-static  O_RDWR  :i32 =      0x0002;  // open for reading and writing
-static  O_APPEND:i32 =      0x0008;  // writes done at eof
+pub static  O_RDONLY:i32 =      0x0000;  // open for reading only
+pub static  O_WRONLY:i32 =      0x0001;  // open for writing only
+pub static  O_RDWR  :i32 =      0x0002;  // open for reading and writing
+pub static  O_APPEND:i32 =      0x0008;  // writes done at eof
 
-static  O_CREAT :i32 =      0x0100;  // create and open file
-static  O_TRUNC :i32 =      0x0200;  // open and truncate
-static  O_EXCL  :i32 =      0x0400;  // open only if file doesn't already exist
+pub static  O_CREAT :i32 =      0x0100;  // create and open file
+pub static  O_TRUNC :i32 =      0x0200;  // open and truncate
+pub static  O_EXCL  :i32 =      0x0400;  // open only if file doesn't already exist
 
-static MAX_FD   :i32 = 0x7fffffff;
-static MIN_FD   :i32 = 100000;
+pub static MAX_FD   :i32 = 0x7fffffff;
+pub static MIN_FD   :i32 = 100000;
 
 pub enum FileType {
     SFS_REGULAR, SFS_DIRECTORY
@@ -75,7 +75,7 @@ pub struct OpenFile{
     //flag_mutex_: Mutex<i32>
 }
 impl OpenFile{
-    pub fn new(_path: String, _flags: i32, _type: FileType) -> OpenFile{
+    pub fn new(_path: &String, _flags: i32, _type: FileType) -> OpenFile{
         let mut flag_vec = BitVec::from_elem(8, false);
         
         if _flags & O_CREAT != 0 {
@@ -98,7 +98,7 @@ impl OpenFile{
         }
         OpenFile{
             type_: _type,
-            path_: _path,
+            path_: _path.clone(),
             flags_: Arc::new(Mutex::new(flag_vec)),
             pos_: Arc::new(Mutex::new(0)),
             entries_: Vec::new()

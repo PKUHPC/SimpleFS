@@ -3,9 +3,9 @@
 #[warn(unused_assignments)]
 pub mod handle;
 pub mod task;
-use std::{fs::{self, OpenOptions}, io::{Error, BufWriter, Write}, path::Path, net::{Ipv4Addr, IpAddr, SocketAddr}};
-use libc::{S_IFDIR, S_IRWXU, S_IRWXG, S_IRWXO};
-use sfs_lib_server::{global::network::post::PostOption::*, global::{network::{rpc::SFSServer, forward_data::{WriteData, ReadData, CreateData, UpdateMetadentryData}, config::CHUNK_SIZE, post::PostResult}, error_msg::error_msg, util::net_util::get_my_hostname, metadata::Metadata}, server::{config::ServerConfig, network::network_context::NetworkContext}};
+use std::{fs::{self, OpenOptions}, io::{Error, BufWriter, Write}, path::Path, net::{Ipv4Addr, IpAddr, SocketAddr}, mem::size_of};
+use libc::{S_IFDIR, S_IRWXU, S_IRWXG, S_IRWXO, getuid, getgid};
+use sfs_lib_server::{global::network::post::PostOption::*, global::{network::{rpc::SFSServer, forward_data::{WriteData, ReadData, CreateData, UpdateMetadentryData, DecrData, TruncData, DirentData}, config::CHUNK_SIZE, post::PostResult}, error_msg::error_msg, util::net_util::get_my_hostname, metadata::Metadata, fsconfig::SFSConfig}, server::{config::ServerConfig, network::network_context::NetworkContext}};
 use sfs_lib_server::{server::{filesystem::storage_context::StorageContext, storage::metadata::db::MetadataDB, storage::data::chunk_storage::*}, global::network::post::Post};
 
 use futures::{future, prelude::*};
@@ -15,7 +15,7 @@ use tarpc::{
     tokio_serde::formats::Json,
 };
 
-use crate::handle::{handle_write, handle_read};
+use crate::handle::{handle_write, handle_read, handle_trunc};
 
 #[derive(Clone)]
 struct ServerHandler(SocketAddr);
@@ -74,7 +74,22 @@ impl SFSServer for ServerHandler {
                 let id: u64 = serde_json::from_str(&post.data).unwrap();
                 StorageContext::get_instance().set_host_id(id);
             },
-            FsConfig => todo!(),
+            FsConfig => {
+                let mut fs_config = SFSConfig::new();
+                fs_config.mountdir = StorageContext::get_instance().get_mountdir().to_string();
+                fs_config.rootdir = StorageContext::get_instance().get_rootdir().to_string();
+                fs_config.atime_state = StorageContext::get_instance().get_atime_state();
+                fs_config.ctime_state = StorageContext::get_instance().get_ctime_state();
+                fs_config.mtime_state = StorageContext::get_instance().get_mtime_state();
+                fs_config.link_cnt_state = StorageContext::get_instance().get_link_count_state();
+                fs_config.blocks_state = StorageContext::get_instance().get_blocks_state();
+                fs_config.uid = unsafe{ getuid() };
+                fs_config.gid = unsafe{ getgid() };
+                return serde_json::to_string(&PostResult{
+                    err: false,
+                    data: serde_json::to_string(&fs_config).unwrap()
+                }).unwrap();
+            },
             UpdateMetadentry => {
                 let update_data: UpdateMetadentryData = serde_json::from_str(&post.data).unwrap();
                 MetadataDB::get_instance().increase_size(&update_data.path, update_data.size as usize + update_data.offset as usize, update_data.append);
@@ -107,7 +122,42 @@ impl SFSServer for ServerHandler {
                 return serde_json::to_string(&post_result).unwrap();
             },
             DecrSize => {
-                
+                let data: DecrData = serde_json::from_str(&post.data).unwrap();
+                MetadataDB::get_instance().decrease_size(&data.path, data.new_size as usize);
+                return serde_json::to_string(
+                    &PostResult{
+                        err: false,
+                        data: "0".to_string()
+                    }
+                ).unwrap();
+            },
+            Trunc => {
+                let trunc_data: TruncData = serde_json::from_str(&post.data).unwrap();
+                return handle_trunc(trunc_data).await;
+            },
+            GetDirents => {
+                let data: DirentData = serde_json::from_str(&post.data).unwrap();
+                let path = data.path;
+                let entries = MetadataDB::get_instance().get_dirents(&path);
+                if entries.len() == 0{
+                    return serde_json::to_string(
+                        &PostResult{
+                            err: false,
+                            data: "".to_string()
+                        }
+                    ).unwrap();
+                }
+                let mut tot_name_size = 0;
+                for entry in entries.iter(){
+                    tot_name_size += entry.0.len();
+                }
+                let out_size = tot_name_size + entries.len() * (size_of::<bool>() + size_of::<char>());
+                return serde_json::to_string(
+                    &PostResult{
+                        err: false,
+                        data: serde_json::to_string(&entries).unwrap()
+                    }
+                ).unwrap();
             }
         }
         serde_json::to_string(&PostResult{

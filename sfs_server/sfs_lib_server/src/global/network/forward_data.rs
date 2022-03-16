@@ -56,3 +56,20 @@ impl ChunkStat{
         ChunkStat{ chunk_size: 0, chunk_total: 0, chunk_free: 0 }
     }
 }
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DecrData{
+    pub path: String,
+    pub new_size: i64
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TruncData{
+    pub path: String,
+    pub new_size: i64
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DirentData{
+    pub path: String,
+    // RDMA buffer?
+}

@@ -7,16 +7,16 @@ use libc::{c_char, strncpy, EBUSY};
 use tokio::task::JoinHandle;
 
 use crate::client::client_endpoint::SFSEndpoint;
-use crate::client::client_openfile::OpenFile;
-use crate::client::client_util::{offset_to_chunk_id, chunk_lpad, chunk_rpad};
+use crate::client::client_openfile::{OpenFile, OpenFileFlags, O_RDONLY, FileType};
 use crate::client::{client_context::ClientContext, network::network_service::NetworkService};
 use crate::client::network::network_service::*;
 use crate::global::distributor::Distributor;
 use crate::global::error_msg::error_msg;
 use crate::global::fsconfig::SFSConfig;
-use crate::global::network::config::CHUNK_SIZE;
-use crate::global::network::forward_data::{WriteData, ReadData, ReadResult, CreateData, UpdateMetadentryData, ChunkStat, DecrData};
+use crate::global::network::config::{CHUNK_SIZE, DIRENT_BUF_SIZE};
+use crate::global::network::forward_data::{WriteData, ReadData, ReadResult, CreateData, UpdateMetadentryData, ChunkStat, DecrData, TruncData};
 use crate::global::network::post::{PostOption, PostResult, Post};
+use crate::global::util::arith_util::{block_index, offset_to_chunk_id, chunk_lpad, chunk_rpad};
 
 
 
@@ -169,7 +169,39 @@ pub fn forward_decr_size(path: &String, new_size: i64) -> i32{
     }
 }
 pub fn forward_truncate(path: &String, old_size: i64, new_size: i64) -> i32{
-    todo!()
+    if old_size < new_size{
+        return -1;
+    }
+    let chunk_start = block_index(new_size, CHUNK_SIZE);
+    let chunk_end = block_index(old_size - new_size - 1, CHUNK_SIZE);
+    let mut hosts: Vec<u64> = Vec::new();
+    for chunk_id in chunk_start..(chunk_end + 1){
+        hosts.push(ClientContext::get_instance().get_distributor().locate_data(path, chunk_id));
+    }
+    let mut posts: Vec<(SFSEndpoint, Post)> = Vec::new();
+    for host in hosts{
+        let trunc_data = TruncData{
+            path: path.clone(),
+            new_size
+        };
+        let post = Post{
+            option: PostOption::Trunc,
+            data: serde_json::to_string(&trunc_data).unwrap()
+        };
+        posts.push((ClientContext::get_instance().get_hosts().get(host as usize).unwrap().clone(), post));
+    }
+    let post_results = NetworkService::group_post(posts);
+    if let Err(e) = post_results{
+        return -1;
+    }
+    let results = post_results.unwrap();
+    for result in results{
+        if result.err{
+            return 5;
+        }
+    }
+
+    return 0;
 }
 pub fn forward_update_metadentry_size(path: &String, size: u64, offset: i64, append_flag: bool) -> (i32, i64){
     let update_data = UpdateMetadentryData{
@@ -299,7 +331,6 @@ pub fn forward_read(path: &String, buf: * mut c_char, offset: i64, read_size: i6
             chunk_end: chunk_end,
             total_chunk_size: tot_chunk_size
         };
-        println!("{:?}", input);
         if let Ok(p) = NetworkService::post::<ReadData>(ClientContext::get_instance().get_hosts().get(target as usize).unwrap(), input, PostOption::Read){
             if p.err{
                 return (-1, 0);
@@ -321,12 +352,37 @@ pub fn forward_read(path: &String, buf: * mut c_char, offset: i64, read_size: i6
     return (0, tot_read);
 }
 pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>){
-    todo!();
+    let targets = ClientContext::get_instance().get_distributor().locate_dir_metadata(path);
+    let buf: [u8; DIRENT_BUF_SIZE as usize] = [0; DIRENT_BUF_SIZE as usize];
+    let buf_size_per_host = DIRENT_BUF_SIZE / targets.len() as u64;
+    let mut posts: Vec<(SFSEndpoint, Post)> = Vec::new();
+    for target in targets.iter(){
+        posts.push((ClientContext::get_instance().get_hosts().get(*target as usize).unwrap().clone(), Post{
+            option: PostOption::GetDirents,
+            data: path.clone()
+        }));
+    }
+    let post_results = NetworkService::group_post(posts);
+    if let Err(e) = post_results{
+        return (-1, Arc::new(Mutex::new(OpenFile::new(&"".to_string(), 0, crate::client::client_openfile::FileType::SFS_REGULAR))));
+    }
+    let results = post_results.unwrap();
+    let mut open_dir = OpenFile::new(path, O_RDONLY, crate::client::client_openfile::FileType::SFS_DIRECTORY);
+
+    for result in results{
+        let entries: Vec<(String, bool)> = serde_json::from_str(&result.data).unwrap();
+        for entry in entries{
+            open_dir.add(entry.0, if entry.1 {FileType::SFS_DIRECTORY} else {FileType::SFS_REGULAR});
+        }
+    }
+    (0, Arc::new(Mutex::new(open_dir)))
 }
 pub fn forward_get_fs_config() -> bool{
-    if let Ok(handle) = NetworkService::post::<>(ClientContext::get_instance().get_hosts().get(ClientContext::get_instance().get_local_host_id() as usize).unwrap(), (), PostOption::FsConfig){
-        let out: String = "".to_string();
-        let config: SFSConfig = serde_json::from_str(out.as_str()).unwrap();
+    if let Ok(result) = NetworkService::post::<>(ClientContext::get_instance().get_hosts().get(ClientContext::get_instance().get_local_host_id() as usize).unwrap(), (), PostOption::FsConfig){
+        if result.err{
+            return false;
+        }
+        let config: SFSConfig = serde_json::from_str(&result.data.as_str()).unwrap();
         ClientContext::get_instance().set_mountdir(config.mountdir.clone());
         ClientContext::get_instance().set_fsconfig(config);
         return true;

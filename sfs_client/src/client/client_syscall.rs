@@ -66,7 +66,7 @@ pub extern "C" fn sfs_open(path: * const c_char, mode: u32, flag: i32) -> i32{
             }
         }
     }
-    return ClientContext::get_instance().get_ofm().lock().unwrap().add(Arc::new(Mutex::new(OpenFile::new(s, flag, FileType::SFS_REGULAR))));
+    return ClientContext::get_instance().get_ofm().lock().unwrap().add(Arc::new(Mutex::new(OpenFile::new(&s, flag, FileType::SFS_REGULAR))));
 }
 
 static CHECK_PARENT_DIR: bool = false;

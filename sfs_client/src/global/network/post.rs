@@ -15,6 +15,8 @@ pub enum PostOption {
     GetMetadentry,
     ChunkStat,
     DecrSize,
+    Trunc,
+    GetDirents,
 }
 impl Clone for PostOption{
     fn clone(&self) -> Self {
@@ -30,7 +32,9 @@ impl Clone for PostOption{
             Self::UpdateMetadentry => Self::UpdateMetadentry,
             Self::GetMetadentry => Self::GetMetadentry,
             Self::ChunkStat => Self::ChunkStat,
-            Self::DecrSize => Self::DecrSize
+            Self::DecrSize => Self::DecrSize,
+            Self::Trunc => Self::Trunc,
+            Self::GetDirents => Self::GetDirents
         }
     }
 }

@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use sfs_lib_server::{global::{network::{forward_data::{WriteData, ReadData, ReadResult}, config::CHUNK_SIZE, post::PostResult}, distributor::{SimpleHashDistributor, Distributor}}, server::{filesystem::storage_context::StorageContext, storage::data::chunk_storage::ChunkStorage}};
+use sfs_lib_server::{global::{network::{forward_data::{WriteData, ReadData, ReadResult, TruncData}, config::CHUNK_SIZE, post::PostResult}, distributor::{SimpleHashDistributor, Distributor}, util::arith_util::{block_index, block_overrun}}, server::{filesystem::storage_context::StorageContext, storage::data::chunk_storage::ChunkStorage}};
 use tokio::task::JoinHandle;
 
 use crate::task::{WriteChunkTask, ReadChunkTask};
@@ -192,4 +192,21 @@ async fn read_file(args: &ReadChunkTask) -> (u64, u64, String){
     else{
         (args.chunk_id, 0, "".to_string())
     }
+}
+
+pub async fn handle_trunc(input: TruncData) -> String{
+    let path = input.path;
+    let size = input.new_size;
+    let mut chunk_id_start = block_index(size, CHUNK_SIZE);
+    let left_pad = block_overrun(size, CHUNK_SIZE);
+    if left_pad != 0{
+        ChunkStorage::get_instance().truncate_chunk_file(&path, chunk_id_start, left_pad);
+        chunk_id_start += 1;
+    }
+    ChunkStorage::get_instance().trim_chunk_space(&path, chunk_id_start);
+    let post_res = PostResult{
+        err: false,
+        data: "".to_string()
+    };
+    return serde_json::to_string(&post_res).unwrap();
 }
