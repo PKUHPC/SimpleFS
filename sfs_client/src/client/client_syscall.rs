@@ -323,8 +323,8 @@ pub extern "C" fn sfs_write(fd: i32, buf: * const c_char, count: i64) -> i64{
 }
 fn internal_pread(f: Arc<Mutex<OpenFile>>, buf: * mut c_char, count: i64, offset: i64) -> i64{
     match f.lock().unwrap().get_type(){
-        FileType::SFS_REGULAR => { error_msg("client::sfs_pread".to_string(), "can not read directory".to_string()); return -1 },
-        FileType::SFS_DIRECTORY => {},
+        FileType::SFS_DIRECTORY => { error_msg("client::sfs_pread".to_string(), "can not read directory".to_string()); return -1 },
+        FileType::SFS_REGULAR => {},
     }
     if ZERO_BUF_BEFORE_READ{
         unsafe { memset(buf as (* mut c_void), 0, count as usize); }
