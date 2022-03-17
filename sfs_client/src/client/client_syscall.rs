@@ -70,7 +70,7 @@ pub extern "C" fn sfs_open(path: * const c_char, mode: u32, flag: i32) -> i32{
     return ClientContext::get_instance().get_ofm().lock().unwrap().add(Arc::new(Mutex::new(OpenFile::new(&s, flag, FileType::SFS_REGULAR))));
 }
 
-static CHECK_PARENT_DIR: bool = false;
+static CHECK_PARENT_DIR: bool = true;
 fn check_parent_dir(path: &String) -> i32{
     if !CHECK_PARENT_DIR{
         return 0;
@@ -79,7 +79,7 @@ fn check_parent_dir(path: &String) -> i32{
     let md_res = get_metadata(&p_comp, false);
     if let Err(e) = md_res{
         match e.kind(){
-            NotFound => { error_msg("client::check_parent_dir".to_string(), "parent component doesn't exist".to_string()); },
+            ErrorKind::NotFound => { error_msg("client::check_parent_dir".to_string(), "parent component doesn't exist".to_string()); },
             _ => { error_msg("client::check_parent_dir".to_string(), "fail to fetch parent dir metadata".to_string()); }
         }
         return -1;
@@ -94,7 +94,7 @@ fn check_parent_dir(path: &String) -> i32{
 #[no_mangle]
 pub extern "C" fn sfs_create(path: * const c_char, mut mode: u32) -> i32{
     match mode & S_IFMT{
-        0 => { mode |= S_IFREG; }
+        0 => { mode |= S_IFREG; },
         S_IFREG => {},
         S_IFDIR => {},
         S_IFCHR => { error_msg("client:sfs_create".to_string(), "unsupported node type".to_string()); return -1; },
@@ -273,8 +273,8 @@ pub extern "C" fn sfs_dup2(oldfd: i32, newfd: i32) -> i32{
 
 fn internal_pwrite(f: Arc<Mutex<OpenFile>>, buf: * const c_char, count: i64, offset: i64) -> i64{
     match f.lock().unwrap().get_type(){
-        FileType::SFS_REGULAR => { error_msg("client::sfs_pwrite".to_string(), "can not write directory".to_string()); return -1 },
-        FileType::SFS_DIRECTORY => {},
+        FileType::SFS_DIRECTORY => { error_msg("client::sfs_pwrite".to_string(), "can not write directory".to_string()); return -1 },
+        FileType::SFS_REGULAR => {},
     }
     let path = f.lock().unwrap().get_path();
     let append_flag = f.lock().unwrap().get_flag(super::client_openfile::OpenFileFlags::Append);

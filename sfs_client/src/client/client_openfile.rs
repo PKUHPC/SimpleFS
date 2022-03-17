@@ -15,6 +15,7 @@ pub static  O_EXCL  :i32 =      0x0400;  // open only if file doesn't already ex
 pub static MAX_FD   :i32 = 0x7fffffff;
 pub static MIN_FD   :i32 = 100000;
 
+#[derive(Debug)]
 pub enum FileType {
     SFS_REGULAR, SFS_DIRECTORY
 }
@@ -37,6 +38,7 @@ pub enum OpenFileFlags{
     FlagCount
 }
 
+#[derive(Debug)]
 pub struct SFSDirEntry{
     name_: String,
     type_: FileType

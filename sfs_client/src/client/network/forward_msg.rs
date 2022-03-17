@@ -14,7 +14,7 @@ use crate::global::distributor::Distributor;
 use crate::global::error_msg::error_msg;
 use crate::global::fsconfig::SFSConfig;
 use crate::global::network::config::{CHUNK_SIZE, DIRENT_BUF_SIZE};
-use crate::global::network::forward_data::{WriteData, ReadData, ReadResult, CreateData, UpdateMetadentryData, ChunkStat, DecrData, TruncData, SerdeString};
+use crate::global::network::forward_data::{WriteData, ReadData, ReadResult, CreateData, UpdateMetadentryData, ChunkStat, DecrData, TruncData, SerdeString, DirentData};
 use crate::global::network::post::{PostOption, PostResult, Post};
 use crate::global::util::arith_util::{block_index, offset_to_chunk_id, chunk_lpad, chunk_rpad};
 
@@ -210,8 +210,9 @@ pub fn forward_update_metadentry_size(path: &String, size: u64, offset: i64, app
         offset,
         append: append_flag,
     };
+    let host_id = ClientContext::get_instance().get_distributor().locate_file_metadata(&path) as usize;
     let post_result = NetworkService::post::<UpdateMetadentryData>(
-        ClientContext::get_instance().get_hosts().get(ClientContext::get_instance().get_distributor().locate_file_metadata(&path) as usize).unwrap(),
+        ClientContext::get_instance().get_hosts().get(host_id).unwrap(),
         update_data, 
         PostOption::UpdateMetadentry
     );
@@ -353,20 +354,22 @@ pub fn forward_read(path: &String, buf: * mut c_char, offset: i64, read_size: i6
 }
 pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>){
     let targets = ClientContext::get_instance().get_distributor().locate_dir_metadata(path);
-    let buf: [u8; DIRENT_BUF_SIZE as usize] = [0; DIRENT_BUF_SIZE as usize];
-    let buf_size_per_host = DIRENT_BUF_SIZE / targets.len() as u64;
+    //let buf: Box<[u8; DIRENT_BUF_SIZE as usize]> = Box::new([0; DIRENT_BUF_SIZE as usize]);
+    //let buf_size_per_host = DIRENT_BUF_SIZE / targets.len() as u64;
     let mut posts: Vec<(SFSEndpoint, Post)> = Vec::new();
     for target in targets.iter(){
         posts.push((ClientContext::get_instance().get_hosts().get(*target as usize).unwrap().clone(), Post{
             option: PostOption::GetDirents,
-            data: path.clone()
+            data: serde_json::to_string(&DirentData{
+                path: path.clone()
+            }).unwrap()
         }));
     }
     let post_results = NetworkService::group_post(posts);
     if let Err(e) = post_results{
         return (-1, Arc::new(Mutex::new(OpenFile::new(&"".to_string(), 0, crate::client::client_openfile::FileType::SFS_REGULAR))));
     }
-    let results = post_results.unwrap();
+    let results: Vec<PostResult> = post_results.unwrap();
     let mut open_dir = OpenFile::new(path, O_RDONLY, crate::client::client_openfile::FileType::SFS_DIRECTORY);
 
     for result in results{

@@ -60,7 +60,7 @@ impl MetadataDB{
         }
     }
     pub fn get(&self, key: &String) -> Option<String>{
-        println!("getting key: {}", key);
+        //println!("getting key: {}", key);
         if let Ok(Some(val)) = self.db.as_ref().unwrap().get(key){
             Some(String::from_utf8(val).unwrap())
         }
@@ -69,7 +69,7 @@ impl MetadataDB{
         }
     }
     pub fn put(&mut self, key: &String, val: &String) -> i32{
-        println!("putting key: {} \nvalue: {}", key, val);
+        //println!("putting key: {} value: {}", key, val);
         if !is_absolute(key) {
             error_msg("server::storage::metadata::db::put".to_string(), "key must be absolute path".to_string());
             return 1;
@@ -78,7 +78,7 @@ impl MetadataDB{
             error_msg("server::storage::metadata::db::put".to_string(), "key mustn't have trailing slash".to_string());
             return 2;
         }
-        if let Err(e) = self.db.as_ref().unwrap().put_opt(key, val, &self.write_opts){
+        if let Err(e) = self.db.as_ref().unwrap().merge_opt(key, val, &self.write_opts){
             error_msg("server::storage::metadata::db::put".to_string(), "fail to merge value".to_string());
             return 3;
         }
@@ -128,17 +128,17 @@ impl MetadataDB{
         if !has_trailing_slash(&root_path) && root_path.len() == 1{
             root_path.push('/');
         }
-        let iter = self.db.as_ref().unwrap().prefix_iterator(root_path.clone());
+        let iter = self.db.as_ref().unwrap().prefix_iterator(root_path.as_bytes());
         let mut entries: Vec<(String, bool)> = Vec::new();
         for (k, v) in iter{
             let s = String::from_utf8(k.to_vec()).unwrap();
             if !s.starts_with(&root_path) || s.len() == root_path.len(){
                 continue;
             }
-            if let Some(idx) = s[root_path.len()..].to_string().find('/'){
+            if let Some(idx) = s[root_path.len() + 1..].to_string().find('/'){
                 continue;
             }
-            let name = s[root_path.len()..].to_string();
+            let name = s[root_path.len() + 1..].to_string();
             if name.len() == 0{
                 continue;
             }

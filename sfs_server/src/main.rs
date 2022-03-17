@@ -25,9 +25,9 @@ impl SFSServer for ServerHandler {
         let post: Post = serde_json::from_str(post.as_str()).unwrap();
         match post.option {
             Stat => {
-                println!("handling metadata....");
                 let serde_string: SerdeString = serde_json::from_str(&post.data).unwrap();
                 let path = serde_string.str;
+                println!("handling metadata of '{}'....", path);
                 let md_res = MetadataDB::get_instance().get(&path);
                 if let Some(md) = md_res{
                     return serde_json::to_string(&PostResult{err: false, data: md}).unwrap();
@@ -37,8 +37,8 @@ impl SFSServer for ServerHandler {
                 }
             },
             Create => {
-                println!("handling create....");
                 let create_data: CreateData = serde_json::from_str(post.data.as_str()).unwrap();
+                println!("handling create of '{}'....", create_data.path);
                 let mode = create_data.mode;
                 let mut md = Metadata::new();
                 md.set_mode(mode);
@@ -160,15 +160,15 @@ impl SFSServer for ServerHandler {
                     return serde_json::to_string(
                         &PostResult{
                             err: false,
-                            data: "".to_string()
+                            data: serde_json::to_string(&(Vec::new() as Vec<(String, bool)>)).unwrap()
                         }
                     ).unwrap();
                 }
-                let mut tot_name_size = 0;
-                for entry in entries.iter(){
-                    tot_name_size += entry.0.len();
-                }
-                let out_size = tot_name_size + entries.len() * (size_of::<bool>() + size_of::<char>());
+                //let mut tot_name_size = 0;
+                //for entry in entries.iter(){
+                //    tot_name_size += entry.0.len();
+                //}
+                //let out_size = tot_name_size + entries.len() * (size_of::<bool>() + size_of::<char>());
                 return serde_json::to_string(
                     &PostResult{
                         err: false,
@@ -285,6 +285,11 @@ pub async fn main() -> Result<(), Error>{
     StorageContext::get_instance().set_metadir(metadata_path.clone());
     fs::create_dir_all(Path::new(&metadata_path)).expect("fail to create metadata directory");
     StorageContext::set_mdb(MetadataDB::new(&metadata_path).expect("fail to create metadata data base"));
+
+    let mut root_md = Metadata::new();
+    root_md.set_mode(S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO);
+
+    MetadataDB::get_instance().put(&"/".to_string(), &root_md.serialize());
 
     //MetadataDB::get_instance().put(&"/sfs/test/async_write/a".to_string(), &"c|32768|0|0|0|0|1|0".to_string());
     //println!("?");

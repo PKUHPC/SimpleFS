@@ -40,7 +40,7 @@ pub fn full_merge(new_key: &[u8],
     existing_val: Option<&[u8]>,
     operands: &MergeOperands)
     -> Option<Vec<u8>> {
-    println!("?\n");
+    println!("full merging ...");
     let mut md = Metadata::new();
     if let Some(val) = existing_val{
         if let Ok(data) = Metadata::deserialize(&String::from_utf8((&val).to_vec()).unwrap()){
@@ -58,6 +58,7 @@ pub fn full_merge(new_key: &[u8],
             return None;
         }
         let op_s = String::from_utf8(iter.next().unwrap().to_vec()).unwrap();
+        println!("{}", op_s);
         match get_id_from_op(&op_s){
             OperandID::Create => {
                 if let Ok(data) = Metadata::deserialize(&op_s){
@@ -122,6 +123,6 @@ pub fn partial_merge(new_key: &[u8],
     existing_val: Option<&[u8]>,
     operands: &MergeOperands)
     -> Option<Vec<u8>> {
-        println!("!\n");
+        println!("partial merging ...");
         None
 }

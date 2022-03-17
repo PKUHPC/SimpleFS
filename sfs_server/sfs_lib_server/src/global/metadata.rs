@@ -39,8 +39,8 @@ impl Metadata{
     pub fn deserialize(binary_str: &String) -> Result<Metadata, i32>{
         let s = binary_str.split('|');
         let vec = s.collect::<Vec<&str>>();
-        if vec.len() != 7{
-            print!("error::global::metadata::init_acm_time - invalid serialized metadata detected: {}", binary_str);
+        if vec.len() != 8{
+            print!("error::global::metadata::init_acm_time - invalid serialized metadata detected: {}\n", binary_str);
             Err(0)
         }
         else{
@@ -73,7 +73,7 @@ impl Metadata{
             self.change_time_ = n.as_micros() as i64;
             self.modify_time_ = n.as_micros() as i64;
         } else{
-            print!("error::global::metadata::init_acm_time - invalid time detected");
+            print!("error::global::metadata::init_acm_time - invalid time detected\n");
         }
     }
     pub fn update_acm_time(&mut self, a: bool, c: bool, m:bool){
@@ -88,7 +88,7 @@ impl Metadata{
                 self.modify_time_ = n.as_micros() as i64;
             }
         } else{
-            print!("error::global::metadata::update_acm_time - invalid time detected");
+            print!("error::global::metadata::update_acm_time - invalid time detected\n");
         }
     }
     pub fn get_access_time(&self) -> i64{

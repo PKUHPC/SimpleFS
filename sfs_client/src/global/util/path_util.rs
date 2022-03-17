@@ -62,7 +62,7 @@ pub fn dirname(path: &String) -> String{
         return "".to_string();
     }
     if let Some(index) = path.rfind(SEPERATOR){
-        path[0..index].to_string()
+        path[0..if index == 0 {1} else {index}].to_string()
     }
     else{
         error_msg("global::util::path_util::dirname".to_string(), "there is no seperator in path".to_string());
