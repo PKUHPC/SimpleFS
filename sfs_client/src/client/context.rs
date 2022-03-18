@@ -4,9 +4,9 @@ use std::sync::{Mutex, Arc, MutexGuard};
 
 use bit_vec::*;
 
-use crate::client::client_openfile::OpenFileMap;
+use crate::client::openfile::OpenFileMap;
 use crate::global::distributor::SimpleHashDistributor;
-use crate::client::client_endpoint::SFSEndpoint;
+use crate::client::endpoint::SFSEndpoint;
 use crate::global::error_msg::error_msg;
 use crate::global::fsconfig::SFSConfig;
 use crate::global::path;

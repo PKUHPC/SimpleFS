@@ -5,9 +5,9 @@ use rand::{thread_rng, Rng};
 use rand::seq::SliceRandom;
 use regex::Regex;
 
-use crate::{global::{util::env_util::get_var, error_msg::error_msg, distributor::SimpleHashDistributor, fsconfig::hostfile_path}, client::{client_context::ClientContext}};
+use crate::{global::{util::env_util::get_var, error_msg::error_msg, distributor::SimpleHashDistributor, fsconfig::hostfile_path}, client::{context::ClientContext}};
 
-use super::{client_util::get_hostname, client_endpoint::SFSEndpoint, network::{network_service::NetworkService, forward_msg::forward_get_fs_config}};
+use super::{util::get_hostname, endpoint::SFSEndpoint, network::{network_service::NetworkService, forward_msg::forward_get_fs_config}};
 
 fn extract_protocol(uri: &String){
     

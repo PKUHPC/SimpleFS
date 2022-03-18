@@ -6,9 +6,9 @@ use std::sync::{Arc, Mutex};
 use libc::{c_char, strncpy, EBUSY};
 use tokio::task::JoinHandle;
 
-use crate::client::client_endpoint::SFSEndpoint;
-use crate::client::client_openfile::{OpenFile, OpenFileFlags, O_RDONLY, FileType};
-use crate::client::{client_context::ClientContext, network::network_service::NetworkService};
+use crate::client::endpoint::SFSEndpoint;
+use crate::client::openfile::{OpenFile, OpenFileFlags, O_RDONLY, FileType};
+use crate::client::{context::ClientContext, network::network_service::NetworkService};
 use crate::client::network::network_service::*;
 use crate::global::distributor::Distributor;
 use crate::global::error_msg::error_msg;
@@ -52,9 +52,9 @@ pub fn forward_create(path: &String, mode: u32) -> Result<i32, Error>{
     }
 }
 pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> Result<i32, Error>{
+    let endp_id = ClientContext::get_instance().get_distributor().locate_file_metadata(&path);
+    let post_res = NetworkService::post::<SerdeString>(ClientContext::get_instance().get_hosts().get(endp_id as usize).unwrap(), SerdeString{str: path.clone()}, PostOption::RemoveMeta)?;
     if remove_metadentry_only{
-        let endp_id = ClientContext::get_instance().get_distributor().locate_file_metadata(&path);
-        let post_res = NetworkService::post::<SerdeString>(ClientContext::get_instance().get_hosts().get(endp_id as usize).unwrap(), SerdeString{str: path.clone()}, PostOption::RemoveMeta)?;
         return Ok(0);
     }
     let mut posts: Vec<(SFSEndpoint, Post)> = Vec::new();
@@ -65,7 +65,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
         let chunk_end = size as u64 / CHUNK_SIZE;
         posts.push((ClientContext::get_instance().get_hosts().get(meta_host_id as usize).unwrap().clone(), Post{
             option: PostOption::Remove,
-            data: path.clone()
+            data: serde_json::to_string(&SerdeString{str: path.clone()}).unwrap()
         }));
 
         for chunk_id in chunk_start..(chunk_end + 1){
@@ -75,7 +75,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
             }
             posts.push((ClientContext::get_instance().get_hosts().get(chunk_host_id as usize).unwrap().clone(), Post{
                 option: PostOption::Remove,
-                data: path.clone()
+                data: serde_json::to_string(&SerdeString{str: path.clone()}).unwrap()
             }));
         }
     }
@@ -83,7 +83,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
         for endp in ClientContext::get_instance().get_hosts().iter(){
             posts.push((endp.clone(), Post{
                 option: PostOption::Remove,
-                data: path.clone()
+                data: serde_json::to_string(&SerdeString{str: path.clone()}).unwrap()
             }));
         }
     }
@@ -105,7 +105,7 @@ pub fn forward_get_chunk_stat() -> (i32, ChunkStat){
     let mut posts: Vec<(SFSEndpoint, Post)> = Vec::new();
     for endp in ClientContext::get_instance().get_hosts().iter(){
         posts.push((endp.clone(), Post{
-            option: PostOption::Remove,
+            option: PostOption::ChunkStat,
             data: "0".to_string()
         }));
     }
@@ -152,10 +152,11 @@ pub fn forward_get_metadentry_size(path: &String) -> (i32, i64){
     }
 }
 pub fn forward_decr_size(path: &String, new_size: i64) -> i32{
+    let host_id = ClientContext::get_instance().get_distributor().locate_file_metadata(&path) as usize;
     let post_result = NetworkService::post::<DecrData>(
-        ClientContext::get_instance().get_hosts().get(ClientContext::get_instance().get_distributor().locate_file_metadata(&path) as usize).unwrap(),
+        ClientContext::get_instance().get_hosts().get(host_id).unwrap(),
         DecrData { path: path.clone(), new_size }, 
-        PostOption::UpdateMetadentry
+        PostOption::DecrSize
     );
     if let Err(e) = post_result{
         return -1;
@@ -367,10 +368,10 @@ pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>){
     }
     let post_results = NetworkService::group_post(posts);
     if let Err(e) = post_results{
-        return (-1, Arc::new(Mutex::new(OpenFile::new(&"".to_string(), 0, crate::client::client_openfile::FileType::SFS_REGULAR))));
+        return (-1, Arc::new(Mutex::new(OpenFile::new(&"".to_string(), 0, crate::client::openfile::FileType::SFS_REGULAR))));
     }
     let results: Vec<PostResult> = post_results.unwrap();
-    let mut open_dir = OpenFile::new(path, O_RDONLY, crate::client::client_openfile::FileType::SFS_DIRECTORY);
+    let mut open_dir = OpenFile::new(path, O_RDONLY, crate::client::openfile::FileType::SFS_DIRECTORY);
 
     for result in results{
         let entries: Vec<(String, bool)> = serde_json::from_str(&result.data).unwrap();

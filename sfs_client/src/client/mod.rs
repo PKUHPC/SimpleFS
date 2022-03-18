@@ -1,8 +1,9 @@
-pub mod client_syscall;
-pub mod client_context;
-pub mod client_openfile;
-pub mod client_endpoint;
-pub mod client_util;
-pub mod client_init;
+pub mod syscall;
+pub mod context;
+pub mod openfile;
+pub mod endpoint;
+pub mod util;
+pub mod init;
+pub mod config;
 
 pub mod network;

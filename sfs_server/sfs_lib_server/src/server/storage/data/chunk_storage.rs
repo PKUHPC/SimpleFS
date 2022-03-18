@@ -146,7 +146,7 @@ impl ChunkStorage{
             let entry = entry.unwrap();
             let chunk_path = entry.path();
             let chunk_id = chunk_path.file_name().unwrap().to_str().unwrap().parse::<u64>().unwrap();
-            if chunk_id > chunk_start{
+            if chunk_id >= chunk_start{
                 if let Err(e) = fs::remove_file(chunk_path.as_path()){
                     error_msg("server::storage::chunk_storage::trim_chunk_space".to_string(), "fail to remove file".to_string());
                     err = true;

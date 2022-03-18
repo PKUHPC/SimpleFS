@@ -90,7 +90,7 @@ pub async fn handle_write(input: WriteData) -> String{
 }
 async fn write_file(args: &WriteChunkTask) -> u64{
     //println!("{:?}", args);
-    println!("writing...");
+    //println!("writing...");
     if let Ok(nwrite) = ChunkStorage::get_instance().write_chunk(&args.path, args.chunk_id, args.buf.as_bytes(), args.size, args.offset){
         nwrite
     }
@@ -185,7 +185,7 @@ pub async fn handle_read(input: ReadData) -> String{
 
 async fn read_file(args: &ReadChunkTask) -> (u64, u64, String){
     //println!("{:?}", args);
-    println!("reading...");
+    //println!("reading...");
     let mut buf = [0 as u8; CHUNK_SIZE as usize];
     if let Ok(nreads) = ChunkStorage::get_instance().read_chunk(&args.path, args.chunk_id, &mut buf, args.size, args.offset){
         (args.chunk_id, nreads, String::from_utf8(buf[0..(nreads as usize)].to_vec()).unwrap())

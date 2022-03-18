@@ -68,8 +68,11 @@ impl MetadataDB{
             None
         }
     }
-    pub fn put(&mut self, key: &String, val: &String) -> i32{
+    pub fn put(&mut self, key: &String, val: &String, ignore_if_exists: bool) -> i32{
         //println!("putting key: {} value: {}", key, val);
+        if ignore_if_exists && self.exists(key){
+            return 4;
+        }
         if !is_absolute(key) {
             error_msg("server::storage::metadata::db::put".to_string(), "key must be absolute path".to_string());
             return 1;

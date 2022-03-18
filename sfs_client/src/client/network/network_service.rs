@@ -4,7 +4,7 @@ use tarpc::{tokio_serde::formats::Json, client::{self, RpcError}, context};
 use tokio::task::JoinHandle;
 use std::{sync::{Mutex, MutexGuard}, net::{IpAddr}, io::{Error}};
 
-use crate::{client::client_endpoint::SFSEndpoint, global::network::{post::{PostOption, Post, PostResult}, rpc::SFSServerClient}};
+use crate::{client::endpoint::SFSEndpoint, global::network::{post::{PostOption, Post, PostResult}, rpc::SFSServerClient}};
 
 pub struct NetworkService{
 

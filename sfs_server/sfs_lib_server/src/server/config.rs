@@ -7,3 +7,5 @@ pub struct ServerConfig{
     pub hosts_file : String,
     pub listen: String
 }
+
+pub const IGNORE_IF_EXISTS: bool = true;

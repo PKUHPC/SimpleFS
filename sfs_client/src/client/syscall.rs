@@ -6,7 +6,7 @@ use std::sync::{Arc, Mutex};
 use std::{ffi::CStr};
 use std::os::raw::c_char;
 
-use libc::{O_PATH, O_APPEND, O_CREAT, O_DIRECTORY, S_IFREG, O_EXCL, O_TRUNC, O_RDONLY, O_WRONLY, S_IFMT, S_IFDIR, S_IFCHR, S_IFBLK, S_IFIFO, S_IFSOCK, stat, statfs, fsid_t, ST_NOATIME, ST_NODIRATIME, ST_NOSUID, ST_NODEV, ST_SYNCHRONOUS, statvfs, SEEK_SET, SEEK_CUR, SEEK_DATA, SEEK_END, SEEK_HOLE, memset, c_void, dirent, dirent64, DT_REG, DT_DIR, strcpy};
+use libc::{O_PATH, O_APPEND, O_CREAT, O_DIRECTORY, S_IFREG, O_EXCL, O_TRUNC, O_RDONLY, O_WRONLY, S_IFMT, S_IFDIR, S_IFCHR, S_IFBLK, S_IFIFO, S_IFSOCK, statfs, fsid_t, ST_NOATIME, ST_NODIRATIME, ST_NOSUID, ST_NODEV, ST_SYNCHRONOUS, statvfs, SEEK_SET, SEEK_CUR, SEEK_DATA, SEEK_END, SEEK_HOLE, memset, c_void, dirent, dirent64, DT_REG, DT_DIR, strcpy, dev_t, ino_t, nlink_t, mode_t, uid_t, gid_t, c_int, off_t, blksize_t, blkcnt_t, time_t, memcpy};
 
 use crate::global;
 use crate::global::error_msg::error_msg;
@@ -14,9 +14,10 @@ use crate::global::fsconfig::ZERO_BUF_BEFORE_READ;
 use crate::global::metadata::{self, S_ISDIR, S_ISREG, Metadata};
 use crate::global::util::path_util::dirname;
 
-use super::client_context::ClientContext;
-use super::client_openfile::{OpenFile, FileType};
-use super::client_util::{get_metadata, metadata_to_stat};
+use super::context::ClientContext;
+use super::openfile::{OpenFile, FileType};
+use super::util::{get_metadata, metadata_to_stat};
+use super::config::CHECK_PARENT_DIR;
 use super::network::forward_msg::{forward_create, forward_remove, forward_get_chunk_stat, forward_get_metadentry_size, forward_truncate, forward_update_metadentry_size, forward_write, forward_read, forward_get_dirents, forward_decr_size};
 
 #[no_mangle]
@@ -70,7 +71,6 @@ pub extern "C" fn sfs_open(path: * const c_char, mode: u32, flag: i32) -> i32{
     return ClientContext::get_instance().get_ofm().lock().unwrap().add(Arc::new(Mutex::new(OpenFile::new(&s, flag, FileType::SFS_REGULAR))));
 }
 
-static CHECK_PARENT_DIR: bool = true;
 fn check_parent_dir(path: &String) -> i32{
     if !CHECK_PARENT_DIR{
         return 0;
@@ -79,7 +79,7 @@ fn check_parent_dir(path: &String) -> i32{
     let md_res = get_metadata(&p_comp, false);
     if let Err(e) = md_res{
         match e.kind(){
-            ErrorKind::NotFound => { error_msg("client::check_parent_dir".to_string(), "parent component doesn't exist".to_string()); },
+            ErrorKind::NotFound => { error_msg("client::check_parent_dir".to_string(), format!("parent component '{}' doesn't exist", p_comp)); },
             _ => { error_msg("client::check_parent_dir".to_string(), "fail to fetch parent dir metadata".to_string()); }
         }
         return -1;
@@ -144,6 +144,29 @@ pub extern "C" fn sfs_access(path: * const c_char, mask: i32, follow_links: bool
         return -1;
     }
     return 0;
+}
+
+// exactly the same as stat in libc but with all fields public
+#[derive(Debug)]
+pub struct stat {
+    pub st_dev: dev_t,
+    pub st_ino: ino_t,
+    pub st_nlink: nlink_t,
+    pub st_mode: mode_t,
+    pub st_uid: uid_t,
+    pub st_gid: gid_t,
+    pub __pad0: c_int,
+    pub st_rdev: dev_t,
+    pub st_size: off_t,
+    pub st_blksize: blksize_t,
+    pub st_blocks: blkcnt_t,
+    pub st_atime: time_t,
+    pub st_atime_nsec: i64,
+    pub st_mtime: time_t,
+    pub st_mtime_nsec: i64,
+    pub st_ctime: time_t,
+    pub st_ctime_nsec: i64,
+    pub __unused: [i64; 3],
 }
 
 #[no_mangle]
@@ -277,7 +300,7 @@ fn internal_pwrite(f: Arc<Mutex<OpenFile>>, buf: * const c_char, count: i64, off
         FileType::SFS_REGULAR => {},
     }
     let path = f.lock().unwrap().get_path();
-    let append_flag = f.lock().unwrap().get_flag(super::client_openfile::OpenFileFlags::Append);
+    let append_flag = f.lock().unwrap().get_flag(super::openfile::OpenFileFlags::Append);
     let ret_update_size = forward_update_metadentry_size(&path, count as u64, offset, append_flag);
     if ret_update_size.0 != 0{
         error_msg("client::sfs_pwrite".to_string(), format!("update metadentry size with error {}", ret_update_size.0));
@@ -293,7 +316,7 @@ fn internal_pwrite(f: Arc<Mutex<OpenFile>>, buf: * const c_char, count: i64, off
 }
 
 #[no_mangle]
-fn sfs_pwrite(fd: i32, buf: * const c_char, count: i64, offset: i64) -> i64{
+pub fn sfs_pwrite(fd: i32, buf: * const c_char, count: i64, offset: i64) -> i64{
     let f = ClientContext::get_instance().get_ofm().lock().unwrap().get(fd);
     if let None = f{
         error_msg("client::sfs_pwrite".to_string(), "file not exist".to_string());
@@ -312,7 +335,7 @@ pub extern "C" fn sfs_write(fd: i32, buf: * const c_char, count: i64) -> i64{
     }
     let f = f.unwrap();
     let pos = f.lock().unwrap().get_pos();
-    if f.lock().unwrap().get_flag(super::client_openfile::OpenFileFlags::Append) {
+    if f.lock().unwrap().get_flag(super::openfile::OpenFileFlags::Append) {
         internal_lseek(Arc::clone(&f), 0, SEEK_END);
     }
     let write_res = internal_pwrite(Arc::clone(&f), buf, count, pos);
@@ -455,7 +478,7 @@ pub extern "C" fn sfs_getdents(fd: i32, dirp: * mut dirent, count: i64) -> i32{
                 FileType::SFS_DIRECTORY => { c = DT_DIR },
             }
             (*current_dirp).d_type = c;
-            strcpy((*current_dirp).d_name.as_ptr() as *mut i8, de.get_name().as_ptr() as *mut i8);
+            strcpy((*current_dirp).d_name.as_ptr() as *mut i8, de.get_name().as_ptr() as *const i8);
             pos += 1;
             (*current_dirp).d_off = pos;
             written += total_size as i64;

@@ -1,10 +1,10 @@
 use std::{hash::{Hash, Hasher}, collections::hash_map::DefaultHasher, io::Error};
 
-use libc::{stat, makedev, gethostname};
+use libc::{makedev, gethostname};
 
-use crate::{global::{metadata::Metadata, network::config::CHUNK_SIZE}, client::client_context::ClientContext };
+use crate::{global::{metadata::Metadata, network::config::CHUNK_SIZE}, client::context::ClientContext };
 
-use super::network::{forward_msg, self};
+use super::{network::{forward_msg, self}, syscall::stat};
 
 pub fn get_metadata(path: &String, follow_link: bool) -> Result<Metadata, Error>{
     let md_res = forward_msg::forward_stat(path);
