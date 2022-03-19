@@ -382,16 +382,17 @@ pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>){
     (0, Arc::new(Mutex::new(open_dir)))
 }
 pub fn forward_get_fs_config() -> bool{
-    if let Ok(result) = NetworkService::post::<>(ClientContext::get_instance().get_hosts().get(ClientContext::get_instance().get_local_host_id() as usize).unwrap(), (), PostOption::FsConfig){
-        if result.err{
-            return false;
-        }
-        let config: SFSConfig = serde_json::from_str(&result.data.as_str()).unwrap();
-        ClientContext::get_instance().set_mountdir(config.mountdir.clone());
-        ClientContext::get_instance().set_fsconfig(config);
-        return true;
-    }
-    else{
+    let host_id = ClientContext::get_instance().get_local_host_id() as usize;
+    let fsconf_res =NetworkService::post::<>(ClientContext::get_instance().get_hosts().get(host_id).unwrap(), (), PostOption::FsConfig);
+    if let Err(e) = fsconf_res{
         return false;
     }
+    let result = fsconf_res.unwrap();
+    if result.err{
+        return false;
+    }
+    let config: SFSConfig = serde_json::from_str(&result.data.as_str()).unwrap();
+    ClientContext::get_instance().set_mountdir(config.mountdir.clone());
+    ClientContext::get_instance().set_fsconfig(config);
+    return true;
 }

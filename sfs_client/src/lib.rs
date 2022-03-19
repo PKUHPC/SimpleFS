@@ -7,25 +7,29 @@ mod tests {
 
     use libc::{c_char, O_RDWR, O_CREAT, S_IFREG, S_IFDIR, SEEK_SET, dirent};
 
-    use crate::{global::{distributor::SimpleHashDistributor}, client::{endpoint::SFSEndpoint, context::ClientContext, syscall::{sfs_open, sfs_create, sfs_read, sfs_lseek, sfs_opendir, sfs_write, sfs_remove, sfs_truncate, sfs_stat, stat, sfs_dup, sfs_pwrite, sfs_pread, sfs_rmdir, sfs_getdents, sfs_dup2}}};
+    use crate::{global::{distributor::SimpleHashDistributor}, client::{endpoint::SFSEndpoint, context::ClientContext, syscall::{sfs_open, sfs_create, sfs_read, sfs_lseek, sfs_opendir, sfs_write, sfs_remove, sfs_truncate, sfs_stat, stat, sfs_dup, sfs_pwrite, sfs_pread, sfs_rmdir, sfs_getdents, sfs_dup2}, init::init_environment}};
 
     #[test]
+    pub fn test0(){
+        init_environment();
+    }
+    #[test]
     pub fn test1(){
-        let s = "bybchuicbahbcashbadhasuhdadioada";
+        let s = "hello, here is the test data of sfs small-data local-host open/read/write test";
 
         let distributor = SimpleHashDistributor::new(1, 1);
         ClientContext::get_instance().set_distributor(distributor);
         
         let endp = SFSEndpoint{
-            addr: "127.0.0.1".to_string(),
+            addr: "192.168.230.137".to_string(),
         };
         ClientContext::get_instance().set_hosts(vec![endp; 1]);
 
 
-        let path = "/sfs/test/create_dir/file1".to_string();
-        let path1 = "/sfs".to_string();
-        let path2 = "/sfs/test".to_string();
-        let path3 = "/sfs/test/create_dir".to_string();
+        let path = "/sfs/test/create_dir/file1\0".to_string();
+        let path1 = "/sfs\0".to_string();
+        let path2 = "/sfs/test\0".to_string();
+        let path3 = "/sfs/test/create_dir\0".to_string();
         let res1 = sfs_create(path1.as_ptr() as * const i8, S_IFDIR);
         let res2 = sfs_create(path2.as_ptr() as * const i8, S_IFDIR);
         let res3 = sfs_create(path3.as_ptr() as * const i8, S_IFDIR);
@@ -56,7 +60,7 @@ mod tests {
         }
 
         sfs_lseek(fd, 13, SEEK_SET);
-        let mut buf = [0 as u8; 50];
+        let mut buf = [0 as u8; 100];
         let res = sfs_read(fd, buf.as_mut_ptr() as * mut i8, 100);
         if res <= 0{
             println!("read error ...");
@@ -68,13 +72,13 @@ mod tests {
     }
     #[test]
     pub fn test2(){
-        let s = "bybchuicbahbcashbadhasuhdadioada".to_string();
+        let s = "hello, here is the test data of sfs small-data local-host create/opendir test".to_string();
 
         let distributor = SimpleHashDistributor::new(1, 1);
         ClientContext::get_instance().set_distributor(distributor);
         
         let endp = SFSEndpoint{
-            addr: "127.0.0.1".to_string(),
+            addr: "192.168.230.137".to_string(),
         };
         ClientContext::get_instance().set_hosts(vec![endp; 1]);
 
@@ -85,10 +89,7 @@ mod tests {
         let res1 = sfs_create(path1.as_ptr() as * const i8, S_IFDIR);
         let res2 = sfs_create(path2.as_ptr() as * const i8, S_IFDIR);
         let res3 = sfs_create(path3.as_ptr() as * const i8, S_IFDIR);
-        if res1 != 0 || res2 != 0 || res3 != 0{
-            println!("create dir error ...");
-            return;
-        } 
+
         let fd = sfs_open(path.as_str().as_ptr() as * const c_char, S_IFREG, O_CREAT | O_RDWR);
         let file_path1 = "/sfs/test/create_dir/file2\0".to_string();
         let fd = sfs_open(file_path1.as_str().as_ptr() as * const c_char, S_IFREG, O_CREAT | O_RDWR);
@@ -119,7 +120,7 @@ mod tests {
         ClientContext::get_instance().set_distributor(distributor);
         
         let endp = SFSEndpoint{
-            addr: "127.0.0.1".to_string(),
+            addr: "192.168.230.137".to_string(),
         };
         ClientContext::get_instance().set_hosts(vec![endp; 1]);
 
@@ -159,13 +160,13 @@ mod tests {
     }
     #[test]
     pub fn test4(){
-        let data = "hello, here is the test data of sfs small-data local-host stat test";
+        let data = "hello, here is the test data of sfs small-data local-host truncate test";
 
         let distributor = SimpleHashDistributor::new(1, 1);
         ClientContext::get_instance().set_distributor(distributor);
         
         let endp = SFSEndpoint{
-            addr: "127.0.0.1".to_string(),
+            addr: "192.168.230.137".to_string(),
         };
         ClientContext::get_instance().set_hosts(vec![endp; 1]);
 
@@ -209,13 +210,13 @@ mod tests {
     }
     #[test]
     pub fn test5(){
-        let data = "hello, here is the test data of sfs small-data local-host truncate test";
+        let data = "hello, here is the test data of sfs small-data local-host stat test";
 
         let distributor = SimpleHashDistributor::new(1, 1);
         ClientContext::get_instance().set_distributor(distributor);
         
         let endp = SFSEndpoint{
-            addr: "127.0.0.1".to_string(),
+            addr: "192.168.230.137".to_string(),
         };
         ClientContext::get_instance().set_hosts(vec![endp; 1]);
 
@@ -303,7 +304,7 @@ mod tests {
         ClientContext::get_instance().set_distributor(distributor);
         
         let endp = SFSEndpoint{
-            addr: "127.0.0.1".to_string(),
+            addr: "192.168.230.137".to_string(),
         };
         ClientContext::get_instance().set_hosts(vec![endp; 1]);
 
@@ -354,7 +355,7 @@ mod tests {
         ClientContext::get_instance().set_distributor(distributor);
         
         let endp = SFSEndpoint{
-            addr: "127.0.0.1".to_string(),
+            addr: "192.168.230.137".to_string(),
         };
         ClientContext::get_instance().set_hosts(vec![endp; 1]);
 
@@ -388,7 +389,7 @@ mod tests {
         ClientContext::get_instance().set_distributor(distributor);
         
         let endp = SFSEndpoint{
-            addr: "127.0.0.1".to_string(),
+            addr: "192.168.230.137".to_string(),
         };
         ClientContext::get_instance().set_hosts(vec![endp; 1]);
 
@@ -412,7 +413,7 @@ mod tests {
         ClientContext::get_instance().set_distributor(distributor);
         
         let endp = SFSEndpoint{
-            addr: "127.0.0.1".to_string(),
+            addr: "192.168.230.137".to_string(),
         };
         ClientContext::get_instance().set_hosts(vec![endp; 1]);
 
@@ -473,7 +474,7 @@ mod tests {
         ClientContext::get_instance().set_distributor(distributor);
         
         let endp = SFSEndpoint{
-            addr: "127.0.0.1".to_string(),
+            addr: "192.168.230.137".to_string(),
         };
         ClientContext::get_instance().set_hosts(vec![endp; 1]);
 
@@ -483,7 +484,7 @@ mod tests {
 
         let fpath_file1 = "/sfs/file1\0".to_string();
         let fd = sfs_open(fpath_file1.as_str().as_ptr() as * const c_char, S_IFREG, O_CREAT | O_RDWR);
-        let fd2 = 10010;
+        let fd2 = 100010;
         let fd3 = sfs_dup2(fd, fd2);
         if fd2 != fd3 {
             println!("dup2 error ...");

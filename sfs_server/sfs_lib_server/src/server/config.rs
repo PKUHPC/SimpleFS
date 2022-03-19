@@ -9,3 +9,4 @@ pub struct ServerConfig{
 }
 
 pub const IGNORE_IF_EXISTS: bool = true;
+pub const TRUNCATE_DIRECTORY: bool = true;

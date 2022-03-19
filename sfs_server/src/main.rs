@@ -3,9 +3,9 @@
 #[warn(unused_assignments)]
 pub mod handle;
 pub mod task;
-use std::{fs::{self, OpenOptions}, io::{Error, BufWriter, Write}, path::Path, net::{Ipv4Addr, IpAddr, SocketAddr}, mem::size_of};
+use std::{fs::{self, OpenOptions}, io::{Error, BufWriter, Write, Read}, path::Path, net::{Ipv4Addr, IpAddr, SocketAddr}, mem::size_of};
 use libc::{S_IFDIR, S_IRWXU, S_IRWXG, S_IRWXO, getuid, getgid};
-use sfs_lib_server::{global::network::post::PostOption::*, global::{network::{rpc::SFSServer, forward_data::{WriteData, ReadData, CreateData, UpdateMetadentryData, DecrData, TruncData, DirentData, SerdeString}, config::CHUNK_SIZE, post::PostResult}, error_msg::error_msg, util::net_util::get_my_hostname, metadata::Metadata, fsconfig::SFSConfig}, server::{config::{ServerConfig, IGNORE_IF_EXISTS}, network::network_context::NetworkContext}};
+use sfs_lib_server::{global::network::post::PostOption::*, global::{network::{rpc::SFSServer, forward_data::{WriteData, ReadData, CreateData, UpdateMetadentryData, DecrData, TruncData, DirentData, SerdeString}, config::CHUNK_SIZE, post::PostResult}, error_msg::error_msg, util::net_util::get_my_hostname, metadata::Metadata, fsconfig::SFSConfig}, server::{config::{ServerConfig, IGNORE_IF_EXISTS, TRUNCATE_DIRECTORY}, network::network_context::NetworkContext}};
 use sfs_lib_server::{server::{filesystem::storage_context::StorageContext, storage::metadata::db::MetadataDB, storage::data::chunk_storage::*}, global::network::post::Post};
 
 use futures::{future, prelude::*};
@@ -22,7 +22,7 @@ struct ServerHandler(SocketAddr);
 #[tarpc::server]
 impl SFSServer for ServerHandler {
     async fn handle(self, _: context::Context, post: String) -> String {
-        println!("recived post: {}", post);
+        //println!("recived post: {}", post);
         let post: Post = serde_json::from_str(post.as_str()).unwrap();
         match post.option {
             Stat => {
@@ -50,7 +50,7 @@ impl SFSServer for ServerHandler {
                 let serde_string: SerdeString = serde_json::from_str(&post.data).unwrap();
                 let path = serde_string.str;
                 println!("handling remove of {}....", path);
-                ChunkStorage::get_instance().destroy_chunk_space(&path);
+                ChunkStorage::destroy_chunk_space(&path);
                 return serde_json::to_string(&PostResult{err: false, data: "0".to_string()}).unwrap();
             },
             RemoveMeta => {
@@ -84,6 +84,10 @@ impl SFSServer for ServerHandler {
                 println!("handling look up....");
                 let id: u64 = serde_json::from_str(&post.data).unwrap();
                 StorageContext::get_instance().set_host_id(id);
+                return serde_json::to_string(&PostResult{
+                    err: false,
+                    data: "ok".to_string()
+                }).unwrap()
             },
             FsConfig => {
                 println!("handling fsconfig....");
@@ -130,7 +134,7 @@ impl SFSServer for ServerHandler {
             },
             ChunkStat => {
                 println!("handling chunk stat...."); 
-                let chunk_stat = ChunkStorage::get_instance().chunk_stat();
+                let chunk_stat = ChunkStorage::chunk_stat();
                 let post_result = PostResult{
                     err: false,
                     data: serde_json::to_string(&chunk_stat).unwrap()
@@ -188,8 +192,8 @@ impl SFSServer for ServerHandler {
 
 async fn init_server(addr: &String) -> Result<(), Error>{
     NetworkContext::get_instance().set_self_addr(addr.clone());
-    
-    let server_addr = (IpAddr::V4(Ipv4Addr::LOCALHOST), 8082);
+    let server_addr: (Ipv4Addr, u16) = (addr.parse().unwrap(), 8082);
+    println!("listening on {:?}", server_addr);
     let mut listener = tarpc::serde_transport::tcp::listen(&server_addr, Json::default).await?;
     listener.config_mut().max_frame_length(usize::MAX);
     listener
@@ -225,23 +229,28 @@ fn populates_host_file() -> Option<Error>{
     None
 }
 async fn init_environment() -> Result<(), Error>{
-    // init metadata storage
+    let chunk_storage_path = StorageContext::get_instance().get_rootdir().clone() + &"/data/chunks".to_string();
     let metadata_path = StorageContext::get_instance().get_metadir().clone() + &"/rocksdb".to_string();
+
+    if TRUNCATE_DIRECTORY{
+        fs::remove_dir_all(Path::new(&chunk_storage_path));
+        fs::remove_dir_all(Path::new(&metadata_path));
+    }
+    // init metadata storage
+    
     fs::create_dir_all(Path::new(&metadata_path)).expect("fail to create metadata data base directory");
     StorageContext::set_mdb(MetadataDB::new(&metadata_path).expect("fail to create metadata data base"));
 
     // init chunk storage
-    let chunk_storage_path = StorageContext::get_instance().get_rootdir().clone() + &"/data/chunks".to_string();
     fs::create_dir_all(Path::new(&chunk_storage_path)).expect("fail to create chunk storage directory");
     StorageContext::set_storage(ChunkStorage::new(&chunk_storage_path, CHUNK_SIZE).expect("fail to create chunk storage"));
-
-    init_server(StorageContext::get_instance().get_bind_addr()).await?;
 
     StorageContext::get_instance().set_atime_state(true);
     StorageContext::get_instance().set_mtime_state(true);
     StorageContext::get_instance().set_ctime_state(true);
     StorageContext::get_instance().set_link_count_state(true);
     StorageContext::get_instance().set_blocks_state(true);
+    
     let mut root_md = Metadata::new();
     root_md.set_mode(S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO);
 
@@ -250,6 +259,8 @@ async fn init_environment() -> Result<(), Error>{
     if !StorageContext::get_instance().get_hosts_file().len() == 0{
         populates_host_file();
     }
+    let addr = StorageContext::get_instance().get_bind_addr().clone();
+    init_server(&addr).await?;
     Ok(())
 }
 fn destroy_environment(){
@@ -257,11 +268,10 @@ fn destroy_environment(){
 }
 #[tokio::main]
 pub async fn main() -> Result<(), Error>{
-    /*
     let RPC_PROTOCOL: String = String::from("tcp");
     
     let mut json: Vec<u8> = Vec::new();
-    let mut f =  fs::OpenOptions::new().read(true).open("config.json".to_string())?;
+    let mut f =  std::fs::OpenOptions::new().read(true).open("config.json".to_string())?;
 
     f.read_to_end(&mut json).expect("fail to read config file");
     let s = String::from_utf8(json.clone()).unwrap();
@@ -269,16 +279,17 @@ pub async fn main() -> Result<(), Error>{
 
     fs::create_dir_all(Path::new(&config.mountdir)).expect("fail to create mount directory");
     StorageContext::get_instance().set_mountdir(fs::canonicalize(&config.mountdir).unwrap().to_str().unwrap().to_string());
-    let root_dir = config.rootdir;
-    let root_dirpath = root_dir + &std::process::id().to_string();
+    let root_dirpath = config.rootdir;
+    //let root_dirpath = root_dir + &std::process::id().to_string();
     fs::create_dir_all(Path::new(&root_dirpath)).expect("fail to create root directory");
     StorageContext::get_instance().set_rootdir(root_dirpath);
     StorageContext::get_instance().set_metadir(fs::canonicalize(&config.metadir).unwrap().to_str().unwrap().to_string());
     StorageContext::get_instance().set_hosts_file(config.hosts_file);
-    StorageContext::get_instance().set_bind_addr(format!("{}://{}", RPC_PROTOCOL, config.listen));
+    //StorageContext::get_instance().set_bind_addr(format!("{}://{}", RPC_PROTOCOL, config.listen));
+    StorageContext::get_instance().set_bind_addr(config.listen);
 
     init_environment().await?;
-    */
+    /*
     let chunk_storage_path = "/home/dev/Desktop/storage/data/chunks".to_string();
     fs::remove_dir_all(Path::new(&chunk_storage_path));
     fs::create_dir_all(Path::new(&chunk_storage_path)).expect("fail to create chunk storage directory");
@@ -298,5 +309,6 @@ pub async fn main() -> Result<(), Error>{
     //MetadataDB::get_instance().put(&"/sfs/test/async_write/a".to_string(), &"c|32768|0|0|0|0|1|0".to_string());
     //println!("?");
     init_server(&"192.168.230.137".to_string()).await?;
+    */
     Ok(())
 }

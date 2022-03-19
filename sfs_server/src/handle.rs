@@ -91,7 +91,7 @@ pub async fn handle_write(input: WriteData) -> String{
 async fn write_file(args: &WriteChunkTask) -> u64{
     //println!("{:?}", args);
     //println!("writing...");
-    if let Ok(nwrite) = ChunkStorage::get_instance().write_chunk(&args.path, args.chunk_id, args.buf.as_bytes(), args.size, args.offset){
+    if let Ok(nwrite) = ChunkStorage::write_chunk(&args.path, args.chunk_id, args.buf.as_bytes(), args.size, args.offset).await{
         nwrite
     }
     else { 0 }
@@ -187,7 +187,7 @@ async fn read_file(args: &ReadChunkTask) -> (u64, u64, String){
     //println!("{:?}", args);
     //println!("reading...");
     let mut buf = [0 as u8; CHUNK_SIZE as usize];
-    if let Ok(nreads) = ChunkStorage::get_instance().read_chunk(&args.path, args.chunk_id, &mut buf, args.size, args.offset){
+    if let Ok(nreads) = ChunkStorage::read_chunk(&args.path, args.chunk_id, &mut buf, args.size, args.offset).await{
         (args.chunk_id, nreads, String::from_utf8(buf[0..(nreads as usize)].to_vec()).unwrap())
     }
     else{
@@ -201,10 +201,10 @@ pub async fn handle_trunc(input: TruncData) -> String{
     let mut chunk_id_start = block_index(size, CHUNK_SIZE);
     let left_pad = block_overrun(size, CHUNK_SIZE);
     if left_pad != 0{
-        ChunkStorage::get_instance().truncate_chunk_file(&path, chunk_id_start, left_pad);
+        ChunkStorage::truncate_chunk_file(&path, chunk_id_start, left_pad).await;
         chunk_id_start += 1;
     }
-    ChunkStorage::get_instance().trim_chunk_space(&path, chunk_id_start);
+    ChunkStorage::trim_chunk_space(&path, chunk_id_start).await;
     let post_res = PostResult{
         err: false,
         data: "".to_string()

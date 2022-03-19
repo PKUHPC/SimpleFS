@@ -24,6 +24,9 @@ pub fn get_hostname(short_hostname: bool) -> String{
         if let Some(pos) = hostname.find(&".".to_string()){
             hostname = hostname[0..pos].to_string();
         }
+        if let Some(pos) = hostname.find(&"\0".to_string()){
+            hostname = hostname[0..pos].to_string();
+        }
         return hostname;
     }
     else{

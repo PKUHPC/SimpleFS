@@ -125,9 +125,9 @@ impl StorageContext{
     pub fn set_mdb(mdb_: MetadataDB){
         MetadataDB::set_mdb(mdb_);
     }
-    pub fn get_storage() -> MutexGuard<'static, ChunkStorage>{
-        ChunkStorage::get_instance()
-    }
+    //pub fn get_storage() -> &'static ChunkStorage{
+    //    ChunkStorage::get_instance()
+    //}
     pub fn set_storage(storage_: ChunkStorage){
         ChunkStorage::set_storage(storage_);
     }
