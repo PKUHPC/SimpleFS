@@ -53,6 +53,7 @@ pub async fn handle_write(input: WriteData) -> String{
             if input.offset > 0{
                 origin_offset = (CHUNK_SIZE - input.offset as u64) + ((chunk_id_file - input.chunk_start) - 1) * CHUNK_SIZE;
             }
+            chunk_ptr = origin_offset;
             if chunk_id_curr == input.chunk_n - 1{
                 transfer_size = chunk_size_left_host;
             }

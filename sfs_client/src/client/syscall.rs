@@ -447,6 +447,9 @@ fn align(size: usize, step: usize) -> usize{
 }
 #[no_mangle]
 pub extern "C" fn sfs_getdents(fd: i32, dirp: * mut dirent, count: i64) -> i32{
+    unsafe{
+        memset(dirp as * mut c_void, 0, count as usize);
+    }
     let opendir = ClientContext::get_instance().get_ofm().lock().unwrap().get_dir(fd);
     if let None = opendir{
         error_msg("client::sfs_getdirents".to_string(), "directory not opned".to_string());
@@ -478,7 +481,8 @@ pub extern "C" fn sfs_getdents(fd: i32, dirp: * mut dirent, count: i64) -> i32{
                 FileType::SFS_DIRECTORY => { c = DT_DIR },
             }
             (*current_dirp).d_type = c;
-            strcpy((*current_dirp).d_name.as_ptr() as *mut i8, de.get_name().as_ptr() as *const i8);
+            //strcpy((*current_dirp).d_name.as_ptr() as *mut i8, de.get_name().as_ptr() as *const i8);
+            memcpy((*current_dirp).d_name.as_ptr() as *mut c_void, de.get_name().as_ptr() as *const c_void, de.get_name().len());
             pos += 1;
             (*current_dirp).d_off = pos;
             written += total_size as i64;
@@ -493,6 +497,10 @@ pub extern "C" fn sfs_getdents(fd: i32, dirp: * mut dirent, count: i64) -> i32{
 
 #[no_mangle]
 pub extern "C" fn sfs_getdents64(fd: i32, dirp: * mut dirent64, count: i64) -> i32{
+    
+    unsafe{
+        memset(dirp as * mut c_void, 0, count as usize);
+    }
     let opendir = ClientContext::get_instance().get_ofm().lock().unwrap().get_dir(fd);
     if let None = opendir{
         error_msg("client::sfs_getdirents".to_string(), "directory not opned".to_string());
@@ -507,7 +515,7 @@ pub extern "C" fn sfs_getdents64(fd: i32, dirp: * mut dirent64, count: i64) -> i
     let size = opendir.lock().unwrap().get_size() as i64;
     while pos < size{
         let de = opendir.lock().unwrap().getdent(pos);
-        let total_size = align(19 + de.get_name().len() + 1, 8);
+        let total_size = align(19 + de.get_name().len() + 3, 8);
         if total_size as i64 > count - written{
             break;
         }
@@ -524,7 +532,8 @@ pub extern "C" fn sfs_getdents64(fd: i32, dirp: * mut dirent64, count: i64) -> i
                 FileType::SFS_DIRECTORY => { c = DT_DIR },
             }
             (*current_dirp).d_type = c;
-            strcpy((*current_dirp).d_name.as_ptr() as *mut i8, de.get_name().as_ptr() as *mut i8);
+            //strcpy((*current_dirp).d_name.as_ptr() as *mut i8, de.get_name().as_ptr() as *const i8);
+            memcpy((*current_dirp).d_name.as_ptr() as *mut c_void, de.get_name().as_ptr() as *const c_void, de.get_name().len());
             pos += 1;
             (*current_dirp).d_off = pos;
             written += total_size as i64;

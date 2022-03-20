@@ -177,7 +177,10 @@ pub fn forward_truncate(path: &String, old_size: i64, new_size: i64) -> i32{
     let chunk_end = block_index(old_size - new_size - 1, CHUNK_SIZE);
     let mut hosts: Vec<u64> = Vec::new();
     for chunk_id in chunk_start..(chunk_end + 1){
-        hosts.push(ClientContext::get_instance().get_distributor().locate_data(path, chunk_id));
+        let host_id = ClientContext::get_instance().get_distributor().locate_data(path, chunk_id);
+        if !hosts.contains(&host_id){
+            hosts.push(host_id);
+        }
     }
     let mut posts: Vec<(SFSEndpoint, Post)> = Vec::new();
     for host in hosts{

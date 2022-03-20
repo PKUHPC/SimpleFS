@@ -147,6 +147,7 @@ impl ChunkStorage{
             let chunk_id = chunk_path.file_name().unwrap().to_str().unwrap().parse::<u64>().unwrap();
             if chunk_id >= chunk_start{
                 if let Err(e) = fs::remove_file(chunk_path.as_path()).await{
+                    continue;
                     error_msg("server::storage::chunk_storage::trim_chunk_space".to_string(), "fail to remove file".to_string());
                     err = true;
                 }
@@ -162,7 +163,11 @@ impl ChunkStorage{
             return;
         }
         let chunk_path = ChunkStorage::absolute(&ChunkStorage::get_chunks_path(file_path, chunk_id));
-        let f = fs::OpenOptions::new().write(true).read(true).open(Path::new(&chunk_path)).await.unwrap();
+        let f_res = fs::OpenOptions::new().write(true).read(true).open(Path::new(&chunk_path)).await;
+        if let Err(e) = f_res{
+            return;
+        }
+        let f = f_res.unwrap();
         if let Err(e) = f.set_len(length).await{
             error_msg("server::storage::chunk_storage::truncate_chunk_file".to_string(), "error occurs while truncating chunk file".to_string());
         }

@@ -49,7 +49,7 @@ impl SimpleHashDistributor{
         SimpleHashDistributor{
             localhost_: host_id,
             hosts_size_: host_size,
-            all_hosts_: Arc::new(vec![0; host_size as usize]),
+            all_hosts_: Arc::new((0..host_size).collect()),
             //str_hash_: DefaultHasher::new()
         }
     }

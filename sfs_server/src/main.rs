@@ -278,6 +278,7 @@ pub async fn main() -> Result<(), Error>{
     let config: ServerConfig = serde_json::from_str(s.as_str()).expect("JSON was not well-formatted");
 
     fs::create_dir_all(Path::new(&config.mountdir)).expect("fail to create mount directory");
+    fs::create_dir_all(Path::new(&config.metadir)).expect("fail to create meta directory");
     StorageContext::get_instance().set_mountdir(fs::canonicalize(&config.mountdir).unwrap().to_str().unwrap().to_string());
     let root_dirpath = config.rootdir;
     //let root_dirpath = root_dir + &std::process::id().to_string();
