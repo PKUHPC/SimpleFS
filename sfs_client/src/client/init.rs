@@ -1,13 +1,13 @@
 use core::time;
-use std::{io::{Error, BufReader, BufRead}, fs::OpenOptions, path::Path, net::TcpStream, thread};
+use std::{io::{Error, BufReader, BufRead}, fs::OpenOptions, path::Path, net::TcpStream, thread, sync::Arc};
 
 use rand::{thread_rng, Rng};
 use rand::seq::SliceRandom;
 use regex::Regex;
 
-use crate::{global::{util::env_util::get_var, error_msg::error_msg, distributor::SimpleHashDistributor, fsconfig::hostfile_path}, client::{context::ClientContext}};
+use crate::{global::{util::env_util::get_var, error_msg::error_msg, distributor::SimpleHashDistributor, fsconfig::{hostfile_path, SFSConfig}}, client::context::DynamicContext};
 
-use super::{util::get_hostname, endpoint::SFSEndpoint, network::{network_service::NetworkService, forward_msg::forward_get_fs_config}};
+use super::{util::get_hostname, endpoint::SFSEndpoint, network::{network_service::NetworkService, forward_msg::forward_get_fs_config}, context::StaticContext};
 
 fn extract_protocol(uri: &String){
     
@@ -49,7 +49,7 @@ fn lookup_endpoint(uri: &String, max_retries: i32, host_id: u64) -> Result<SFSEn
     }
     Err(Error::new(std::io::ErrorKind::ConnectionAborted, "fail to connect to target host"))
 }
-fn connect_hosts(mut hosts: &mut Vec<(String, String)>) -> bool{
+fn connect_hosts(mut hosts: &mut Vec<(String, String)>, mut context: &mut StaticContext) -> bool{
     let local_hostname = get_hostname(true);
     println!("localhost name: {}", local_hostname);
     let mut local_host_found = false;
@@ -73,16 +73,16 @@ fn connect_hosts(mut hosts: &mut Vec<(String, String)>) -> bool{
             addrs[id as usize] = endp;
         }
         if !local_host_found && hostname.eq(&local_hostname){
-            ClientContext::get_instance().set_local_host_id(id);
+            context.set_local_host_id(id);
             local_host_found = true;
         }
     }
 
     if !local_host_found{
-        ClientContext::get_instance().set_local_host_id(0);
+        context.set_local_host_id(0);
     }
     
-    ClientContext::get_instance().set_hosts(addrs);
+    context.set_hosts(addrs);
     return true;
 }
 fn read_host_file() -> Vec<(String, String)>{
@@ -96,21 +96,24 @@ fn read_host_file() -> Vec<(String, String)>{
     hosts = load_res.unwrap();
     return hosts;
 }
-#[no_mangle]
-pub extern "C" fn init_environment(){
+pub fn init_environment() -> StaticContext{
+    // make sure DynamicContext singleton is initialized
+    DynamicContext::get_instance();
     let mut hosts = read_host_file();
 
+    let mut context = StaticContext::new();
     println!("found hosts: {:?}", hosts);
-    if !connect_hosts(&mut hosts){
-        return;
+    if !connect_hosts(&mut hosts, &mut context){
+        return context;
     }
 
-    let host_id = ClientContext::get_instance().get_local_host_id();
-    let host_len =ClientContext::get_instance().get_hosts().len() as u64; 
+    let host_id = context.get_local_host_id();
+    let host_len =context.get_hosts().len() as u64; 
     let distributor = SimpleHashDistributor::new(host_id, host_len);
-    ClientContext::get_instance().set_distributor(distributor);
+    context.set_distributor(distributor);
 
-    if !forward_get_fs_config(){
+    if !forward_get_fs_config(&mut context){
         error_msg("client::client_init".to_string(), "fail to fetch fs config".to_string());
     }
+    return context;
 }

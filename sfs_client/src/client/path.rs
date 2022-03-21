@@ -4,7 +4,7 @@ use libc::{SYS_chdir, unsetenv, SYS_getcwd};
 
 use crate::global::{error_msg::error_msg, path::match_components, fsconfig::CWD};
 
-use super::context::ClientContext;
+use super::context::{StaticContext, DynamicContext};
 
 static SEPERATOR: char = '/';
 pub const max_length: i64 = 4096;
@@ -23,7 +23,7 @@ pub fn resolve(path: &String, resolve_last_link: bool) -> (bool, String){
         }
     }
     //let mut st = Stat::init();
-    let mnt_components = ClientContext::get_instance().get_mountdir_components();
+    let mnt_components = StaticContext::get_instance().get_mountdir_components();
     let mut matched_components: usize = 0;
     let mut resolved_components: usize = 0;
     let mut comp_size: usize = 0;
@@ -108,7 +108,7 @@ pub fn resolve(path: &String, resolve_last_link: bool) -> (bool, String){
     }
 
     if matched_components >= mnt_components.len() {
-        resolved = resolved[0..0].to_string() + &resolved[(ClientContext::get_instance().get_mountdir().len() + 1)..resolved.len()].to_string();
+        resolved = resolved[0..0].to_string() + &resolved[(StaticContext::get_instance().get_mountdir().len() + 1)..resolved.len()].to_string();
         return (true, resolved)
     }
     if resolved.is_empty() {
@@ -116,7 +116,6 @@ pub fn resolve(path: &String, resolve_last_link: bool) -> (bool, String){
     }
     (false, resolved)
 }
-
 pub fn set_sys_cwd(path: &String) -> i32{
     unsafe{syscall_no_intercept(SYS_chdir, path.as_ptr() as *const c_char) as i32}
 }
@@ -137,7 +136,7 @@ pub fn get_sys_cwd() -> String{
 }
 pub fn set_cwd(path: &String, internal: bool) -> i32{
     if internal{
-        let sys_res = set_sys_cwd(ClientContext::get_instance().get_mountdir());
+        let sys_res = set_sys_cwd(StaticContext::get_instance().get_mountdir());
         if sys_res != 0{
             return sys_res;
         }
@@ -151,7 +150,7 @@ pub fn set_cwd(path: &String, internal: bool) -> i32{
         unset_env_cwd();
 
     }
-    ClientContext::get_instance().set_cwd(path.clone());
+    DynamicContext::get_instance().set_cwd(path.clone());
     return 0;
 }
 

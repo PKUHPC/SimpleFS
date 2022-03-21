@@ -8,6 +8,7 @@ pub trait Distributor{
     fn locate_dir_metadata(&self, path: &String) -> Arc<Vec<u64>>;
 }
 
+#[derive(Debug)]
 pub struct SimpleHashDistributor{
     pub localhost_: u64,
     pub hosts_size_: u64,

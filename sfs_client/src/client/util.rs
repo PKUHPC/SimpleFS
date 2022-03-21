@@ -2,7 +2,7 @@ use std::{hash::{Hash, Hasher}, collections::hash_map::DefaultHasher, io::Error}
 
 use libc::{makedev, gethostname};
 
-use crate::{global::{metadata::Metadata, network::config::CHUNK_SIZE}, client::context::ClientContext };
+use crate::{global::{metadata::Metadata, network::config::CHUNK_SIZE}, client::context::{StaticContext, DynamicContext} };
 
 use super::{network::{forward_msg, self}, syscall::stat};
 
@@ -39,8 +39,8 @@ pub fn metadata_to_stat(path: &String, md: Metadata, attr: &mut stat) -> i32{
     path.hash(&mut hasher);
     attr.st_ino = hasher.finish();
     attr.st_nlink = 1;
-    attr.st_uid = ClientContext::get_instance().get_fsconfig().uid;
-    attr.st_gid = ClientContext::get_instance().get_fsconfig().gid;
+    attr.st_uid = StaticContext::get_instance().get_fsconfig().uid;
+    attr.st_gid = StaticContext::get_instance().get_fsconfig().gid;
     attr.st_rdev = 0;
     attr.st_blksize = CHUNK_SIZE as i64;
     attr.st_blocks = 0;
@@ -54,19 +54,19 @@ pub fn metadata_to_stat(path: &String, md: Metadata, attr: &mut stat) -> i32{
 
     attr.st_mode = md.get_mode();
     attr.st_size = md.get_size();
-    if ClientContext::get_instance().get_fsconfig().atime_state{
+    if StaticContext::get_instance().get_fsconfig().atime_state{
         attr.st_atime = md.get_access_time();
     }
-    if ClientContext::get_instance().get_fsconfig().ctime_state{
+    if StaticContext::get_instance().get_fsconfig().ctime_state{
         attr.st_ctime = md.get_change_time();
     }
-    if ClientContext::get_instance().get_fsconfig().ctime_state{
+    if StaticContext::get_instance().get_fsconfig().ctime_state{
         attr.st_ctime = md.get_modify_time();
     }
-    if ClientContext::get_instance().get_fsconfig().link_cnt_state{
+    if StaticContext::get_instance().get_fsconfig().link_cnt_state{
         attr.st_nlink = md.get_link_count();
     }
-    if ClientContext::get_instance().get_fsconfig().blocks_state{
+    if StaticContext::get_instance().get_fsconfig().blocks_state{
         attr.st_blocks = md.get_blocks();
     }
     return 0;

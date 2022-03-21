@@ -12,17 +12,15 @@ mod tests {
 
     use libc::{c_char, O_RDWR, O_CREAT, S_IFREG, S_IFDIR, SEEK_SET, dirent};
 
-    use crate::{global::{distributor::SimpleHashDistributor}, client::{endpoint::SFSEndpoint, context::ClientContext, syscall::{sfs_open, sfs_create, sfs_read, sfs_lseek, sfs_opendir, sfs_write, sfs_remove, sfs_truncate, sfs_stat, stat, sfs_dup, sfs_pwrite, sfs_pread, sfs_rmdir, sfs_getdents, sfs_dup2, internel_truncate}, init::init_environment}};
+    use crate::{global::{distributor::SimpleHashDistributor}, client::{endpoint::SFSEndpoint, context::{StaticContext, DynamicContext}, syscall::{sfs_open, sfs_create, sfs_read, sfs_lseek, sfs_opendir, sfs_write, sfs_remove, sfs_truncate, sfs_stat, stat, sfs_dup, sfs_pwrite, sfs_pread, sfs_rmdir, sfs_getdents, sfs_dup2, internel_truncate}, init::init_environment}};
 
     #[test]
     pub fn test0(){
-        init_environment();
+        
     }
     #[test]
     pub fn test1(){
         let s = "hello, here is the test data of sfs small-data local-host open/read/write test";
-
-        init_environment();
 
         let path = "/sfs/test/create_dir/file1\0".to_string();
         let path1 = "/sfs\0".to_string();
@@ -42,12 +40,12 @@ mod tests {
             return;
         }
         println!("open result: {}", fd);
-        println!("ofm length: {}", ClientContext::get_instance().get_ofm().lock().unwrap().get_length());
+        println!("ofm length: {}", DynamicContext::get_instance().get_ofm().lock().unwrap().get_length());
 
         //let path = "/sfs/test/async_write/a".to_string();
         //let res = sfs_open(path.as_str().as_ptr() as * const c_char, S_IFREG, O_CREAT | O_RDONLY);
         //println!("open result: {}", res);
-        //println!("ofm length: {}", ClientContext::get_instance().get_ofm().lock().unwrap().get_length());
+        //println!("ofm length: {}", DynamicContext::get_instance().get_ofm().lock().unwrap().get_length());
         let res = sfs_write(fd, s.as_ptr() as * mut i8, s.len() as i64);
         if res <= 0{
             println!("write error ...");
@@ -72,7 +70,7 @@ mod tests {
     pub fn test2(){
         let s = "hello, here is the test data of sfs small-data local-host create/opendir test".to_string();
 
-        init_environment();
+        
 
         let path = "/sfs/test/create_dir/file1\0".to_string();
         let path1 = "/sfs\0".to_string();
@@ -92,8 +90,8 @@ mod tests {
 
         let fd = sfs_opendir(dir_path1.as_str().as_ptr() as * const c_char);
         println!("open dir result: {}", fd);
-        println!("ofm length: {}", ClientContext::get_instance().get_ofm().lock().unwrap().get_length());
-        println!("dirents: {:?}\n", (*ClientContext::get_instance().get_ofm().lock().unwrap().get(fd).unwrap().lock().unwrap()).entries_);
+        println!("ofm length: {}", DynamicContext::get_instance().get_ofm().lock().unwrap().get_length());
+        println!("dirents: {:?}\n", (*DynamicContext::get_instance().get_ofm().lock().unwrap().get(fd).unwrap().lock().unwrap()).entries_);
 
         let res = sfs_create(dir_path2.as_ptr() as * const i8, S_IFDIR);
         let file_path2 = "/sfs/test/file1\0".to_string();
@@ -101,14 +99,14 @@ mod tests {
 
         let fd = sfs_opendir(dir_path3.as_str().as_ptr() as * const c_char);
         println!("open dir result: {}", fd);
-        println!("ofm length: {}", ClientContext::get_instance().get_ofm().lock().unwrap().get_length());
-        println!("dirents: {:?}", (*ClientContext::get_instance().get_ofm().lock().unwrap().get(fd).unwrap().lock().unwrap()).entries_);
+        println!("ofm length: {}", DynamicContext::get_instance().get_ofm().lock().unwrap().get_length());
+        println!("dirents: {:?}", (*DynamicContext::get_instance().get_ofm().lock().unwrap().get(fd).unwrap().lock().unwrap()).entries_);
     }
     #[test]
     pub fn test3(){
         let data = "hello, here is the test data of sfs small-data local-host remove test";
 
-        init_environment();
+        
 
 
         let dpath_sfs = "/sfs\0".to_string();
@@ -132,11 +130,11 @@ mod tests {
         }
 
         let fd = sfs_opendir(dpath_sfs.as_str().as_ptr() as * const c_char);
-        println!("dirents of {}: {:?}", dpath_sfs, (*ClientContext::get_instance().get_ofm().lock().unwrap().get(fd).unwrap().lock().unwrap()).entries_);
+        println!("dirents of {}: {:?}", dpath_sfs, (*DynamicContext::get_instance().get_ofm().lock().unwrap().get(fd).unwrap().lock().unwrap()).entries_);
         
         sfs_remove(fpath_file1.as_str().as_ptr() as * const c_char);
         let fd = sfs_opendir(dpath_sfs.as_str().as_ptr() as * const c_char);
-        println!("dirents of {}: {:?}", dpath_sfs, (*ClientContext::get_instance().get_ofm().lock().unwrap().get(fd).unwrap().lock().unwrap()).entries_);
+        println!("dirents of {}: {:?}", dpath_sfs, (*DynamicContext::get_instance().get_ofm().lock().unwrap().get(fd).unwrap().lock().unwrap()).entries_);
         
         sfs_remove(dpath_sfs.as_str().as_ptr() as * const c_char);
         let fd = sfs_opendir(dpath_sfs.as_str().as_ptr() as * const c_char);
@@ -148,7 +146,7 @@ mod tests {
     pub fn test4(){
         let data = "hello, here is the test data of sfs small-data local-host truncate test";
 
-        init_environment();
+        
 
 
         let dpath_sfs = "/sfs\0".to_string();
@@ -192,7 +190,7 @@ mod tests {
     pub fn test5(){
         let data = "hello, here is the test data of sfs small-data local-host stat test";
 
-        init_environment();
+        
 
 
         let dpath_sfs = "/sfs\0".to_string();
@@ -274,7 +272,7 @@ mod tests {
     pub fn test6(){
         let data = "hello, here is the test data of sfs small-data local-host dup test";
 
-        init_environment();
+        
 
 
         let dpath_sfs = "/sfs\0".to_string();
@@ -319,7 +317,7 @@ mod tests {
     pub fn test7(){
         let data = "hello, here is the test data of sfs small-data local-host pwrite/pread test";
 
-        init_environment();
+        
 
 
         let dpath_sfs = "/sfs\0".to_string();
@@ -347,7 +345,7 @@ mod tests {
     pub fn test8(){
         let data = "hello, here is the test data of sfs small-data local-host rmdir test";
 
-        init_environment();
+        
 
 
         let dpath_sfs = "/sfs\0".to_string();
@@ -365,7 +363,7 @@ mod tests {
     pub fn test9(){
         let data = "hello, here is the test data of sfs small-data local-host getdents test";
 
-        init_environment();
+        
 
 
         let dpath_sfs = "/sfs\0".to_string();
@@ -391,7 +389,7 @@ mod tests {
         };
         let dirents = [new_dirent; 20];
         let fd = sfs_opendir(dpath_sfs.as_str().as_ptr() as * const c_char);
-        println!("dirents of {}: {:?}", dpath_sfs, (*ClientContext::get_instance().get_ofm().lock().unwrap().get(fd).unwrap().lock().unwrap()).entries_);
+        println!("dirents of {}: {:?}", dpath_sfs, (*DynamicContext::get_instance().get_ofm().lock().unwrap().get(fd).unwrap().lock().unwrap()).entries_);
         sfs_lseek(fd, 0, SEEK_SET);
         sfs_getdents(fd, dirents.as_ptr() as *mut dirent, 200);
 
@@ -421,7 +419,7 @@ mod tests {
     pub fn test10(){
         let data = "hello, here is the test data of sfs small-data local-host dup2 test";
 
-        init_environment();
+        
 
 
         let dpath_sfs = "/sfs\0".to_string();

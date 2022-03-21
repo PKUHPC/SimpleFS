@@ -14,7 +14,7 @@ use crate::global::fsconfig::ZERO_BUF_BEFORE_READ;
 use crate::global::metadata::{self, S_ISDIR, S_ISREG, Metadata};
 use crate::global::util::path_util::dirname;
 
-use super::context::ClientContext;
+use super::context::{StaticContext, DynamicContext};
 use super::openfile::{OpenFile, FileType};
 use super::util::{get_metadata, metadata_to_stat};
 use super::config::CHECK_PARENT_DIR;
@@ -68,7 +68,7 @@ pub extern "C" fn sfs_open(path: * const c_char, mode: u32, flag: i32) -> i32{
             }
         }
     }
-    return ClientContext::get_instance().get_ofm().lock().unwrap().add(Arc::new(Mutex::new(OpenFile::new(&s, flag, FileType::SFS_REGULAR))));
+    return DynamicContext::get_instance().get_ofm().lock().unwrap().add(Arc::new(Mutex::new(OpenFile::new(&s, flag, FileType::SFS_REGULAR))));
 }
 fn check_parent_dir(path: &String) -> i32{
     if !CHECK_PARENT_DIR{
@@ -224,7 +224,7 @@ pub extern "C" fn sfs_statvfs(buf: *mut statvfs) -> i32{
 }
 #[no_mangle]
 pub fn sfs_lseek(fd: i32, offset: i64, whence: i32) -> i64{
-    let f_res = ClientContext::get_instance().get_ofm().lock().unwrap().get(fd);
+    let f_res = DynamicContext::get_instance().get_ofm().lock().unwrap().get(fd);
     if let None = f_res{
         return -1;
     }
@@ -289,11 +289,11 @@ pub extern "C" fn sfs_truncate(path: * const c_char, length: i64) -> i32{
 }
 #[no_mangle]
 pub extern "C" fn sfs_dup(oldfd: i32) -> i32{
-    return ClientContext::get_instance().get_ofm().lock().unwrap().dup(oldfd);
+    return DynamicContext::get_instance().get_ofm().lock().unwrap().dup(oldfd);
 }
 #[no_mangle]
 pub extern "C" fn sfs_dup2(oldfd: i32, newfd: i32) -> i32{
-    return ClientContext::get_instance().get_ofm().lock().unwrap().dup2(oldfd, newfd);
+    return DynamicContext::get_instance().get_ofm().lock().unwrap().dup2(oldfd, newfd);
 }
 fn internal_pwrite(f: Arc<Mutex<OpenFile>>, buf: * const c_char, count: i64, offset: i64) -> i64{
     match f.lock().unwrap().get_type(){
@@ -317,7 +317,7 @@ fn internal_pwrite(f: Arc<Mutex<OpenFile>>, buf: * const c_char, count: i64, off
 }
 #[no_mangle]
 pub fn sfs_pwrite(fd: i32, buf: * const c_char, count: i64, offset: i64) -> i64{
-    let f = ClientContext::get_instance().get_ofm().lock().unwrap().get(fd);
+    let f = DynamicContext::get_instance().get_ofm().lock().unwrap().get(fd);
     if let None = f{
         error_msg("client::sfs_pwrite".to_string(), "file not exist".to_string());
         return -1;
@@ -327,7 +327,7 @@ pub fn sfs_pwrite(fd: i32, buf: * const c_char, count: i64, offset: i64) -> i64{
 }
 #[no_mangle]
 pub extern "C" fn sfs_write(fd: i32, buf: * const c_char, count: i64) -> i64{
-    let f = ClientContext::get_instance().get_ofm().lock().unwrap().get(fd);
+    let f = DynamicContext::get_instance().get_ofm().lock().unwrap().get(fd);
     if let None = f{
         error_msg("client::sfs_write".to_string(), "file not exist".to_string());
         return -1;
@@ -361,7 +361,7 @@ fn internal_pread(f: Arc<Mutex<OpenFile>>, buf: * mut c_char, count: i64, offset
 }
 #[no_mangle]
 pub extern "C" fn sfs_pread(fd: i32, buf: * mut c_char, count: i64, offset: i64) -> i64{
-    let f = ClientContext::get_instance().get_ofm().lock().unwrap().get(fd);
+    let f = DynamicContext::get_instance().get_ofm().lock().unwrap().get(fd);
     if let None = f{
         error_msg("client::sfs_pread".to_string(), "file not exist".to_string());
         return -1;
@@ -371,7 +371,7 @@ pub extern "C" fn sfs_pread(fd: i32, buf: * mut c_char, count: i64, offset: i64)
 }
 #[no_mangle]
 pub extern "C" fn sfs_read(fd: i32, buf: * mut c_char, count: i64) -> i64{
-    let f = ClientContext::get_instance().get_ofm().lock().unwrap().get(fd);
+    let f = DynamicContext::get_instance().get_ofm().lock().unwrap().get(fd);
     if let None = f{
         error_msg("client::sfs_read".to_string(), "file not exist".to_string());
         return -1;
@@ -433,7 +433,7 @@ pub extern "C" fn sfs_opendir(path: * const c_char) -> i32{
         error_msg("client::sfs_opendir".to_string(), format!("forward get dirents with error {}", dirent_res.0));
         return -1;
     }
-    return ClientContext::get_instance().get_ofm().lock().unwrap().add(dirent_res.1);
+    return DynamicContext::get_instance().get_ofm().lock().unwrap().add(dirent_res.1);
 }
 fn align(size: usize, step: usize) -> usize{
     (size + step) & (!step + 1)
@@ -443,7 +443,7 @@ pub extern "C" fn sfs_getdents(fd: i32, dirp: * mut dirent, count: i64) -> i32{
     unsafe{
         memset(dirp as * mut c_void, 0, count as usize);
     }
-    let opendir = ClientContext::get_instance().get_ofm().lock().unwrap().get_dir(fd);
+    let opendir = DynamicContext::get_instance().get_ofm().lock().unwrap().get_dir(fd);
     if let None = opendir{
         error_msg("client::sfs_getdirents".to_string(), "directory not opned".to_string());
         return -1;
@@ -493,7 +493,7 @@ pub extern "C" fn sfs_getdents64(fd: i32, dirp: * mut dirent64, count: i64) -> i
     unsafe{
         memset(dirp as * mut c_void, 0, count as usize);
     }
-    let opendir = ClientContext::get_instance().get_ofm().lock().unwrap().get_dir(fd);
+    let opendir = DynamicContext::get_instance().get_ofm().lock().unwrap().get_dir(fd);
     if let None = opendir{
         error_msg("client::sfs_getdirents".to_string(), "directory not opned".to_string());
         return -1;
