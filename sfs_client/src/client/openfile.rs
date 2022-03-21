@@ -108,8 +108,8 @@ impl OpenFile{
             //flag_mutex_: Mutex::new(0)
         }
     }
-    pub fn get_path(&self) -> String{
-        self.path_.clone()
+    pub fn get_path(&self) -> &String{
+        &self.path_
     }
     pub fn set_path(&mut self, new_path: String){
         self.path_ = new_path;

@@ -2,12 +2,17 @@
 pub mod global;
 pub mod client;
 
+#[no_mangle]
+pub extern "C" fn hello_c(n: i32) -> i32{
+    println!("hello c, here is rust");
+    n + 1
+}
 #[cfg(test)]
 mod tests {
 
     use libc::{c_char, O_RDWR, O_CREAT, S_IFREG, S_IFDIR, SEEK_SET, dirent};
 
-    use crate::{global::{distributor::SimpleHashDistributor}, client::{endpoint::SFSEndpoint, context::ClientContext, syscall::{sfs_open, sfs_create, sfs_read, sfs_lseek, sfs_opendir, sfs_write, sfs_remove, sfs_truncate, sfs_stat, stat, sfs_dup, sfs_pwrite, sfs_pread, sfs_rmdir, sfs_getdents, sfs_dup2}, init::init_environment}};
+    use crate::{global::{distributor::SimpleHashDistributor}, client::{endpoint::SFSEndpoint, context::ClientContext, syscall::{sfs_open, sfs_create, sfs_read, sfs_lseek, sfs_opendir, sfs_write, sfs_remove, sfs_truncate, sfs_stat, stat, sfs_dup, sfs_pwrite, sfs_pread, sfs_rmdir, sfs_getdents, sfs_dup2, internel_truncate}, init::init_environment}};
 
     #[test]
     pub fn test0(){
@@ -166,7 +171,7 @@ mod tests {
             println!("read: {}", String::from_utf8(buf).unwrap());
         }
 
-        let tres = sfs_truncate(fpath_file1.as_str().as_ptr() as * const c_char, len, 13);
+        let tres = internel_truncate(fpath_file1.as_str().as_ptr() as * const c_char, len, 13);
         if tres != 0{
             println!("truncate error ...");
             return;
@@ -229,7 +234,7 @@ mod tests {
             println!("stat: {:?}", stat);
         }
 
-        let tres = sfs_truncate(fpath_file1.as_str().as_ptr() as * const c_char, len, 13);
+        let tres = internel_truncate(fpath_file1.as_str().as_ptr() as * const c_char, len, 13);
         if tres != 0{
             println!("truncate error ...");
             return;

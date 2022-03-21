@@ -62,7 +62,7 @@ pub extern "C" fn sfs_open(path: * const c_char, mode: u32, flag: i32) -> i32{
             return sfs_opendir(path);
         }
         if flag & O_TRUNC != 0 && (flag & O_RDONLY != 0 || flag & O_WRONLY != 0){
-            if sfs_truncate(path, md.get_size(), 0) != 0{
+            if internel_truncate(path, md.get_size(), 0) != 0{
                 error_msg("client::sfs_open".to_string(), "fail to truncate 'O_TRUNC' file".to_string());
                 return -1;
             }
@@ -70,7 +70,6 @@ pub extern "C" fn sfs_open(path: * const c_char, mode: u32, flag: i32) -> i32{
     }
     return ClientContext::get_instance().get_ofm().lock().unwrap().add(Arc::new(Mutex::new(OpenFile::new(&s, flag, FileType::SFS_REGULAR))));
 }
-
 fn check_parent_dir(path: &String) -> i32{
     if !CHECK_PARENT_DIR{
         return 0;
@@ -117,7 +116,6 @@ pub extern "C" fn sfs_create(path: * const c_char, mut mode: u32) -> i32{
         return create_res.unwrap();
     }
 }
-
 #[no_mangle]
 pub extern "C" fn sfs_remove(path: * const c_char) -> i32{
     let path = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
@@ -135,7 +133,6 @@ pub extern "C" fn sfs_remove(path: * const c_char) -> i32{
     }
     return 0;
 }
-
 #[no_mangle]
 pub extern "C" fn sfs_access(path: * const c_char, mask: i32, follow_links: bool) -> i32{
     let path = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
@@ -145,7 +142,6 @@ pub extern "C" fn sfs_access(path: * const c_char, mask: i32, follow_links: bool
     }
     return 0;
 }
-
 // exactly the same as stat in libc but with all fields public
 #[derive(Debug)]
 pub struct stat {
@@ -168,7 +164,6 @@ pub struct stat {
     pub st_ctime_nsec: i64,
     pub __unused: [i64; 3],
 }
-
 #[no_mangle]
 pub extern "C" fn sfs_stat(path: * const c_char, buf: *mut stat, follow_links: bool) -> i32{
     let path = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
@@ -249,7 +244,7 @@ pub fn internal_lseek(fd: Arc<Mutex<OpenFile>>, offset: i64, whence: i32) -> i64
             fd.lock().unwrap().set_pos(curr_pos + offset);
         },
         SEEK_END => {
-            let ret = forward_get_metadentry_size(&fd.lock().unwrap().get_path());
+            let ret = forward_get_metadentry_size(fd.lock().unwrap().get_path());
             if ret.0 != 0 {
                 return -1;
             }
@@ -265,9 +260,8 @@ pub fn internal_lseek(fd: Arc<Mutex<OpenFile>>, offset: i64, whence: i32) -> i64
     }
     return fd.lock().unwrap().get_pos();
 }
-
 #[no_mangle]
-pub extern "C" fn sfs_truncate(path: * const c_char, old_size: i64, new_size: i64) -> i32{
+pub extern "C" fn internel_truncate(path: * const c_char, old_size: i64, new_size: i64) -> i32{
     if new_size < 0 || new_size > old_size {
         return -1;
     }
@@ -283,24 +277,31 @@ pub extern "C" fn sfs_truncate(path: * const c_char, old_size: i64, new_size: i6
     }
     return 0;
 }
-
+#[no_mangle]
+pub extern "C" fn sfs_truncate(path: * const c_char, length: i64) -> i32{
+    let spath = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
+    let md_res = get_metadata(&spath, false);
+    if let Err(e) = md_res{
+        return -1;
+    }
+    let md = md_res.unwrap();
+    return internel_truncate(path, md.get_size(), length);
+}
 #[no_mangle]
 pub extern "C" fn sfs_dup(oldfd: i32) -> i32{
     return ClientContext::get_instance().get_ofm().lock().unwrap().dup(oldfd);
 }
-
 #[no_mangle]
 pub extern "C" fn sfs_dup2(oldfd: i32, newfd: i32) -> i32{
     return ClientContext::get_instance().get_ofm().lock().unwrap().dup2(oldfd, newfd);
 }
-
 fn internal_pwrite(f: Arc<Mutex<OpenFile>>, buf: * const c_char, count: i64, offset: i64) -> i64{
     match f.lock().unwrap().get_type(){
         FileType::SFS_DIRECTORY => { error_msg("client::sfs_pwrite".to_string(), "can not write directory".to_string()); return -1 },
         FileType::SFS_REGULAR => {},
     }
-    let path = f.lock().unwrap().get_path();
     let append_flag = f.lock().unwrap().get_flag(super::openfile::OpenFileFlags::Append);
+    let path = f.lock().unwrap().get_path().clone();
     let ret_update_size = forward_update_metadentry_size(&path, count as u64, offset, append_flag);
     if ret_update_size.0 != 0{
         error_msg("client::sfs_pwrite".to_string(), format!("update metadentry size with error {}", ret_update_size.0));
@@ -314,7 +315,6 @@ fn internal_pwrite(f: Arc<Mutex<OpenFile>>, buf: * const c_char, count: i64, off
     }
     return write_res.1;
 }
-
 #[no_mangle]
 pub fn sfs_pwrite(fd: i32, buf: * const c_char, count: i64, offset: i64) -> i64{
     let f = ClientContext::get_instance().get_ofm().lock().unwrap().get(fd);
@@ -325,7 +325,6 @@ pub fn sfs_pwrite(fd: i32, buf: * const c_char, count: i64, offset: i64) -> i64{
     let f = f.unwrap();
     return internal_pwrite(f, buf, count, offset);
 }
-
 #[no_mangle]
 pub extern "C" fn sfs_write(fd: i32, buf: * const c_char, count: i64) -> i64{
     let f = ClientContext::get_instance().get_ofm().lock().unwrap().get(fd);
@@ -352,7 +351,7 @@ fn internal_pread(f: Arc<Mutex<OpenFile>>, buf: * mut c_char, count: i64, offset
     if ZERO_BUF_BEFORE_READ{
         unsafe { memset(buf as (* mut c_void), 0, count as usize); }
     }
-    let path = f.lock().unwrap().get_path();
+    let path = f.lock().unwrap().get_path().clone();
     let read_res = forward_read(&path, buf, offset, count);
     if read_res.0 != 0{
         error_msg("client::sfs_pread".to_string(), format!("read with error {}", read_res.0));
@@ -360,7 +359,6 @@ fn internal_pread(f: Arc<Mutex<OpenFile>>, buf: * mut c_char, count: i64, offset
     }
     return read_res.1 as i64;
 }
-
 #[no_mangle]
 pub extern "C" fn sfs_pread(fd: i32, buf: * mut c_char, count: i64, offset: i64) -> i64{
     let f = ClientContext::get_instance().get_ofm().lock().unwrap().get(fd);
@@ -371,7 +369,6 @@ pub extern "C" fn sfs_pread(fd: i32, buf: * mut c_char, count: i64, offset: i64)
     let f = f.unwrap();
     return internal_pread(Arc::clone(&f), buf, count, offset);
 }
-
 #[no_mangle]
 pub extern "C" fn sfs_read(fd: i32, buf: * mut c_char, count: i64) -> i64{
     let f = ClientContext::get_instance().get_ofm().lock().unwrap().get(fd);
@@ -387,8 +384,6 @@ pub extern "C" fn sfs_read(fd: i32, buf: * mut c_char, count: i64) -> i64{
     }
     return read_res;
 }
-
-
 #[no_mangle]
 pub extern "C" fn sfs_rmdir(path: * const c_char) -> i32{
     
@@ -420,7 +415,6 @@ pub extern "C" fn sfs_rmdir(path: * const c_char) -> i32{
     }
     return rm_res.unwrap();
 }
-
 #[no_mangle]
 pub extern "C" fn sfs_opendir(path: * const c_char) -> i32{
     let path = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
@@ -441,7 +435,6 @@ pub extern "C" fn sfs_opendir(path: * const c_char) -> i32{
     }
     return ClientContext::get_instance().get_ofm().lock().unwrap().add(dirent_res.1);
 }
-
 fn align(size: usize, step: usize) -> usize{
     (size + step) & (!step + 1)
 }
@@ -470,7 +463,7 @@ pub extern "C" fn sfs_getdents(fd: i32, dirp: * mut dirent, count: i64) -> i32{
         }
         let current_dirp = unsafe {(dirp as *mut c_char).offset(written as isize) as *mut dirent};
         let mut s = DefaultHasher::new();
-        let p = opendir.lock().unwrap().get_path() + "/" + &de.get_name();
+        let p = opendir.lock().unwrap().get_path().clone() + "/" + &de.get_name();
         p.hash(&mut s);
         unsafe{ 
             (*current_dirp).d_ino = s.finish();
@@ -494,7 +487,6 @@ pub extern "C" fn sfs_getdents(fd: i32, dirp: * mut dirent, count: i64) -> i32{
     opendir.lock().unwrap().set_pos(pos);
     return 0;
 }
-
 #[no_mangle]
 pub extern "C" fn sfs_getdents64(fd: i32, dirp: * mut dirent64, count: i64) -> i32{
     
@@ -521,7 +513,7 @@ pub extern "C" fn sfs_getdents64(fd: i32, dirp: * mut dirent64, count: i64) -> i
         }
         let current_dirp = unsafe {(dirp as *mut c_char).offset(written as isize) as *mut dirent};
         let mut s = DefaultHasher::new();
-        let p = opendir.lock().unwrap().get_path() + "/" + &de.get_name();
+        let p = opendir.lock().unwrap().get_path().clone() + "/" + &de.get_name();
         p.hash(&mut s);
         unsafe{ 
             (*current_dirp).d_ino = s.finish();
@@ -546,7 +538,3 @@ pub extern "C" fn sfs_getdents64(fd: i32, dirp: * mut dirent64, count: i64) -> i
     return 0;
 }
 
-//#[no_mangle]
-//pub extern "C" fn sfs_getdents(fd: i32, dirp: *linux_dirent, count: u32) -> i32{
-//    return -1;
-//}

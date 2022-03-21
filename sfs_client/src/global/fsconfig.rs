@@ -34,3 +34,4 @@ impl Clone for SFSConfig{
     }
 }
 pub static ZERO_BUF_BEFORE_READ: bool = false;
+pub static CWD: &str = "SFS_CWD";

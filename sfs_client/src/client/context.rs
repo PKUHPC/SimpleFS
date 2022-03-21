@@ -12,6 +12,8 @@ use crate::global::fsconfig::SFSConfig;
 use crate::global::path;
 use crate::global::util::path_util::{is_absolute, has_trailing_slash, split_path, is_relative};
 
+use super::path::resolve;
+
 
 /*
 #[link(name = "syscall_no_intercept", kind = "static")]
@@ -166,7 +168,7 @@ impl ClientContext{
                 }
                 if let Some(dir) = self.open_file_map_.lock().unwrap().get_dir(dirfd){
                     path = self.get_mountdir().clone();
-                    path = dir.lock().unwrap().get_path() + &path;
+                    path = dir.lock().unwrap().get_path().clone() + &path;
                     path.push(SEPERATOR);
                     path.push_str(&raw_path);
                 }
@@ -178,13 +180,13 @@ impl ClientContext{
         else{
             path = raw_path.clone();
         }
-        let resolve_res = path::resolve(path, resolve_last_link);
+        let resolve_res = resolve(&path, resolve_last_link);
         if resolve_res.0 {
             return (RelativizeStatus::Internal, resolve_res.1);
         }
         (RelativizeStatus::External, resolve_res.1)
     }
-    pub fn relativize_path(&self, raw_path: String, resolve_last_link: bool) -> (bool, String){
+    pub fn relativize_path(&self, raw_path: &String, resolve_last_link: bool) -> (bool, String){
         if !self.interception_enabled_{
             error_msg("client::simplefs_context::ClientContext::relativize_path".to_string(), "interception need to be enabled".to_string());
             return  (false, "".to_string());
@@ -204,7 +206,7 @@ impl ClientContext{
         else{
             path = raw_path.clone();
         }
-        path::resolve(path, resolve_last_link)
+        resolve(&path, resolve_last_link)
     }
     pub fn get_ofm(&self) -> Arc<Mutex<OpenFileMap>>{
         Arc::clone(&self.open_file_map_)

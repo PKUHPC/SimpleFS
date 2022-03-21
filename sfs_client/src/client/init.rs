@@ -96,7 +96,8 @@ fn read_host_file() -> Vec<(String, String)>{
     hosts = load_res.unwrap();
     return hosts;
 }
-pub fn init_environment(){
+#[no_mangle]
+pub extern "C" fn init_environment(){
     let mut hosts = read_host_file();
 
     println!("found hosts: {:?}", hosts);

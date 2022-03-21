@@ -2,3 +2,9 @@
 /sfs_server/target
 /sfs_client/cargo.lock
 /sfs_server/cargo.lock
+.vscode
+/wrapper/libsfs_client.a
+/wrapper/call_rust
+/wrapper/hostfile
+/sfs_server/hostfile
+/sfs_client/hostfile
