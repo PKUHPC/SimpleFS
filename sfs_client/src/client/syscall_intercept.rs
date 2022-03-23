@@ -1,10 +1,10 @@
 use std::{os::raw::c_char, ffi::CStr};
 
-use libc::{EINVAL, ENOTDIR, SYS_openat, SYS_close, SYS_stat, SYS_lstat, SYS_fstat, SYS_read, SYS_pread64, SYS_pwrite64, SYS_write, SYS_unlinkat, AT_REMOVEDIR, SYS_access, SYS_faccessat, SYS_lseek, EOVERFLOW, SYS_truncate, SYS_ftruncate, SYS_dup, SYS_dup2, ENOTSUP, SYS_dup3, SYS_symlinkat, dirent, SYS_getdents, SYS_getdents64, dirent64, SYS_mkdir, S_IFDIR, SYS_mkdirat, SYS_fchmodat, SYS_fchmod, EBADF, SYS_fchdir};
+use libc::{EINVAL, ENOTDIR, SYS_openat, SYS_close, SYS_stat, SYS_lstat, SYS_fstat, SYS_read, SYS_pread64, SYS_pwrite64, SYS_write, SYS_unlinkat, AT_REMOVEDIR, SYS_access, SYS_faccessat, SYS_lseek, EOVERFLOW, SYS_truncate, SYS_ftruncate, SYS_dup, SYS_dup2, ENOTSUP, SYS_dup3, SYS_symlinkat, dirent, SYS_getdents, SYS_getdents64, dirent64, SYS_mkdir, S_IFDIR, SYS_mkdirat, SYS_fchmodat, SYS_fchmod, EBADF, SYS_fchdir, ERANGE, strcpy, statfs, SYS_statfs, SYS_fstatfs, SYS_fsync, c_schar, SYS_readlinkat, SYS_fcntl, F_DUPFD, F_DUPFD_CLOEXEC, F_GETFD, F_SETFD, FD_CLOEXEC, O_WRONLY, O_RDWR, F_GETFL, SYS_renameat, c_void, SYS_getxattr};
 
 use crate::global::{metadata::S_ISDIR, util::path_util::has_trailing_slash, error_msg::error_msg};
 
-use super::{context::{DynamicContext, RelativizeStatus, StaticContext}, syscall::{sfs_open, sfs_stat, stat, sfs_read, sfs_pread, sfs_write, sfs_pwrite, sfs_rmdir, sfs_remove, sfs_access, sfs_lseek, sfs_truncate, sfs_dup, sfs_dup2, sfs_getdents, sfs_getdents64, sfs_create}, util::get_metadata, path::{set_cwd, unset_env_cwd, get_sys_cwd}};
+use super::{context::{DynamicContext, RelativizeStatus, StaticContext}, syscall::{sfs_open, sfs_stat, stat, sfs_read, sfs_pread, sfs_write, sfs_pwrite, sfs_rmdir, sfs_remove, sfs_access, sfs_lseek, sfs_truncate, sfs_dup, sfs_dup2, sfs_getdents, sfs_getdents64, sfs_create, sfs_statfs}, util::get_metadata, path::{set_cwd, unset_env_cwd, get_sys_cwd}, openfile::{OpenFileFlags, O_RDONLY}};
 
 #[no_mangle]
 pub extern "C" fn hook_openat(dirfd: i32, path: * const c_char, mode: u32, flag: i32) -> i32{
@@ -359,6 +359,153 @@ pub extern "C" fn hook_fchdir(fd: i32) -> i32{
     }
     return 0;
 }
+#[no_mangle]
+pub extern "C" fn hook_getcwd(buf: *mut c_char, size: u64) -> i32{
+    if DynamicContext::get_instance().get_cwd().len() as u64 + 1 > size{
+        error_msg("client::hook_getcwd".to_string(), "buffer is not enough to hold cwd".to_string());
+        return -ERANGE;
+    }
+    unsafe{strcpy(buf, DynamicContext::get_instance().get_cwd().as_ptr() as *const i8);}
+    return DynamicContext::get_instance().get_cwd().len() as i32 + 1;
+}
+#[no_mangle]
+pub extern "C" fn hook_statfs(path: *mut c_char, buf: *mut statfs) -> i32{
+    let raw_path = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
+    let res = DynamicContext::get_instance().relativize_path(&raw_path, false);
+    let mut rel_path = res.1 + "\0";
+    if res.0{
+        return sfs_statfs(buf);
+    }
+    return unsafe{syscall_no_intercept(SYS_statfs, rel_path.as_ptr() as *const c_char, buf) as i32};
+}
+#[no_mangle]
+pub extern "C" fn hook_readlinkat(dirfd: i32, path: *const c_char, buf: *mut c_char, bufsize: i32) -> i32{
+    let raw_path = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
+    let res = DynamicContext::get_instance().relativize_fd_path(dirfd, &raw_path, false);
+    let rstatus = res.0;
+    let resolved = res.1 + "\0";
+    match rstatus {
+        RelativizeStatus::Internal => {
+            -ENOTSUP
+        },
+        RelativizeStatus::External => {
+            unsafe {syscall_no_intercept(SYS_readlinkat, dirfd, resolved.as_ptr() as * const c_char, buf, bufsize) as i32}
+        },
+        RelativizeStatus::FdUnknown => {
+            unsafe {syscall_no_intercept(SYS_readlinkat, dirfd, path, buf, bufsize) as i32}
+        },
+        RelativizeStatus::FdNotADir => {-ENOTDIR},
+        RelativizeStatus::Error => {-EINVAL}
+    }
+}
+#[no_mangle]
+pub extern  "C" fn hook_fcntl(fd: i32, cmd: i32, arg: u64) -> i32{
+    if !DynamicContext::get_instance().get_ofm().lock().unwrap().exist(fd){
+        return unsafe{syscall_no_intercept(SYS_fcntl, fd, cmd, arg) as i32}
+    }
+    match cmd {
+        F_DUPFD => {sfs_dup(fd)},
+        F_DUPFD_CLOEXEC => {
+            let ret = sfs_dup(fd);
+            if ret == -1{
+                return -1;
+            }
+            DynamicContext::get_instance().get_ofm().lock().unwrap().get(fd).unwrap().lock().unwrap().set_flag(OpenFileFlags::Cloexec, true);
+            ret
+        },
+        F_GETFD => {
+            if DynamicContext::get_instance().get_ofm().lock().unwrap().get(fd).unwrap().lock().unwrap().get_flag(OpenFileFlags::Cloexec){
+                return FD_CLOEXEC;
+            }
+            return 0;
+        },
+        F_GETFL => {
+            let mut ret = 0;
+            if DynamicContext::get_instance().get_ofm().lock().unwrap().get(fd).unwrap().lock().unwrap().get_flag(OpenFileFlags::Rdonly){
+                ret |= O_RDONLY;
+            }
+            if DynamicContext::get_instance().get_ofm().lock().unwrap().get(fd).unwrap().lock().unwrap().get_flag(OpenFileFlags::Wronly){
+                ret |= O_WRONLY;
+            }
+            if DynamicContext::get_instance().get_ofm().lock().unwrap().get(fd).unwrap().lock().unwrap().get_flag(OpenFileFlags::Rdwr){
+                ret |= O_RDWR;
+            }
+            return ret;
+        },
+        F_SETFD => {
+            DynamicContext::get_instance().get_ofm().lock().unwrap().get(fd).unwrap().lock().unwrap().set_flag(OpenFileFlags::Cloexec, arg as i32 & FD_CLOEXEC != 0);
+            return 0;
+        },
+        _ => {-ENOTSUP}
+    }
+}
+#[no_mangle]
+pub extern  "C" fn hook_renameat(olddfd: i32, oldname: *const c_char, newdfd: i32, newname: *const c_char, flags: u32) -> i32{
+    let mut oldpath_pass: String = "".to_string();
+    let oldpath = unsafe { CStr::from_ptr(oldname).to_string_lossy().into_owned() };
+    let res = DynamicContext::get_instance().relativize_fd_path(olddfd, &oldpath, false);
+    let old_rstatus = res.0;
+    let old_resolved = res.1 + "\0";
+    match old_rstatus {
+        RelativizeStatus::Internal => {
+            return -ENOTSUP
+        },
+        RelativizeStatus::External => {
+            oldpath_pass = old_resolved;
+        },
+        RelativizeStatus::FdUnknown => {
+            oldpath_pass = oldpath + "\0";
+        },
+        RelativizeStatus::FdNotADir => {return -ENOTDIR},
+        RelativizeStatus::Error => {return -EINVAL}
+    }
+
+    let mut newpath_pass: String = "".to_string();
+    let newpath = unsafe { CStr::from_ptr(oldname).to_string_lossy().into_owned() };
+    let res = DynamicContext::get_instance().relativize_fd_path(newdfd, &newpath, false);
+    let new_rstatus = res.0;
+    let new_resolved = res.1 + "\0";
+    match old_rstatus {
+        RelativizeStatus::Internal => {
+            return -ENOTSUP
+        },
+        RelativizeStatus::External => {
+            newpath_pass = new_resolved;
+        },
+        RelativizeStatus::FdUnknown => {
+            newpath_pass = newpath + "\0";
+        },
+        RelativizeStatus::FdNotADir => {return -ENOTDIR},
+        RelativizeStatus::Error => {return -EINVAL}
+    }
+    return unsafe{syscall_no_intercept(SYS_renameat, olddfd, oldpath_pass.as_ptr() as *const c_char, newdfd, newpath_pass.as_ptr() as *const c_char, flags) as i32};
+}
+#[no_mangle]
+pub extern "C" fn hook_fstatfs(fd: i32, buf: *mut statfs) -> i32{
+    if DynamicContext::get_instance().get_ofm().lock().unwrap().exist(fd){
+        return sfs_statfs(buf);
+    }
+    return unsafe{syscall_no_intercept(SYS_fstatfs, fd, buf) as i32};
+}
+#[no_mangle]
+pub extern "C" fn hook_fsync(fd: i32) -> i32{
+    if DynamicContext::get_instance().get_ofm().lock().unwrap().exist(fd){
+        return 9;
+    }
+    return unsafe{syscall_no_intercept(SYS_fsync, fd) as i32};
+}
+#[no_mangle]
+pub extern "C" fn hook_getxattr(path: *const c_char, name: *const c_char, value: *const c_void, size: u64) -> i32{
+    let raw_path = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
+    let res = DynamicContext::get_instance().relativize_path(&raw_path, false);
+    let mut rel_path = res.1 + "\0";
+    if res.0{
+        return -ENOTSUP;
+    }
+    return unsafe{syscall_no_intercept(SYS_getxattr, path, name, value, size) as i32};
+}
+
+
 
 #[link(name = "syscall_intercept", kind = "static")]
 extern "C" {

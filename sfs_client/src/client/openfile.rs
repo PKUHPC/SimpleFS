@@ -35,7 +35,8 @@ pub enum OpenFileFlags{
     Wronly,
     Rdwr,
     Cloexec,
-    FlagCount
+    FlagCount,
+    Unknown,
 }
 
 #[derive(Debug)]
@@ -64,7 +65,8 @@ fn to_index(flag: OpenFileFlags) -> usize{
         OpenFileFlags::Wronly => 4,
         OpenFileFlags::Rdwr => 5,
         OpenFileFlags::Cloexec => 6,
-        OpenFileFlags::FlagCount => 7
+        OpenFileFlags::FlagCount => 7,
+        OpenFileFlags::Unknown => 8
     }
 }
 pub struct OpenFile{
@@ -78,7 +80,7 @@ pub struct OpenFile{
 }
 impl OpenFile{
     pub fn new(_path: &String, _flags: i32, _type: FileType) -> OpenFile{
-        let mut flag_vec = BitVec::from_elem(8, false);
+        let mut flag_vec = BitVec::from_elem(9, false);
         
         if _flags & O_CREAT != 0 {
             flag_vec.set(to_index(OpenFileFlags::Creat), true);

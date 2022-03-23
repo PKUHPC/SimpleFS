@@ -1,12 +1,121 @@
 #![allow(dead_code)]
+
+use std::ffi::CStr;
+
+use client::{util::get_metadata, context::{DynamicContext, StaticContext}, openfile::OpenFileFlags};
+use libc::{c_char, strcpy};
 pub mod global;
 pub mod client;
 
+
 #[no_mangle]
-pub extern "C" fn hello_c(n: i32) -> i32{
-    println!("hello c, here is rust");
-    n + 1
+pub extern "C" fn relativize_fd_path(dirfd: i32, cpath: *const c_char, mut resolved: *mut c_char, follow_links: bool) -> i32{
+    let path = unsafe {CStr::from_ptr(cpath).to_string_lossy().into_owned()};
+    let ret = DynamicContext::get_instance().relativize_fd_path(dirfd, &path, false);
+    let resolved_str = ret.1 + "\0";
+    unsafe{strcpy(resolved, resolved_str.as_ptr() as *const i8);}
+    match ret.0 {
+        client::context::RelativizeStatus::Internal => 0,
+        client::context::RelativizeStatus::External => 1,
+        client::context::RelativizeStatus::FdUnknown => 2,
+        client::context::RelativizeStatus::FdNotADir => 3,
+        client::context::RelativizeStatus::Error => -1,
+    }
 }
+#[no_mangle]
+pub extern "C" fn relativize_path(path: *const c_char, rel_path: *mut c_char, follow_links: bool) -> bool{
+    let path = unsafe {CStr::from_ptr(path).to_string_lossy().into_owned()};
+    let ret = DynamicContext::get_instance().relativize_path(&path, false);
+    let rel_path_str = ret.1 + "\0";
+    unsafe{strcpy(rel_path, rel_path_str.as_ptr() as *const i8);}
+    return ret.0;
+}
+#[no_mangle]
+pub extern "C" fn fd_exist(fd: i32) -> bool{
+    DynamicContext::get_instance().get_ofm().lock().unwrap().exist(fd)
+}
+#[no_mangle]
+pub extern "C" fn fd_remove(fd: i32){
+    DynamicContext::get_instance().get_ofm().lock().unwrap().remove(fd);
+}
+#[no_mangle]
+pub extern "C" fn fd_is_internal(fd: i32) -> bool{
+    DynamicContext::get_instance().is_internel_fd(fd)
+}
+#[no_mangle]
+pub extern "C" fn fd_get_path(fd: i32, path: *mut c_char){
+    let cpath = DynamicContext::get_instance().get_ofm().lock().unwrap().get(fd).unwrap().lock().unwrap().get_path().clone() + "\0";
+    unsafe{strcpy(path, cpath.as_ptr() as *const i8);}
+}
+#[no_mangle]
+pub extern "C" fn fd_get_dir_path(fd: i32, path: *mut c_char){
+    let cpath = DynamicContext::get_instance().get_ofm().lock().unwrap().get_dir(fd).unwrap().lock().unwrap().get_path().clone() + "\0";
+    unsafe{strcpy(path, cpath.as_ptr() as *const i8);}
+}
+fn i2flag(flag: i32) -> OpenFileFlags{
+    match flag{
+        0 => OpenFileFlags::Append,
+        1 => OpenFileFlags::Creat,
+        2 => OpenFileFlags::Trunc,
+        3 => OpenFileFlags::Rdonly,
+        4 => OpenFileFlags::Wronly,
+        5 => OpenFileFlags::Rdwr,
+        6 => OpenFileFlags::Cloexec,
+        7 => OpenFileFlags::FlagCount,
+        _ => OpenFileFlags::Unknown
+    }
+}
+#[no_mangle]
+pub extern "C" fn set_flag(fd: i32, flag: i32, val: bool){
+    DynamicContext::get_instance().get_ofm().lock().unwrap().get(fd).unwrap().lock().unwrap().set_flag(i2flag(flag), val);
+}
+#[no_mangle]
+pub extern "C" fn get_flag(fd: i32, flag: i32) -> bool{
+    DynamicContext::get_instance().get_ofm().lock().unwrap().get(fd).unwrap().lock().unwrap().get_flag(i2flag(flag))
+}
+#[no_mangle]
+pub extern "C" fn get_mountdir(path: *mut c_char){
+    let mountdir_str = StaticContext::get_instance().get_mountdir().clone() + "\0";
+    unsafe{strcpy(path, mountdir_str.as_ptr() as *const i8);}
+}
+#[no_mangle]
+pub extern "C" fn get_ctx_cwd(cwd: *mut c_char){
+    let cwd_str = DynamicContext::get_instance().get_cwd().clone() + "\0";
+    unsafe{strcpy(cwd, cwd_str.as_ptr() as *const i8);}
+}
+#[no_mangle]
+pub extern "C" fn set_ctx_cwd(cwd: *const c_char){
+    let cwd = unsafe {CStr::from_ptr(cwd).to_string_lossy().into_owned()};
+    DynamicContext::get_instance().set_cwd(cwd);
+}
+#[no_mangle]
+pub extern "C" fn set_cwd(cwd: *const c_char, internal: bool){
+    let cwd = unsafe {CStr::from_ptr(cwd).to_string_lossy().into_owned()};
+    crate::client::path::set_cwd(&cwd, internal);
+}
+#[no_mangle]
+pub extern "C" fn unset_env_cwd(){
+    crate::client::path::unset_env_cwd();
+}
+#[no_mangle]
+pub extern "C" fn get_sys_cwd(cwd: *mut c_char){
+    let cwd_str = crate::client::path::get_sys_cwd() + "\0";
+    unsafe{strcpy(cwd, cwd_str.as_ptr() as *const i8);}
+}
+#[no_mangle]
+pub extern "C" fn get_md_mode(path: *const c_char) -> i32{
+    let path = unsafe {CStr::from_ptr(path).to_string_lossy().into_owned()};
+    let md_res = get_metadata(&path, false);
+    if let Err(e) = md_res{
+        return -1;
+    }
+    return md_res.unwrap().get_mode() as i32;
+}
+
+
+
+
+
 #[cfg(test)]
 mod tests {
 

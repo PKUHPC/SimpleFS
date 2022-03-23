@@ -10,3 +10,4 @@
 /sfs_client/hostfile
 /wrapper/libsfs_client.a
 /wrapper/libsfs_client.so
+/wrapper/test

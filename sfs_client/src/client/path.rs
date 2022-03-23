@@ -44,7 +44,7 @@ pub fn resolve(path: &String, resolve_last_link: bool) -> (bool, String){
         else{
             end = path.len();
         }
-        print!("{}..{}\n", start, end);
+        //print!("{}..{}\n", start, end);
         comp_size = end - start;
         if comp_size == 1 && path.as_bytes()[start] as char == '.' {
             continue;
@@ -66,7 +66,7 @@ pub fn resolve(path: &String, resolve_last_link: bool) -> (bool, String){
         last_slash_pos = resolved.len() - 1;
         resolved.push_str(&path[start..start + comp_size].to_string());
 
-        print!("{} - {}\n", path[start..(start + comp_size)].to_string(), resolved);
+        //print!("{} - {}\n", path[start..(start + comp_size)].to_string(), resolved);
         if matched_components < mnt_components.len(){
             // outside of custom file system
             if matched_components == resolved_components && path[start..(start + comp_size)].to_string().eq(&mnt_components[matched_components]) {

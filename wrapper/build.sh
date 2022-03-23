@@ -1,1 +1,1 @@
-cc hook.c -lsyscall_intercept -lpthread -fpic -shared libsfs_client.a -o libsfs_client.so
+cc intercept.cpp hook.cpp -lsyscall_intercept -lpthread -fpic -shared libsfs_client.a -o libsfs_client.so
