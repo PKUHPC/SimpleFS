@@ -11,3 +11,6 @@
 /wrapper/libsfs_client.a
 /wrapper/libsfs_client.so
 /wrapper/test
+/wrapper/test.cpp
+/wrapper/a.out
+/wrapper/build_test.sh

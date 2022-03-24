@@ -2,7 +2,7 @@ use std::{fs, sync::Arc};
 
 static SEPERATOR: char = '/';
 pub static max_length: i64 = 4096;
-pub struct Stat{
+pub struct Stat {
     st_dev: u32,
     st_ino: u16,
     st_mode: u16,
@@ -13,11 +13,11 @@ pub struct Stat{
     st_size: i64,
     st_atime: i64,
     st_mtime: i64,
-    st_ctime: i64
+    st_ctime: i64,
 }
-impl Stat{
-    pub fn init() -> Stat{
-        Stat{
+impl Stat {
+    pub fn init() -> Stat {
+        Stat {
             st_dev: 0,
             st_ino: 0,
             st_mode: 0,
@@ -40,22 +40,24 @@ pub fn match_components(path: String, components: Arc<Vec<String>>) -> (usize, u
     let mut start: usize = 0; // start index of curr component
     let mut end: usize = 0; // end index of curr component (last processed Path Separator "separator")
 
-    while end + 1 < path.len(){
+    while end + 1 < path.len() {
         end += 1;
         start = end.clone();
 
-        if let Some(index) = path[start..path.len()].to_string().find(SEPERATOR){
+        if let Some(index) = path[start..path.len()].to_string().find(SEPERATOR) {
             end = index + start;
-        }
-        else{
+        } else {
             end = path.len();
         }
         comp_size = end - start;
-        if matched == processed_components && path[start..(start + comp_size)].to_string().eq(&components[matched]) {
+        if matched == processed_components
+            && path[start..(start + comp_size)]
+                .to_string()
+                .eq(&components[matched])
+        {
             matched += 1;
         }
         processed_components += 1;
     }
     (matched, processed_components)
 }
-

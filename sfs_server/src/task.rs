@@ -1,19 +1,25 @@
 #[derive(Debug)]
-pub struct WriteChunkTask{
+pub struct WriteChunkTask {
     pub path: String,
     pub buf: String,
     pub chunk_id: u64,
     pub size: u64,
-    pub offset: u64
+    pub offset: u64,
 }
-impl Clone for WriteChunkTask{
+impl Clone for WriteChunkTask {
     fn clone(&self) -> Self {
-        Self { path: self.path.clone(), buf: self.buf.clone(), chunk_id: self.chunk_id.clone(), size: self.size.clone(), offset: self.offset.clone() }
+        Self {
+            path: self.path.clone(),
+            buf: self.buf.clone(),
+            chunk_id: self.chunk_id.clone(),
+            size: self.size.clone(),
+            offset: self.offset.clone(),
+        }
     }
 }
-impl WriteChunkTask{
-    pub fn new() -> WriteChunkTask{
-        WriteChunkTask{
+impl WriteChunkTask {
+    pub fn new() -> WriteChunkTask {
+        WriteChunkTask {
             path: "".to_string(),
             buf: "".to_string(),
             chunk_id: 0,
@@ -24,20 +30,25 @@ impl WriteChunkTask{
 }
 
 #[derive(Debug)]
-pub struct ReadChunkTask{
+pub struct ReadChunkTask {
     pub path: String,
     pub chunk_id: u64,
     pub size: u64,
-    pub offset: u64
+    pub offset: u64,
 }
-impl Clone for ReadChunkTask{
+impl Clone for ReadChunkTask {
     fn clone(&self) -> Self {
-        Self { path: self.path.clone(), chunk_id: self.chunk_id.clone(), size: self.size.clone(), offset: self.offset.clone() }
+        Self {
+            path: self.path.clone(),
+            chunk_id: self.chunk_id.clone(),
+            size: self.size.clone(),
+            offset: self.offset.clone(),
+        }
     }
 }
-impl ReadChunkTask{
-    pub fn new() -> ReadChunkTask{
-        ReadChunkTask{
+impl ReadChunkTask {
+    pub fn new() -> ReadChunkTask {
+        ReadChunkTask {
             path: "".to_string(),
             chunk_id: 0,
             size: 0,

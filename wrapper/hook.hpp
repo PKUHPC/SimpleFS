@@ -5,6 +5,12 @@
   }
 #endif
 
+
+#ifndef RUST_HPP
+    #include "rust.hpp"
+    #define RUST_HPP
+#endif
+
 extern "C" {
 #include <sys/types.h>
 #include <fcntl.h>

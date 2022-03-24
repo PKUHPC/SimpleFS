@@ -13,10 +13,6 @@ extern "C" {
 }
 #include "hook.hpp"
 
-#ifndef RUST_HPP
-    #include "rust.hpp"
-    #define RUST_HPP
-#endif
 
 int relativize_fd_path_wrapper(int dirfd, const char* cpath, std::string& resolved, bool follow_links = false){
     char* c_resolved = new char[255];
@@ -87,7 +83,6 @@ syscall_no_intercept_wrapper(long syscall_number, Args... args) {
 
 int
 hook_openat(int dirfd, const char* cpath, int flags, mode_t mode) {
-
     std::string resolved;
     auto rstatus = relativize_fd_path_wrapper(dirfd, cpath, resolved);
     switch(rstatus) {
@@ -528,8 +523,14 @@ hook_chdir(const char* path) {
             // open_dir is '/'
             rel_path.pop_back();
         }
+        //set_cwd(rel_path.c_str(), internal);
+        syscall_no_intercept(SYS_chdir, get_mountdir_wrapper().c_str());
+        set_cwd(rel_path.c_str(), internal);
     }
-    set_cwd(rel_path.c_str(), internal);
+    else{
+        syscall_no_intercept(SYS_chdir, rel_path.c_str());
+        set_cwd(rel_path.c_str(), internal);
+    }
     return 0;
 }
 

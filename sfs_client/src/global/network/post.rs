@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-
 #[derive(Serialize, Deserialize, Debug)]
 pub enum PostOption {
     Lookup,
@@ -18,7 +17,7 @@ pub enum PostOption {
     Trunc,
     GetDirents,
 }
-impl Clone for PostOption{
+impl Clone for PostOption {
     fn clone(&self) -> Self {
         match self {
             Self::Lookup => Self::Lookup,
@@ -34,19 +33,19 @@ impl Clone for PostOption{
             Self::ChunkStat => Self::ChunkStat,
             Self::DecrSize => Self::DecrSize,
             Self::Trunc => Self::Trunc,
-            Self::GetDirents => Self::GetDirents
+            Self::GetDirents => Self::GetDirents,
         }
     }
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Post{
+pub struct Post {
     pub option: PostOption,
-    pub data: String
+    pub data: String,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct PostResult{
+pub struct PostResult {
     pub err: bool,
-    pub data: String
+    pub data: String,
 }

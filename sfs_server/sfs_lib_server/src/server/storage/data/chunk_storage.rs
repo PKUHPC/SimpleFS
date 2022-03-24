@@ -55,7 +55,7 @@ impl ChunkStorage{
         if path.exists(){
             return;
         }
-        if let Err(e) = fs::create_dir_all(path).await{
+        if let Err(_e) = fs::create_dir_all(path).await{
             error_msg("server::storage::chunk_storage::init_chunk_space".to_string(), "fail to create chunk directory".to_string());
         }
     }
@@ -77,7 +77,7 @@ impl ChunkStorage{
     }
     pub async fn destroy_chunk_space(file_path: &String){
         let chunk_dir = ChunkStorage::absolute(&ChunkStorage::get_chunks_dir(file_path));
-        if let Err(e) = fs::remove_dir_all(Path::new(&chunk_dir)).await{
+        if let Err(_e) = fs::remove_dir_all(Path::new(&chunk_dir)).await{
             error_msg("server::storage::chunk_storage::destroy_chunk_space".to_string(), "fail to remove chunk directory".to_string());
         }
     }
@@ -107,7 +107,7 @@ impl ChunkStorage{
         ChunkStorage::init_chunk_space(file_path).await;
         let chunk_path = ChunkStorage::absolute(&ChunkStorage::get_chunks_path(file_path, chunk_id));
         let open_res = std::fs::OpenOptions::new().write(true).read(true).open(chunk_path);
-        if let Err(e) = open_res{
+        if let Err(_e) = open_res{
             error_msg("server::storage::chunk_storage::read_chunk".to_string(), "fail to open chunk file".to_string());
             return Err(-1);
         }

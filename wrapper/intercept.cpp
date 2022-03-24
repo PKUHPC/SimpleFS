@@ -5,7 +5,6 @@ extern "C"{
     #include <stdio.h>
     #include <sys/types.h>
     #include <sys/socket.h>
-    #include <printf.h>
 }
 #include <optional>
 #include "hook.hpp"
@@ -17,6 +16,9 @@ hook(long syscall_number,
 			long arg4, long arg5,
 			long *result)
 {
+        if(!intercept_enabled()){
+                return 1;
+        }
 	switch(syscall_number) {
 
         case SYS_execve:
@@ -46,23 +48,19 @@ hook(long syscall_number,
                     AT_FDCWD, reinterpret_cast<const char*>(arg0),
                     O_WRONLY | O_CREAT | O_TRUNC, static_cast<mode_t>(arg1));
             break;
-
         case SYS_openat:
             *result = hook_openat(
                     static_cast<int>(arg0), reinterpret_cast<const char*>(arg1),
                     static_cast<int>(arg2), static_cast<mode_t>(arg3));
             break;
-
         case SYS_close:
             *result = hook_close(static_cast<int>(arg0));
             break;
-
         case SYS_stat:
             *result =
                     hook_stat(reinterpret_cast<char*>(arg0),
                                           reinterpret_cast<struct stat*>(arg1));
             break;
-
 #ifdef STATX_TYPE
         case SYS_statx:
             *result = hook_statx(
@@ -71,26 +69,22 @@ hook(long syscall_number,
                     reinterpret_cast<struct statx*>(arg4));
             break;
 #endif
-
         case SYS_lstat:
             *result = hook_lstat(
                     reinterpret_cast<char*>(arg0),
                     reinterpret_cast<struct stat*>(arg1));
             break;
-
         case SYS_fstat:
             *result = hook_fstat(
                     static_cast<int>(arg0),
                     reinterpret_cast<struct stat*>(arg1));
             break;
-
         case SYS_newfstatat:
             *result = hook_fstatat(
                     static_cast<int>(arg0), reinterpret_cast<const char*>(arg1),
                     reinterpret_cast<struct stat*>(arg2),
                     static_cast<int>(arg3));
             break;
-
         case SYS_read:
             *result = hook_read(static_cast<unsigned int>(arg0),
                                             reinterpret_cast<void*>(arg1),
@@ -286,13 +280,11 @@ hook(long syscall_number,
             *result = hook_getcwd(reinterpret_cast<char*>(arg0),
                                               static_cast<unsigned long>(arg1));
             break;
-
         case SYS_readlink:
             *result = hook_readlinkat(
                     AT_FDCWD, reinterpret_cast<const char*>(arg0),
                     reinterpret_cast<char*>(arg1), static_cast<int>(arg2));
             break;
-
         case SYS_readlinkat:
             *result = hook_readlinkat(
                     static_cast<int>(arg0), reinterpret_cast<const char*>(arg1),
