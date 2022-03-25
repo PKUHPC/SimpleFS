@@ -1,27 +1,23 @@
+use crate::global::{
+    error_msg::error_msg, fsconfig::CWD, path::match_components, util::path_util::is_absolute,
+};
 use std::{
-    env::{remove_var, set_var, current_dir},
+    env::{current_dir, remove_var, set_var},
     fs,
-    os::raw::c_char,
     sync::Arc,
 };
-
-use libc::{unsetenv, SYS_chdir, SYS_getcwd};
-
-use crate::global::{error_msg::error_msg, fsconfig::CWD, path::match_components, util::path_util::is_absolute};
 
 use super::context::{DynamicContext, StaticContext};
 
 static SEPERATOR: char = '/';
-pub const max_length: i64 = 4096;
+pub const MAX_LENGTH: i64 = 4096;
 
 pub fn resolve(path: &String, resolve_last_link: bool) -> (bool, String) {
     let excluded_path = vec!["proc/".to_string(), "sys/".to_string()];
-    /*
-    if !is_absolute(path.clone()){
-        error_msg("global::path::resolve".to_string(), "path needs to be absolute".to_string());
-        return (false, "".to_string());
+    if !is_absolute(&path) {
+        //error_msg("global::path::resolve".to_string(), "path needs to be absolute".to_string());
+        return (false, path.clone());
     }
-    */
     for exclude in excluded_path {
         if path[1..path.len()]
             .to_string()
@@ -30,12 +26,11 @@ pub fn resolve(path: &String, resolve_last_link: bool) -> (bool, String) {
             return (false, path.clone());
         }
     }
-    //let mut st = Stat::init();
     let mnt_components = StaticContext::get_instance().get_mountdir_components();
     let mut matched_components: usize = 0;
     let mut resolved_components: usize = 0;
-    let mut comp_size: usize = 0;
-    let mut start: usize = 0; // start index of curr component
+    let mut comp_size: usize;
+    let mut start: usize; // start index of curr component
     let mut end: usize = 0; // end index of curr component (last processed Path Separator "separator")
     let mut last_slash_pos: usize = 0; // index of last slash in resolved path
     let mut resolved: String = String::from("");
@@ -128,9 +123,14 @@ pub fn resolve(path: &String, resolve_last_link: bool) -> (bool, String) {
     }
 
     if matched_components >= mnt_components.len() {
-        resolved = resolved[0..0].to_string()
-            + &resolved[(StaticContext::get_instance().get_mountdir().len() + 1)..resolved.len()]
-                .to_string();
+        if resolved.len() > StaticContext::get_instance().get_mountdir().len() {
+            resolved.replace_range(
+                1..StaticContext::get_instance().get_mountdir().len() + 1,
+                "",
+            );
+        } else {
+            resolved.replace_range(1..StaticContext::get_instance().get_mountdir().len(), "");
+        }
         return (true, resolved);
     }
     if resolved.is_empty() {

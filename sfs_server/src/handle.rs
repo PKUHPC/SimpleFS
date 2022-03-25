@@ -10,9 +10,7 @@ use sfs_lib_server::{
         },
         util::arith_util::{block_index, block_overrun},
     },
-    server::{
-        filesystem::storage_context::StorageContext, storage::data::chunk_storage::ChunkStorage,
-    },
+    server::storage::data::chunk_storage::ChunkStorage,
 };
 use tokio::task::JoinHandle;
 
@@ -43,7 +41,7 @@ pub async fn handle_write(input: WriteData) -> String {
 
     let mut transfer_size = CHUNK_SIZE;
 
-    let mut distributor = SimpleHashDistributor::new(host_id, host_size);
+    let distributor = SimpleHashDistributor::new(host_id, host_size);
     for chunk_id_file in input.chunk_start..(input.chunk_end + 1) {
         if chunk_id_curr >= input.chunk_n {
             break;
@@ -60,7 +58,7 @@ pub async fn handle_write(input: WriteData) -> String {
             chunk_ptr += offset_size;
             chunk_size_left_host -= offset_size;
         } else {
-            let local_offset = input.total_chunk_size - chunk_size_left_host;
+            //let local_offset = input.total_chunk_size - chunk_size_left_host;
             let mut origin_offset = (chunk_id_file - input.chunk_start) * CHUNK_SIZE;
             if input.offset > 0 {
                 origin_offset = (CHUNK_SIZE - input.offset as u64)
@@ -125,6 +123,8 @@ async fn write_file(args: &WriteChunkTask) -> u64 {
     }
 }
 
+#[allow(unused_variables)]
+#[allow(unused_assignments)]
 pub async fn handle_read(input: ReadData) -> String {
     let path = input.path;
 
@@ -143,11 +143,11 @@ pub async fn handle_read(input: ReadData) -> String {
     let host_size = input.host_size;
     let mut chunk_size_left_host = input.total_chunk_size;
 
-    let mut chunk_ptr = 0;
+    let mut chunk_ptr: u64 = 0;
 
     let mut transfer_size = CHUNK_SIZE;
 
-    let mut distributor = SimpleHashDistributor::new(host_id, host_size);
+    let distributor = SimpleHashDistributor::new(host_id, host_size);
     for chunk_id_file in input.chunk_start..(input.chunk_end + 1) {
         if chunk_id_curr >= input.chunk_n {
             break;

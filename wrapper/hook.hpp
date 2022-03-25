@@ -1,11 +1,3 @@
-#ifndef TYPE_DEF
-  #define TYPE_DEF
-  extern "C" {
-  #include "mytype.h"
-  }
-#endif
-
-
 #ifndef RUST_HPP
     #include "rust.hpp"
     #define RUST_HPP
@@ -110,10 +102,10 @@ int
 hook_dup3(unsigned int oldfd, unsigned int newfd, int flags);
 
 int
-hook_getdents(unsigned int fd, struct linux_dirent* dirp, unsigned int count);
+hook_getdents(unsigned int fd, struct dirent* dirp, unsigned int count);
 
 int
-hook_getdents64(unsigned int fd, struct linux_dirent64* dirp,
+hook_getdents64(unsigned int fd, struct dirent64* dirp,
                 unsigned int count);
 
 int

@@ -1,10 +1,6 @@
 use lazy_static::*;
-use serde::{Deserialize, Serialize};
-use std::{
-    io::Error,
-    net::IpAddr,
-    sync::{Mutex, MutexGuard},
-};
+use serde::Serialize;
+use std::{io::Error, net::IpAddr};
 use tarpc::{
     client::{self, RpcError},
     context,
@@ -92,7 +88,7 @@ impl NetworkService {
         }
         for handle in handles {
             let result = handle.await.unwrap();
-            if let Err(e) = result {
+            if let Err(_e) = result {
                 return Err(Error::new(std::io::ErrorKind::Other, "remove failed"));
             }
             let data = result.unwrap();

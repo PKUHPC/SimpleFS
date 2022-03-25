@@ -1,3 +1,8 @@
+use crate::client::context::interception_enabled;
+
+#[allow(unused_variables, unreachable_code)]
 pub fn error_msg(func: String, msg: String) {
-    //print!("error::{0} - {1}\n", func, msg);
+    if interception_enabled() {
+        print!("error::{} - {}\n", func, msg);
+    }
 }

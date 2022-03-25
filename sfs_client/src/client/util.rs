@@ -4,19 +4,16 @@ use std::{
     io::Error,
 };
 
-use libc::{gethostname, makedev};
+use libc::{gethostname, makedev, stat};
 
 use crate::{
-    client::context::{DynamicContext, StaticContext},
+    client::context::StaticContext,
     global::{metadata::Metadata, network::config::CHUNK_SIZE},
 };
 
-use super::{
-    network::{self, forward_msg},
-    syscall::stat,
-};
+use super::network::forward_msg;
 
-pub fn get_metadata(path: &String, follow_link: bool) -> Result<Metadata, Error> {
+pub fn get_metadata(path: &String, _follow_link: bool) -> Result<Metadata, Error> {
     let md_res = forward_msg::forward_stat(path);
     if let Err(e) = md_res {
         return Err(e);
@@ -42,41 +39,43 @@ pub fn get_hostname(short_hostname: bool) -> String {
         return "".to_string();
     }
 }
-pub fn metadata_to_stat(path: &String, md: Metadata, attr: &mut stat) -> i32 {
-    unsafe { attr.st_dev = makedev(0, 0) };
+pub fn metadata_to_stat(path: &String, md: Metadata, attr: *mut stat) -> i32 {
+    unsafe { (*attr).st_dev = makedev(0, 0) };
     let mut hasher = DefaultHasher::new();
     path.hash(&mut hasher);
-    attr.st_ino = hasher.finish();
-    attr.st_nlink = 1;
-    attr.st_uid = StaticContext::get_instance().get_fsconfig().uid;
-    attr.st_gid = StaticContext::get_instance().get_fsconfig().gid;
-    attr.st_rdev = 0;
-    attr.st_blksize = CHUNK_SIZE as i64;
-    attr.st_blocks = 0;
+    unsafe {
+        (*attr).st_ino = hasher.finish();
+        (*attr).st_nlink = 1;
+        (*attr).st_uid = StaticContext::get_instance().get_fsconfig().uid;
+        (*attr).st_gid = StaticContext::get_instance().get_fsconfig().gid;
+        (*attr).st_rdev = 0;
+        (*attr).st_blksize = CHUNK_SIZE as i64;
+        (*attr).st_blocks = 0;
 
-    attr.st_atime = 0;
-    attr.st_atime_nsec = 0;
-    attr.st_ctime = 0;
-    attr.st_ctime_nsec = 0;
-    attr.st_mtime = 0;
-    attr.st_mtime_nsec = 0;
+        (*attr).st_atime = 0;
+        (*attr).st_atime_nsec = 0;
+        (*attr).st_ctime = 0;
+        (*attr).st_ctime_nsec = 0;
+        (*attr).st_mtime = 0;
+        (*attr).st_mtime_nsec = 0;
 
-    attr.st_mode = md.get_mode();
-    attr.st_size = md.get_size();
-    if StaticContext::get_instance().get_fsconfig().atime_state {
-        attr.st_atime = md.get_access_time();
-    }
-    if StaticContext::get_instance().get_fsconfig().ctime_state {
-        attr.st_ctime = md.get_change_time();
-    }
-    if StaticContext::get_instance().get_fsconfig().ctime_state {
-        attr.st_ctime = md.get_modify_time();
-    }
-    if StaticContext::get_instance().get_fsconfig().link_cnt_state {
-        attr.st_nlink = md.get_link_count();
-    }
-    if StaticContext::get_instance().get_fsconfig().blocks_state {
-        attr.st_blocks = md.get_blocks();
+        (*attr).st_mode = md.get_mode();
+        (*attr).st_size = md.get_size();
+        if StaticContext::get_instance().get_fsconfig().atime_state {
+            (*attr).st_atime = md.get_access_time();
+        }
+        if StaticContext::get_instance().get_fsconfig().ctime_state {
+            (*attr).st_ctime = md.get_change_time();
+        }
+        if StaticContext::get_instance().get_fsconfig().ctime_state {
+            (*attr).st_ctime = md.get_modify_time();
+        }
+        if StaticContext::get_instance().get_fsconfig().link_cnt_state {
+            (*attr).st_nlink = md.get_link_count();
+        }
+        if StaticContext::get_instance().get_fsconfig().blocks_state {
+            (*attr).st_blocks = md.get_blocks();
+        }
     }
     return 0;
 }

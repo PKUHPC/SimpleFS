@@ -9,13 +9,9 @@ use std::{
 use rand::seq::SliceRandom;
 use regex::Regex;
 
-use crate::{
-    global::{
-        distributor::SimpleHashDistributor,
-        error_msg::error_msg,
-        fsconfig::{hostfile_path},
-        util::env_util::get_var,
-    }, client::context::enable_interception,
+use crate::global::{
+    distributor::SimpleHashDistributor, error_msg::error_msg, fsconfig::HOSTFILE_PATH,
+    util::env_util::get_var,
 };
 
 use super::{
@@ -122,7 +118,7 @@ fn connect_hosts(hosts: &mut Vec<(String, String)>, context: &mut StaticContext)
     return true;
 }
 fn read_host_file() -> Vec<(String, String)> {
-    let hostfile = get_var("HOST_FILE".to_string(), hostfile_path.to_string().clone());
+    let hostfile = get_var("HOST_FILE".to_string(), HOSTFILE_PATH.to_string().clone());
     let load_res = load_host_file(&hostfile);
     if let Err(_e) = load_res {
         error_msg(
@@ -155,5 +151,6 @@ pub fn init_environment() -> StaticContext {
         );
     }
 
+    context.init_flag = true;
     return context;
 }

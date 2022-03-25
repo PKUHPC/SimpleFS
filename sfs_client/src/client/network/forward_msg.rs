@@ -1,19 +1,17 @@
 use std::collections::HashMap;
 use std::ffi::CStr;
-use std::io::{Error, ErrorKind};
+use std::io::Error;
 use std::sync::{Arc, Mutex};
 
 use libc::{c_char, strncpy, EBUSY};
-use tokio::task::JoinHandle;
 
 use crate::client::endpoint::SFSEndpoint;
-use crate::client::network::network_service::*;
-use crate::client::openfile::{FileType, OpenFile, OpenFileFlags, O_RDONLY};
+use crate::client::openfile::{FileType, OpenFile, O_RDONLY};
 use crate::client::{context::StaticContext, network::network_service::NetworkService};
 use crate::global::distributor::Distributor;
 use crate::global::error_msg::error_msg;
 use crate::global::fsconfig::SFSConfig;
-use crate::global::network::config::{CHUNK_SIZE, DIRENT_BUF_SIZE};
+use crate::global::network::config::CHUNK_SIZE;
 use crate::global::network::forward_data::{
     ChunkStat, CreateData, DecrData, DirentData, ReadData, ReadResult, SerdeString, TruncData,
     UpdateMetadentryData, WriteData,
@@ -42,10 +40,6 @@ pub fn forward_stat(path: &String) -> Result<String, Error> {
     }
     let result = post_res.unwrap();
     if result.err {
-        error_msg(
-            "client::network::forward_stat".to_string(),
-            "metadata not exist".to_string(),
-        );
         return Err(Error::new(
             std::io::ErrorKind::NotFound,
             "metadata not exist",
@@ -86,7 +80,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
     let endp_id = StaticContext::get_instance()
         .get_distributor()
         .locate_file_metadata(&path);
-    let post_res = NetworkService::post::<SerdeString>(
+    let _post_res = NetworkService::post::<SerdeString>(
         StaticContext::get_instance()
             .get_hosts()
             .get(endp_id as usize)
@@ -175,7 +169,7 @@ pub fn forward_get_chunk_stat() -> (i32, ChunkStat) {
     let mut chunk_total = 0;
     let mut chunk_free = 0;
     let post_results = NetworkService::group_post(posts);
-    if let Err(e) = post_results {
+    if let Err(_e) = post_results {
         return (-1, ChunkStat::new());
     } else {
         let result_vec = post_results.unwrap();
@@ -214,7 +208,7 @@ pub fn forward_get_metadentry_size(path: &String) -> (i32, i64) {
         SerdeString { str: path.clone() },
         PostOption::UpdateMetadentry,
     );
-    if let Err(e) = post_result {
+    if let Err(_e) = post_result {
         return (-1, 0);
     } else {
         let result = post_result.unwrap();
@@ -239,7 +233,7 @@ pub fn forward_decr_size(path: &String, new_size: i64) -> i32 {
         },
         PostOption::DecrSize,
     );
-    if let Err(e) = post_result {
+    if let Err(_e) = post_result {
         return -1;
     } else {
         let result = post_result.unwrap();
@@ -284,7 +278,7 @@ pub fn forward_truncate(path: &String, old_size: i64, new_size: i64) -> i32 {
         ));
     }
     let post_results = NetworkService::group_post(posts);
-    if let Err(e) = post_results {
+    if let Err(_e) = post_results {
         return -1;
     }
     let results = post_results.unwrap();
@@ -319,7 +313,7 @@ pub fn forward_update_metadentry_size(
         update_data,
         PostOption::UpdateMetadentry,
     );
-    if let Err(e) = post_result {
+    if let Err(_e) = post_result {
         return (EBUSY, 0);
     } else {
         let res = post_result.unwrap();
@@ -484,11 +478,16 @@ pub fn forward_read(path: &String, buf: *mut c_char, offset: i64, read_size: i64
                 } else {
                     chnk.0 * CHUNK_SIZE - (offset as u64 % CHUNK_SIZE)
                 };
+                let data = if chnk.0 == chunk_end {
+                    chnk.1 + "\0"
+                } else {
+                    chnk.1
+                };
                 unsafe {
                     strncpy(
                         buf.offset(local_offset as isize),
-                        chnk.1.as_ptr() as *const i8,
-                        chnk.1.len(),
+                        data.as_ptr() as *const i8,
+                        data.len(),
                     );
                 }
             }
@@ -519,7 +518,7 @@ pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>) {
         ));
     }
     let post_results = NetworkService::group_post(posts);
-    if let Err(e) = post_results {
+    if let Err(_e) = post_results {
         return (
             -1,
             Arc::new(Mutex::new(OpenFile::new(
@@ -558,7 +557,7 @@ pub fn forward_get_fs_config(context: &mut StaticContext) -> bool {
         (),
         PostOption::FsConfig,
     );
-    if let Err(e) = fsconf_res {
+    if let Err(_e) = fsconf_res {
         return false;
     }
     let result = fsconf_res.unwrap();

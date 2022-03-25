@@ -19,6 +19,7 @@ pub static MAX_FD: i32 = 0x7fffffff;
 pub static MIN_FD: i32 = 100000;
 
 #[derive(Debug)]
+#[allow(non_camel_case_types)]
 pub enum FileType {
     SFS_REGULAR,
     SFS_DIRECTORY,
@@ -245,15 +246,14 @@ impl OpenFileMap {
         return fd;
     }
     pub fn remove(&mut self, fd: i32) -> bool {
-        let mut map = self.files_.lock().unwrap();
         if !self.exist(fd) {
             return false;
         } else {
-            (*map).remove(&fd);
+            self.files_.lock().unwrap().remove(&fd);
             if self
                 .fd_validation_needed_
                 .load(std::sync::atomic::Ordering::Relaxed)
-                && (*map).capacity() == 0
+                && self.files_.lock().unwrap().capacity() == 0
             {
                 self.fd_validation_needed_ = AtomicBool::new(false);
             }

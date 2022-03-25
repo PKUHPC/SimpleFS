@@ -2,8 +2,8 @@ use std::{sync::{Arc, Mutex, MutexGuard}, path::Path};
 
 use rocksdb::{DB, Options, WriteOptions};
 
-use crate::{server::storage::metadata::merge, global::{util::path_util::{is_absolute, has_trailing_slash}, error_msg::error_msg, metadata::{Metadata, self, S_ISDIR}}};
-static use_write_ahead_log: bool = false;
+use crate::{server::storage::metadata::merge, global::{util::path_util::{is_absolute, has_trailing_slash}, error_msg::error_msg, metadata::{Metadata, S_ISDIR}}};
+static USE_WRITE_AHEAD_LOG: bool = false;
 
 use lazy_static::*;
 
@@ -45,7 +45,7 @@ impl MetadataDB{
         options.set_merge_operator("simplefs merge operator", merge::full_merge, merge::partial_merge);
         MetadataDB::optimize_rocksdb_options(&mut options);
         let mut write_options = WriteOptions::default();
-        write_options.disable_wal(use_write_ahead_log);
+        write_options.disable_wal(USE_WRITE_AHEAD_LOG);
         if let Ok(rdb) = DB::open(&options, Path::new(path)){
             Some(MetadataDB{
                 db: Some(Arc::new(rdb)),
@@ -81,20 +81,20 @@ impl MetadataDB{
             error_msg("server::storage::metadata::db::put".to_string(), "key mustn't have trailing slash".to_string());
             return 2;
         }
-        if let Err(e) = self.db.as_ref().unwrap().merge_opt(key, val, &self.write_opts){
+        if let Err(_e) = self.db.as_ref().unwrap().merge_opt(key, val, &self.write_opts){
             error_msg("server::storage::metadata::db::put".to_string(), "fail to merge value".to_string());
             return 3;
         }
         return 0;
     }
     pub fn remove(&mut self, key: &String){
-        if let Err(e) = self.db.as_ref().unwrap().delete(key){
+        if let Err(_e) = self.db.as_ref().unwrap().delete(key){
             error_msg("server::storage::metadata::db::delete".to_string(), "fail to delete key".to_string());
         }
     }
     pub fn exists(&self, key: &String) -> bool{
         if let Ok(res) = self.db.as_ref().unwrap().get(key){
-            if let Some(value) = res{true}
+            if let Some(_value) = res{true}
             else{false}
         }
         else{
@@ -106,19 +106,19 @@ impl MetadataDB{
         let mut batch = rocksdb::WriteBatch::default();
         batch.delete(old_key);
         batch.put(new_key, val);
-        if let Err(e) = self.db.as_ref().unwrap().write_opt(batch, &self.write_opts){
+        if let Err(_e) = self.db.as_ref().unwrap().write_opt(batch, &self.write_opts){
             error_msg("server::storage::metadata::db::update".to_string(), "fail to write batch".to_string());
         }
     }
     pub fn increase_size(&mut self, key: &String, size: usize, append: bool){
         let op_s = format!("i|{}|{}", size, append);
-        if let Err(e) = self.db.as_ref().unwrap().merge_opt(key, op_s, &self.write_opts){
+        if let Err(_e) = self.db.as_ref().unwrap().merge_opt(key, op_s, &self.write_opts){
             error_msg("server::storage::metadata::db::increase_size".to_string(), "fail to merge operands".to_string()); 
         }
     }
     pub fn decrease_size(&mut self, key: &String, size: usize){
         let op_s = format!("d|{}", size);
-        if let Err(e) = self.db.as_ref().unwrap().merge_opt(key, op_s, &self.write_opts){
+        if let Err(_e) = self.db.as_ref().unwrap().merge_opt(key, op_s, &self.write_opts){
             error_msg("server::storage::metadata::db::decrease_size".to_string(), "fail to merge operands".to_string()); 
         }
     }
@@ -128,7 +128,7 @@ impl MetadataDB{
             error_msg("server::storage::metadata::db::get_dirents".to_string(), "dir is not absolute".to_string()); 
             return Vec::new();
         }
-        if !has_trailing_slash(&root_path) && root_path.len() == 1{
+        if !has_trailing_slash(&root_path) && root_path.len() != 1{
             root_path.push('/');
         }
         let iter = self.db.as_ref().unwrap().prefix_iterator(root_path.as_bytes());
@@ -138,10 +138,10 @@ impl MetadataDB{
             if !s.starts_with(&root_path) || s.len() == root_path.len(){
                 continue;
             }
-            if let Some(idx) = s[root_path.len() + 1..].to_string().find('/'){
+            if let Some(_idx) = s[root_path.len()..].to_string().find('/'){
                 continue;
             }
-            let name = s[root_path.len() + 1..].to_string();
+            let name = s[root_path.len()..].to_string();
             if name.len() == 0{
                 continue;
             }
@@ -152,6 +152,8 @@ impl MetadataDB{
         }
         entries
     }
+    #[allow(unused_variables)]
+    #[allow(unused_assignments)]
     pub fn iterate_all(&self){
         let mut key: String;
         let mut value: String;

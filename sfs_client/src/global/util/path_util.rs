@@ -11,6 +11,9 @@ pub fn is_absolute(path: &String) -> bool {
 pub fn has_trailing_slash(path: &String) -> bool {
     path.len() != 0 && path.ends_with(SEPERATOR)
 }
+pub fn has_trailing_endline(path: &String) -> bool {
+    path.len() != 0 && path.ends_with("\n")
+}
 pub fn prepend_path(prefix: &String, raw_path: String) -> String {
     if !has_trailing_slash(&prefix) {
         format!("{}{}{}", prefix, SEPERATOR, raw_path)

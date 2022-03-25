@@ -1,7 +1,5 @@
 use lazy_static::*;
-use rocksdb::{DB, Options};
 use std::sync::{Mutex, MutexGuard};
-use std::sync::Arc;
 
 use crate::server::storage::{metadata::db::MetadataDB, data::chunk_storage::ChunkStorage};
 

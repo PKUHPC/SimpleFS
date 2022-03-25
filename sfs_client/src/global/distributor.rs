@@ -1,9 +1,5 @@
 use sha2::{Digest, Sha256};
-use std::{
-    collections::{hash_map::DefaultHasher, HashMap},
-    hash::{Hash, Hasher},
-    sync::Arc,
-};
+use std::{collections::HashMap, sync::Arc};
 
 pub trait Distributor {
     fn localhost(&self) -> u64;
@@ -19,6 +15,7 @@ pub struct SimpleHashDistributor {
     pub all_hosts_: Arc<Vec<u64>>,
     //pub str_hash_: DefaultHasher
 }
+#[allow(unused_variables)]
 impl Distributor for SimpleHashDistributor {
     fn localhost(&self) -> u64 {
         self.localhost_
@@ -70,6 +67,7 @@ impl LocalOnlyDistributor {
         }
     }
 }
+#[allow(unused_variables)]
 impl Distributor for LocalOnlyDistributor {
     fn localhost(&self) -> u64 {
         self.localhost_
@@ -94,6 +92,7 @@ pub struct ForwardDistributor {
     pub all_hosts_: Arc<Vec<u64>>,
     pub str_hash_: HashMap<String, u64>,
 }
+#[allow(unused_variables)]
 impl Distributor for ForwardDistributor {
     fn localhost(&self) -> u64 {
         self.fwd_host_

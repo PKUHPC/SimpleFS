@@ -10,7 +10,6 @@ use crate::client::openfile::OpenFileMap;
 use crate::global::distributor::SimpleHashDistributor;
 use crate::global::error_msg::error_msg;
 use crate::global::fsconfig::SFSConfig;
-use crate::global::path;
 use crate::global::util::path_util::{has_trailing_slash, is_absolute, is_relative, split_path};
 
 use super::path::resolve;
@@ -31,12 +30,12 @@ static MAX_INTERNEL_FDS: u32 = 100000;
 static AT_FDCWD: i32 = -100;
 static SEPERATOR: char = '/';
 
-enum InterceptionStat{
+enum InterceptionStat {
     Disabled,
     Initialize,
-    Enabled
+    Enabled,
 }
-impl Clone for InterceptionStat{
+impl Clone for InterceptionStat {
     fn clone(&self) -> Self {
         match self {
             Self::Disabled => Self::Disabled,
@@ -46,7 +45,8 @@ impl Clone for InterceptionStat{
     }
 }
 lazy_static! {
-    static ref INTERCEPTION_ENABLE: Mutex<InterceptionStat> = Mutex::new(InterceptionStat::Disabled);
+    static ref INTERCEPTION_ENABLE: Mutex<InterceptionStat> =
+        Mutex::new(InterceptionStat::Disabled);
 }
 pub fn start_interception() {
     *INTERCEPTION_ENABLE.lock().unwrap() = InterceptionStat::Initialize;
@@ -59,16 +59,19 @@ pub fn disable_interception() {
 }
 pub fn interception_enabled() -> bool {
     let stat = (*INTERCEPTION_ENABLE.lock().unwrap()).clone();
-    match stat{
+    match stat {
         InterceptionStat::Disabled => {
             start_interception();
-            if StaticContext::get_instance().init_flag{
+            if StaticContext::get_instance().init_flag {
                 enable_interception();
+                //println!("client context initialized");
+                true
+            } else {
+                false
             }
-            true
-        },
-        InterceptionStat::Initialize => {false},
-        InterceptionStat::Enabled => {true},
+        }
+        InterceptionStat::Initialize => false,
+        InterceptionStat::Enabled => true,
     }
 }
 
@@ -127,7 +130,7 @@ impl DynamicContext {
             );
             return (RelativizeStatus::Error, raw_path.clone());
         }
-        let mut path = "".to_string();
+        let mut path: String;
         if is_relative(raw_path) {
             if dirfd == AT_FDCWD {
                 path = self.cwd_.clone() + raw_path;
@@ -152,6 +155,41 @@ impl DynamicContext {
             return (RelativizeStatus::Internal, resolve_res.1);
         }
         (RelativizeStatus::External, raw_path.to_string())
+    }
+    pub fn relativize_path(&self, raw_path: &String, resolve_last_link: bool) -> (bool, String) {
+        if !interception_enabled() {
+            error_msg(
+                "client::simplefs_context::ClientContext::relativize_path".to_string(),
+                "interception need to be enabled".to_string(),
+            );
+            return (false, raw_path.clone());
+        }
+        if SCTX.mountdir_.len() == 0 {
+            error_msg(
+                "client::simplefs_context::ClientContext::relativize_path".to_string(),
+                "file system not mounted".to_string(),
+            );
+            return (false, raw_path.clone());
+        }
+        if raw_path.len() == 0 {
+            error_msg(
+                "client::simplefs_context::ClientContext::relativize_path".to_string(),
+                "raw path is empty".to_string(),
+            );
+            return (false, raw_path.clone());
+        }
+        let path: String;
+        if is_relative(&raw_path) {
+            path = self.cwd_.clone() + &raw_path.clone();
+        } else {
+            path = raw_path.clone();
+        }
+        let resolve_res = resolve(&path, resolve_last_link);
+        if resolve_res.0 {
+            resolve_res
+        } else {
+            (resolve_res.0, raw_path.clone())
+        }
     }
     pub fn get_ofm(&self) -> Arc<Mutex<OpenFileMap>> {
         Arc::clone(&self.open_file_map_)
@@ -190,11 +228,11 @@ impl DynamicContext {
             return fd;
         }
         (*self.internal_fds_.lock().unwrap()).set(pos, false);
-        let mut ifd = 0;
-        unsafe {
-            //ifd = syscall_no_intercept(SYS_dup3, fd.clone(), pos + MIN_INTERNEL_FD as usize, O_CLOEXEC);
-            //syscall_no_intercept(SYS_close, fd.clone());
-        }
+        let ifd = 0;
+        //unsafe {
+        //ifd = syscall_no_intercept(SYS_dup3, fd.clone(), pos + MIN_INTERNEL_FD as usize, O_CLOEXEC);
+        //syscall_no_intercept(SYS_close, fd.clone());
+        //}
         ifd
     }
     pub fn unregister_internel_fd(&mut self, fd: i32) {
@@ -222,36 +260,6 @@ impl DynamicContext {
     pub fn get_cwd(&self) -> &String {
         &self.cwd_
     }
-    pub fn relativize_path(&self, raw_path: &String, resolve_last_link: bool) -> (bool, String) {
-        if interception_enabled() {
-            error_msg(
-                "client::simplefs_context::ClientContext::relativize_path".to_string(),
-                "interception need to be enabled".to_string(),
-            );
-            return (false, raw_path.clone());
-        }
-        if SCTX.mountdir_.len() == 0 {
-            error_msg(
-                "client::simplefs_context::ClientContext::relativize_path".to_string(),
-                "file system not mounted".to_string(),
-            );
-            return (false, raw_path.clone());
-        }
-        if raw_path.len() == 0 {
-            error_msg(
-                "client::simplefs_context::ClientContext::relativize_path".to_string(),
-                "raw path is empty".to_string(),
-            );
-            return (false, raw_path.clone());
-        }
-        let mut path = "".to_string();
-        if is_relative(&raw_path) {
-            path = self.cwd_.clone() + &raw_path.clone();
-        } else {
-            path = raw_path.clone();
-        }
-        resolve(&path, resolve_last_link)
-    }
 }
 
 // Context that is read only after initialize
@@ -270,7 +278,7 @@ pub struct StaticContext {
 
     internal_fds_must_relocate_: bool,
 
-    init_flag: bool
+    pub init_flag: bool,
 }
 lazy_static! {
     static ref SCTX: StaticContext = init_environment();
@@ -292,7 +300,7 @@ impl StaticContext {
             rpc_protocol_: "tcp".to_string(),
             auto_sm_: false,
             internal_fds_must_relocate_: true,
-            init_flag: true
+            init_flag: false,
         }
     }
     pub fn set_mountdir(&mut self, mut path: String) {
@@ -359,7 +367,7 @@ impl StaticContext {
     pub fn set_fsconfig(&mut self, config: SFSConfig) {
         self.fs_config_ = Arc::new(config);
     }
-    pub fn get_init_flag(&self) -> bool{
+    pub fn get_init_flag(&self) -> bool {
         self.init_flag
     }
     pub fn protect_user_fds() {}

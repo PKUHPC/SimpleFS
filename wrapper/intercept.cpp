@@ -16,9 +16,9 @@ hook(long syscall_number,
 			long arg4, long arg5,
 			long *result)
 {
-        if(!intercept_enabled()){
-                return 1;
-        }
+    if(!intercept_enabled()){
+            return 1;
+    }
 	switch(syscall_number) {
 
         case SYS_execve:
@@ -121,8 +121,7 @@ hook(long syscall_number,
                     static_cast<size_t>(arg2), static_cast<loff_t>(arg3));
             break;
         case SYS_write:
-            *result =
-                    hook_write(static_cast<unsigned int>(arg0),
+            *result = hook_write(static_cast<unsigned int>(arg0),
                                            reinterpret_cast<const char*>(arg1),
                                            static_cast<size_t>(arg2));
             break;
@@ -226,14 +225,14 @@ hook(long syscall_number,
         case SYS_getdents:
             *result = hook_getdents(
                     static_cast<unsigned int>(arg0),
-                    reinterpret_cast<struct linux_dirent*>(arg1),
+                    reinterpret_cast<struct dirent*>(arg1),
                     static_cast<unsigned int>(arg2));
             break;
 
         case SYS_getdents64:
             *result = hook_getdents64(
                     static_cast<unsigned int>(arg0),
-                    reinterpret_cast<struct linux_dirent64*>(arg1),
+                    reinterpret_cast<struct dirent64*>(arg1),
                     static_cast<unsigned int>(arg2));
             break;
 

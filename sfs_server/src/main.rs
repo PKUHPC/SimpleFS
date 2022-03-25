@@ -14,7 +14,6 @@ use sfs_lib_server::{
 use sfs_lib_server::{
     global::network::post::PostOption::*,
     global::{
-        error_msg::error_msg,
         fsconfig::SFSConfig,
         metadata::Metadata,
         network::{
@@ -54,7 +53,7 @@ struct ServerHandler(SocketAddr);
 #[tarpc::server]
 impl SFSServer for ServerHandler {
     async fn handle(self, _: context::Context, post: String) -> String {
-        //println!("recived post: {}", post);
+        println!("recived post: {}", post);
         let post: Post = serde_json::from_str(post.as_str()).unwrap();
         match post.option {
             Stat => {
@@ -96,7 +95,7 @@ impl SFSServer for ServerHandler {
             Remove => {
                 let serde_string: SerdeString = serde_json::from_str(&post.data).unwrap();
                 let path = serde_string.str;
-                println!("handling remove of {}....", path);
+                println!("handling remove of '{}'....", path);
                 ChunkStorage::destroy_chunk_space(&path).await;
                 return serde_json::to_string(&PostResult {
                     err: false,
@@ -107,7 +106,7 @@ impl SFSServer for ServerHandler {
             RemoveMeta => {
                 let serde_string: SerdeString = serde_json::from_str(&post.data).unwrap();
                 let path = serde_string.str;
-                println!("handling remove metadata of {}....", path);
+                println!("handling remove metadata of '{}'....", path);
                 let md_res = MetadataDB::get_instance().get(&path);
                 if let None = md_res {
                     return serde_json::to_string(&PostResult {
@@ -125,12 +124,12 @@ impl SFSServer for ServerHandler {
             }
             Read => {
                 let read_data: ReadData = serde_json::from_str(&post.data).unwrap();
-                println!("handling read of {}....", read_data.path);
+                println!("handling read of '{}'....", read_data.path);
                 return handle_read(read_data).await;
             }
             Write => {
                 let write_data: WriteData = serde_json::from_str(&post.data).unwrap();
-                println!("handling write of {}....", write_data.path);
+                println!("handling write of '{}'....", write_data.path);
                 return handle_write(write_data).await;
             }
             Lookup => {
@@ -163,7 +162,7 @@ impl SFSServer for ServerHandler {
             }
             UpdateMetadentry => {
                 let update_data: UpdateMetadentryData = serde_json::from_str(&post.data).unwrap();
-                println!("handling updata metadentry of {}....", update_data.path);
+                println!("handling update metadentry of '{}'....", update_data.path);
                 MetadataDB::get_instance().increase_size(
                     &update_data.path,
                     update_data.size as usize + update_data.offset as usize,
@@ -209,7 +208,7 @@ impl SFSServer for ServerHandler {
             }
             DecrSize => {
                 let decr_data: DecrData = serde_json::from_str(&post.data).unwrap();
-                println!("handling decrease size of {}....", decr_data.path);
+                println!("handling decrease size of '{}'....", decr_data.path);
                 MetadataDB::get_instance()
                     .decrease_size(&decr_data.path, decr_data.new_size as usize);
                 return serde_json::to_string(&PostResult {
@@ -220,13 +219,13 @@ impl SFSServer for ServerHandler {
             }
             Trunc => {
                 let trunc_data: TruncData = serde_json::from_str(&post.data).unwrap();
-                println!("handling truncate of {}....", trunc_data.path);
+                println!("handling truncate of '{}'....", trunc_data.path);
                 return handle_trunc(trunc_data).await;
             }
             GetDirents => {
-                println!("handling get dirents....");
                 let data: DirentData = serde_json::from_str(&post.data).unwrap();
                 let path = data.path;
+                println!("handling get dirents of '{}'....", path);
                 let entries = MetadataDB::get_instance().get_dirents(&path);
                 if entries.len() == 0 {
                     return serde_json::to_string(&PostResult {
@@ -247,11 +246,6 @@ impl SFSServer for ServerHandler {
                 .unwrap();
             }
         }
-        serde_json::to_string(&PostResult {
-            err: false,
-            data: "".to_string(),
-        })
-        .unwrap()
     }
 }
 
@@ -345,10 +339,10 @@ async fn init_environment() -> Result<(), Error> {
     init_server(&addr).await?;
     Ok(())
 }
-fn destroy_environment() {}
+//fn destroy_environment() {}
 #[tokio::main]
 pub async fn main() -> Result<(), Error> {
-    let RPC_PROTOCOL: String = String::from("tcp");
+    //let RPC_PROTOCOL: String = String::from("tcp");
 
     let mut json: Vec<u8> = Vec::new();
     let mut f = std::fs::OpenOptions::new()

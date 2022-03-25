@@ -3,9 +3,11 @@ use std::time::{self, SystemTime, UNIX_EPOCH};
 
 use libc::{S_IFDIR, S_IFREG};
 
+#[allow(non_snake_case)]
 pub fn S_ISREG(mode: u32) -> bool {
     mode & S_IFREG != 0
 }
+#[allow(non_snake_case)]
 pub fn S_ISDIR(mode: u32) -> bool {
     mode & S_IFDIR != 0
 }

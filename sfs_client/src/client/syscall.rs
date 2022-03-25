@@ -2,26 +2,26 @@ use std::collections::hash_map::DefaultHasher;
 use std::ffi::CStr;
 use std::hash::{Hash, Hasher};
 use std::io::ErrorKind;
-use std::mem::size_of;
 use std::os::raw::c_char;
 use std::sync::{Arc, Mutex};
 
+#[allow(unused_imports)]
 use libc::{
-    blkcnt_t, blksize_t, c_int, c_void, dev_t, dirent, dirent64, fsid_t, gid_t, ino_t, memcpy,
-    memset, mode_t, nlink_t, off_t, statfs, statvfs, strcpy, time_t, uid_t, DT_DIR, DT_REG,
-    O_APPEND, O_CREAT, O_DIRECTORY, O_EXCL, O_PATH, O_RDONLY, O_TRUNC, O_WRONLY, SEEK_CUR,
-    SEEK_DATA, SEEK_END, SEEK_HOLE, SEEK_SET, ST_NOATIME, ST_NODEV, ST_NODIRATIME, ST_NOSUID,
-    ST_SYNCHRONOUS, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFMT, S_IFREG, S_IFSOCK,
+    blkcnt_t, blksize_t, c_int, c_void, dev_t, dirent, dirent64, gid_t, ino_t, memcpy, memset,
+    mode_t, nlink_t, off_t, stat, statfs, statvfs, strcpy, time_t, uid_t, DT_DIR, DT_REG, O_APPEND,
+    O_CREAT, O_DIRECTORY, O_EXCL, O_PATH, O_RDONLY, O_TRUNC, O_WRONLY, SEEK_CUR, SEEK_DATA,
+    SEEK_END, SEEK_HOLE, SEEK_SET, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFMT, S_IFREG, S_IFSOCK,
 };
 
 use crate::global;
 use crate::global::error_msg::error_msg;
 use crate::global::fsconfig::ZERO_BUF_BEFORE_READ;
-use crate::global::metadata::{self, Metadata, S_ISDIR, S_ISREG};
+use crate::global::metadata::{S_ISDIR, S_ISREG};
 use crate::global::util::path_util::dirname;
 
 use super::config::CHECK_PARENT_DIR;
-use super::context::{DynamicContext, StaticContext};
+#[allow(unused_imports)]
+use super::context::{DynamicContext, interception_enabled};
 use super::network::forward_msg::{
     forward_create, forward_decr_size, forward_get_chunk_stat, forward_get_dirents,
     forward_get_metadentry_size, forward_read, forward_remove, forward_truncate,
@@ -196,7 +196,7 @@ pub extern "C" fn sfs_create(path: *const c_char, mut mode: u32) -> i32 {
         return -1;
     }
     let create_res = forward_create(&path, mode);
-    if let Err(e) = create_res {
+    if let Err(_e) = create_res {
         error_msg(
             "client:sfs_create".to_string(),
             "error occurs while creating file".to_string(),
@@ -210,7 +210,7 @@ pub extern "C" fn sfs_create(path: *const c_char, mut mode: u32) -> i32 {
 pub extern "C" fn sfs_remove(path: *const c_char) -> i32 {
     let path = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
     let md_res = get_metadata(&path, false);
-    if let Err(e) = md_res {
+    if let Err(_e) = md_res {
         error_msg(
             "client::sfs_remove".to_string(),
             "fail to fetch metadata".to_string(),
@@ -220,7 +220,7 @@ pub extern "C" fn sfs_remove(path: *const c_char) -> i32 {
     let md = md_res.unwrap();
     let has_data = S_ISREG(md.get_mode()) && md.get_size() != 0;
     let rm_res = forward_remove(path.clone(), !has_data, md.get_size());
-    if let Err(e) = rm_res {
+    if let Err(_e) = rm_res {
         error_msg(
             "client::sfs_remove".to_string(),
             "fail to remove file".to_string(),
@@ -230,17 +230,17 @@ pub extern "C" fn sfs_remove(path: *const c_char) -> i32 {
     return 0;
 }
 #[no_mangle]
-pub extern "C" fn sfs_access(path: *const c_char, mask: i32, follow_links: bool) -> i32 {
+pub extern "C" fn sfs_access(path: *const c_char, _mask: i32, _follow_links: bool) -> i32 {
     let path = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
     let md_res = get_metadata(&path, false);
-    if let Err(e) = md_res {
+    if let Err(_e) = md_res {
         return -1;
     }
     return 0;
 }
 // exactly the same as stat in libc but with all fields public
 #[derive(Debug)]
-pub struct stat {
+pub struct Stat {
     pub st_dev: dev_t,
     pub st_ino: ino_t,
     pub st_nlink: nlink_t,
@@ -261,16 +261,84 @@ pub struct stat {
     pub __unused: [i64; 3],
 }
 #[no_mangle]
-pub extern "C" fn sfs_stat(path: *const c_char, buf: *mut stat, follow_links: bool) -> i32 {
+pub extern "C" fn sfs_stat(path: *const c_char, buf: *mut stat, _follow_links: bool) -> i32 {
     let path = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
     let md_res = get_metadata(&path, false);
-    if let Err(e) = md_res {
+    if let Err(_e) = md_res {
         return -1;
     }
     let md = md_res.unwrap();
-    unsafe { metadata_to_stat(&path, md, &mut *buf) };
+    metadata_to_stat(&path, md, buf);
     return 0;
 }
+/*
+#[no_mangle]
+pub extern "C" fn sfs_statx(
+    _dirfs: i32,
+    path: *const c_char,
+    _flags: i32,
+    _mask: u32,
+    buf: *mut statx,
+    follow_links: bool,
+) -> i32 {
+    let path = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
+    if interception_enabled(){
+        println!("{}", path);
+    }
+    let md_res = get_metadata(&path, follow_links);
+    if let Err(_e) = md_res {
+        return -1;
+    }
+    let md = md_res.unwrap();
+    let mut stat: Stat = Stat{
+        st_dev: 0,
+        st_ino: 0,
+        st_nlink: 0,
+        st_mode: 0,
+        st_uid: 0,
+        st_gid: 0,
+        __pad0: 0,
+        st_rdev: 0,
+        st_size: 0,
+        st_blksize: 0,
+        st_blocks: 0,
+        st_atime: 0,
+        st_atime_nsec: 0,
+        st_mtime: 0,
+        st_mtime_nsec: 0,
+        st_ctime: 0,
+        st_ctime_nsec: 0,
+        __unused: [0; 3],
+    };
+
+    metadata_to_stat(&path, md, &mut stat);
+    unsafe{
+        (*buf).stx_mask = 0;
+        (*buf).stx_blksize = stat.st_blksize as u32;
+        (*buf).stx_attributes = 0;
+        (*buf).stx_nlink = stat.st_nlink as u32;
+        (*buf).stx_uid = stat.st_uid;
+        (*buf).stx_gid = stat.st_gid;
+        (*buf).stx_mode = stat.st_mode as u16;
+        (*buf).stx_ino = stat.st_ino;
+        (*buf).stx_size = stat.st_size as u64;
+        (*buf).stx_blocks = stat.st_blocks as u64;
+        (*buf).stx_attributes_mask = 0;
+
+        (*buf).stx_atime.tv_sec = stat.st_atime;
+        (*buf).stx_atime.tv_nsec = stat.st_atime_nsec as u32;
+
+        (*buf).stx_mtime.tv_sec = stat.st_mtime;
+        (*buf).stx_mtime.tv_nsec = stat.st_mtime_nsec as u32;
+
+        (*buf).stx_ctime.tv_sec = stat.st_ctime;
+        (*buf).stx_ctime.tv_nsec = stat.st_ctime_nsec as u32;
+
+        (*buf).stx_btime = (*buf).stx_atime;
+    }
+    return 0;
+}
+*/
 #[no_mangle]
 pub extern "C" fn sfs_statfs(buf: *mut statfs) -> i32 {
     let ret = forward_get_chunk_stat();
@@ -292,7 +360,7 @@ pub extern "C" fn sfs_statfs(buf: *mut statfs) -> i32 {
         { *buf }.f_files = 0;
         { *buf }.f_ffree = 0;
         //{*buf}.f_fsid = fsid_t { __val: [0, 0]};
-        { *buf }.f_namelen = global::path::max_length;
+        { *buf }.f_namelen = global::path::MAX_LENGTH;
         { *buf }.f_frsize = 0;
         //{*buf}.flags = ST_NOATIME | ST_NODIRATIME | ST_NOSUID | ST_NODEV | ST_SYNCHRONOUS;
     }
@@ -318,7 +386,7 @@ pub extern "C" fn sfs_statvfs(buf: *mut statvfs) -> i32 {
         { *buf }.f_ffree = 0;
         { *buf }.f_favail = 0;
         { *buf }.f_fsid = 0;
-        { *buf }.f_namemax = global::path::max_length as u64;
+        { *buf }.f_namemax = global::path::MAX_LENGTH as u64;
         { *buf }.f_frsize = 0;
         //{*buf}.flags = ST_NOATIME | ST_NODIRATIME | ST_NOSUID | ST_NODEV | ST_SYNCHRONOUS;
     }
@@ -396,7 +464,7 @@ pub extern "C" fn internel_truncate(path: *const c_char, old_size: i64, new_size
 pub extern "C" fn sfs_truncate(path: *const c_char, length: i64) -> i32 {
     let spath = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
     let md_res = get_metadata(&spath, false);
-    if let Err(e) = md_res {
+    if let Err(_e) = md_res {
         return -1;
     }
     let md = md_res.unwrap();
@@ -511,7 +579,7 @@ fn internal_pread(f: Arc<Mutex<OpenFile>>, buf: *mut c_char, count: i64, offset:
     }
     if ZERO_BUF_BEFORE_READ {
         unsafe {
-            memset(buf as (*mut c_void), 0, count as usize);
+            memset(buf as *mut c_void, 0, count as usize);
         }
     }
     let path = f.lock().unwrap().get_path().clone();
@@ -565,7 +633,7 @@ pub extern "C" fn sfs_read(fd: i32, buf: *mut c_char, count: i64) -> i64 {
 pub extern "C" fn sfs_rmdir(path: *const c_char) -> i32 {
     let path = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
     let md_res = get_metadata(&path, false);
-    if let Err(e) = md_res {
+    if let Err(_e) = md_res {
         error_msg(
             "client::sfs_rmdir".to_string(),
             "file not exist".to_string(),
@@ -597,7 +665,7 @@ pub extern "C" fn sfs_rmdir(path: *const c_char) -> i32 {
         return -1;
     }
     let rm_res = forward_remove(path.clone(), true, 0);
-    if let Err(e) = rm_res {
+    if let Err(_e) = rm_res {
         error_msg(
             "client::sfs_rmdir".to_string(),
             format!("forward remove directory with error {}", dirent_res.0),
@@ -610,7 +678,7 @@ pub extern "C" fn sfs_rmdir(path: *const c_char) -> i32 {
 pub extern "C" fn sfs_opendir(path: *const c_char) -> i32 {
     let path = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
     let md_res = get_metadata(&path, false);
-    if let Err(e) = md_res {
+    if let Err(_e) = md_res {
         error_msg(
             "client::sfs_opendir".to_string(),
             "file not exist".to_string(),
@@ -676,23 +744,29 @@ pub extern "C" fn sfs_getdents(fd: i32, dirp: *mut dirent, count: i64) -> i32 {
         let mut s = DefaultHasher::new();
         let p = opendir.lock().unwrap().get_path().clone() + "/" + &de.get_name();
         p.hash(&mut s);
+        let name = de.get_name() + "\0";
         unsafe {
-            (*current_dirp).d_ino = s.finish();
+            (*current_dirp).d_ino = s.finish() as u64;
             (*current_dirp).d_reclen = total_size as u16;
-            let mut c = DT_REG;
+            let c: u8;
             match de.get_type() {
                 FileType::SFS_REGULAR => c = DT_REG,
                 FileType::SFS_DIRECTORY => c = DT_DIR,
             }
             (*current_dirp).d_type = c;
-            //strcpy((*current_dirp).d_name.as_ptr() as *mut i8, de.get_name().as_ptr() as *const i8);
+            strcpy(
+                (*current_dirp).d_name.as_ptr() as *mut i8,
+                name.as_ptr() as *const i8,
+            );
+            /*
             memcpy(
                 (*current_dirp).d_name.as_ptr() as *mut c_void,
-                de.get_name().as_ptr() as *const c_void,
-                de.get_name().len(),
+                name.as_ptr() as *const c_void,
+                name.len(),
             );
-            pos += 1;
+            */
             (*current_dirp).d_off = pos;
+            pos += 1;
             written += total_size as i64;
         }
     }
@@ -736,23 +810,29 @@ pub extern "C" fn sfs_getdents64(fd: i32, dirp: *mut dirent64, count: i64) -> i3
         let mut s = DefaultHasher::new();
         let p = opendir.lock().unwrap().get_path().clone() + "/" + &de.get_name();
         p.hash(&mut s);
+        let name = de.get_name() + "\0";
         unsafe {
-            (*current_dirp).d_ino = s.finish();
+            (*current_dirp).d_ino = s.finish() as u64;
             (*current_dirp).d_reclen = total_size as u16;
-            let mut c = DT_REG;
+            let c: u8;
             match de.get_type() {
                 FileType::SFS_REGULAR => c = DT_REG,
                 FileType::SFS_DIRECTORY => c = DT_DIR,
             }
             (*current_dirp).d_type = c;
-            //strcpy((*current_dirp).d_name.as_ptr() as *mut i8, de.get_name().as_ptr() as *const i8);
+            strcpy(
+                (*current_dirp).d_name.as_ptr() as *mut i8,
+                name.as_ptr() as *const i8,
+            );
+            /*
             memcpy(
                 (*current_dirp).d_name.as_ptr() as *mut c_void,
-                de.get_name().as_ptr() as *const c_void,
-                de.get_name().len(),
+                name.as_ptr() as *const c_void,
+                name.len(),
             );
-            pos += 1;
+            */
             (*current_dirp).d_off = pos;
+            pos += 1;
             written += total_size as i64;
         }
     }

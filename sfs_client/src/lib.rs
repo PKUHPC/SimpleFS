@@ -3,7 +3,7 @@
 use std::ffi::CStr;
 
 use client::{
-    context::{DynamicContext, StaticContext, interception_enabled},
+    context::{interception_enabled, DynamicContext, StaticContext},
     openfile::OpenFileFlags,
     util::get_metadata,
 };
@@ -182,7 +182,7 @@ pub extern "C" fn get_md_mode(path: *const c_char) -> i32 {
     return md_res.unwrap().get_mode() as i32;
 }
 #[no_mangle]
-pub extern "C" fn intercept_enabled() -> bool{
+pub extern "C" fn intercept_enabled() -> bool {
     interception_enabled()
 }
 
@@ -191,19 +191,25 @@ mod tests {
 
     use libc::{c_char, dirent, O_CREAT, O_RDWR, SEEK_SET, S_IFDIR, S_IFREG};
 
-    use crate::{
-        client::{
-            context::{DynamicContext},
-            syscall::{
-                internel_truncate, sfs_create, sfs_dup, sfs_dup2, sfs_getdents, sfs_lseek,
-                sfs_open, sfs_opendir, sfs_pread, sfs_pwrite, sfs_read, sfs_remove, sfs_rmdir,
-                sfs_stat, sfs_write, stat,
-            },
-        }
+    use crate::client::{
+        context::{DynamicContext, StaticContext},
+        path::resolve,
+        syscall::{
+            internel_truncate, sfs_create, sfs_dup, sfs_dup2, sfs_getdents, sfs_lseek, sfs_open,
+            sfs_opendir, sfs_pread, sfs_pwrite, sfs_read, sfs_remove, sfs_rmdir, sfs_stat,
+            sfs_write, Stat,
+        },
     };
 
     #[test]
-    pub fn test0() {}
+    pub fn test0() {
+        println!("{:?}", StaticContext::get_instance().get_mountdir());
+        println!(
+            "{:?}",
+            resolve(&"/home/dev/Desktop/mount/file1/a/".to_string(), false)
+        );
+    }
+    /*
     #[test]
     pub fn test1() {
         let s = "hello, here is the test data of sfs small-data local-host open/read/write test";
@@ -468,7 +474,7 @@ mod tests {
         let len = data.len() as i64;
         let wres = sfs_write(fd, data.as_ptr() as *mut i8, len);
 
-        let mut stat = stat {
+        let mut stat = Stat {
             st_dev: 0,
             st_ino: 0,
             st_nlink: 0,
@@ -490,7 +496,7 @@ mod tests {
         };
         let res = sfs_stat(
             fpath_file1.as_str().as_ptr() as *const c_char,
-            &mut stat as *mut stat,
+            &mut stat as *mut Stat,
             false,
         );
         if res < 0 {
@@ -506,7 +512,7 @@ mod tests {
             return;
         }
 
-        let mut stat = stat {
+        let mut stat = Stat {
             st_dev: 0,
             st_ino: 0,
             st_nlink: 0,
@@ -528,7 +534,7 @@ mod tests {
         };
         let res = sfs_stat(
             fpath_file1.as_str().as_ptr() as *const c_char,
-            &mut stat as *mut stat,
+            &mut stat as *mut Stat,
             false,
         );
         if res < 0 {
@@ -748,4 +754,5 @@ mod tests {
             println!("read from dupped fd: {}", String::from_utf8(buf).unwrap());
         }
     }
+    */
 }

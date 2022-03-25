@@ -8,18 +8,14 @@
 #include <sys/types.h>
 #include <string>
 
-#ifndef TYPE_DEF
-  #define TYPE_DEF
-  extern "C" {
-  #include "mytype.h"
-  }
-#endif
-
 extern "C" int sfs_open(const char *, unsigned int, int);
 extern "C" int sfs_create(const char *, unsigned int);
 extern "C" int sfs_remove(const char *);
 extern "C" int sfs_access(const char *, int, bool);
 extern "C" int sfs_stat(const char *, struct stat*, bool);
+#ifdef STATX_TYPE
+extern "C" int sfs_statx(int, const char*, int, unsigned int, struct statx*, bool);
+#endif
 extern "C" int sfs_statfs(struct statfs*);
 extern "C" int sfs_statvfs(struct statvfs*);
 extern "C" int sfs_lseek(int, long, int);
@@ -32,8 +28,8 @@ extern "C" int sfs_pread(int, char*, long, long);
 extern "C" int sfs_read(int, char*, long);
 extern "C" int sfs_rmdir(const char*);
 extern "C" int sfs_opendir(const char*);
-extern "C" int sfs_getdents(int, struct linux_dirent*, long);
-extern "C" int sfs_getdents64(int, struct linux_dirent64*, long);
+extern "C" int sfs_getdents(int, struct dirent*, long);
+extern "C" int sfs_getdents64(int, struct dirent64*, long);
 
 extern "C" int relativize_fd_path(int dirfd, const char* cpath, char* resolved, bool follow_links);
 extern "C" bool relativize_path(const char* path, char* rel_path, bool follow_links);

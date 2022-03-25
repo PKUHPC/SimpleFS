@@ -1,6 +1,6 @@
 {
-    "mountdir": "/home/dev/Desktop/storage",
-    "rootdir": "/home/dev/Desktop/storage",
+    "mountdir": "/home/dev/Desktop/mount/",
+    "rootdir": "/home/dev/Desktop/storage/",
     "metadir": "/home/dev/Desktop/metadata",
     "hosts_file": "/home/dev/Desktop/SimpleFS/sfs_server/hostfile",
     "listen": "192.168.230.137"

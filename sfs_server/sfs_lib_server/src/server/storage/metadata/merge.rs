@@ -36,11 +36,12 @@ fn get_param_for_decrease_size(op_s: &String) -> Option<i64>{
     }
     Some(vec[1].parse::<i64>().unwrap())
 }
+#[allow(unused_variables)]
 pub fn full_merge(new_key: &[u8],
     existing_val: Option<&[u8]>,
     operands: &MergeOperands)
     -> Option<Vec<u8>> {
-    println!("full merging on key {} ...", String::from_utf8(new_key.to_vec()).unwrap());
+    //println!("full merging on key {} ...", String::from_utf8(new_key.to_vec()).unwrap());
     let mut md = Metadata::new();
     if let Some(val) = existing_val{
         if let Ok(data) = Metadata::deserialize(&String::from_utf8((&val).to_vec()).unwrap()){
@@ -118,10 +119,11 @@ pub fn full_merge(new_key: &[u8],
     md.set_size(fsize);
     Some(md.serialize().as_bytes().to_vec())
 }
+#[allow(unused_variables)]
 pub fn partial_merge(new_key: &[u8],
     existing_val: Option<&[u8]>,
     operands: &MergeOperands)
     -> Option<Vec<u8>> {
-        println!("partial merging ...");
+        //println!("partial merging ...");
         None
 }

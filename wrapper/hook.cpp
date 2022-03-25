@@ -109,7 +109,7 @@ hook_close(int fd) {
 
     if(fd_exist(fd)) {
         // No call to the daemon is required
-       fd_remove(fd);
+        fd_remove(fd);
         return 0;
     }
 
@@ -132,6 +132,36 @@ hook_stat(const char* path, struct stat* buf) {
 
     return syscall_no_intercept_wrapper(SYS_stat, rel_path.c_str(), buf);
 }
+
+#ifdef STATX_TYPE
+int
+hook_statx(int dirfd, const char* path, int flags, unsigned int mask,
+           struct ::statx* buf) {
+
+    std::string resolved;
+    auto rstatus = relativize_fd_path_wrapper(dirfd, path, resolved);
+    switch(rstatus) {
+        case RelativizeStatus::fd_unknown:
+            return syscall_no_intercept(SYS_statx, dirfd, path, flags, mask,
+                                        buf);
+
+        case RelativizeStatus::external:
+            return syscall_no_intercept(SYS_statx, dirfd, resolved.c_str(),
+                                        flags, mask, buf);
+
+        case RelativizeStatus::fd_not_a_dir:
+            return -ENOTDIR;
+
+        case RelativizeStatus::internal:
+            return with_errno(sfs_statx(dirfd, resolved.c_str(), flags, mask, buf, false));
+
+        default:
+            return -EINVAL;
+    }
+
+    return syscall_no_intercept(SYS_statx, dirfd, path, flags, mask, buf);
+}
+#endif
 
 int
 hook_lstat(const char* path, struct stat* buf) {
@@ -220,8 +250,6 @@ hook_preadv(unsigned long fd, const struct iovec* iov, unsigned long iovcnt,
 */
 int
 hook_write(unsigned int fd, const char* buf, size_t count) {
-    
-
     if(fd_exist(fd)) {
         return with_errno(sfs_write(fd, buf, count));
     }
@@ -429,7 +457,7 @@ hook_dup3(unsigned int oldfd, unsigned int newfd, int flags) {
 }
 
 int
-hook_getdents(unsigned int fd, struct linux_dirent* dirp, unsigned int count) {
+hook_getdents(unsigned int fd, struct dirent* dirp, unsigned int count) {
     if(fd_exist(fd)) {
         return with_errno(sfs_getdents(fd, dirp, count));
     }
@@ -438,7 +466,7 @@ hook_getdents(unsigned int fd, struct linux_dirent* dirp, unsigned int count) {
 
 
 int
-hook_getdents64(unsigned int fd, struct linux_dirent64* dirp,
+hook_getdents64(unsigned int fd, struct dirent64* dirp,
                 unsigned int count) {
     if(fd_exist(fd)) {
         return with_errno(sfs_getdents64(fd, dirp, count));

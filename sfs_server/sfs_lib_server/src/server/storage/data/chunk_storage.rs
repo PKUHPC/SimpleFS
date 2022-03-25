@@ -124,7 +124,7 @@ impl ChunkStorage{
                     offset += n as u64;
                     read_tot += n as u64;
                 },
-                Err(e) =>{
+                Err(_e) =>{
                     error_msg("server::storage::chunk_storage::read_chunk".to_string(), "error occurs while reading from chunks".to_string());
                     return Err(-1);
                 },
@@ -140,16 +140,16 @@ impl ChunkStorage{
     pub async fn trim_chunk_space(file_path: &String, chunk_start: u64){
         let chunk_dir = ChunkStorage::absolute(&ChunkStorage::get_chunks_dir(file_path));
         let dir_iter = std::fs::read_dir(Path::new(&chunk_dir)).unwrap();
-        let mut err = false;
+        let err = false;
         for entry in dir_iter{
             let entry = entry.unwrap();
             let chunk_path = entry.path();
             let chunk_id = chunk_path.file_name().unwrap().to_str().unwrap().parse::<u64>().unwrap();
             if chunk_id >= chunk_start{
-                if let Err(e) = fs::remove_file(chunk_path.as_path()).await{
+                if let Err(_e) = fs::remove_file(chunk_path.as_path()).await{
                     continue;
-                    error_msg("server::storage::chunk_storage::trim_chunk_space".to_string(), "fail to remove file".to_string());
-                    err = true;
+                    //error_msg("server::storage::chunk_storage::trim_chunk_space".to_string(), "fail to remove file".to_string());
+                    //err = true;
                 }
             }
         }
@@ -164,18 +164,18 @@ impl ChunkStorage{
         }
         let chunk_path = ChunkStorage::absolute(&ChunkStorage::get_chunks_path(file_path, chunk_id));
         let f_res = fs::OpenOptions::new().write(true).read(true).open(Path::new(&chunk_path)).await;
-        if let Err(e) = f_res{
+        if let Err(_e) = f_res{
             return;
         }
         let f = f_res.unwrap();
-        if let Err(e) = f.set_len(length).await{
+        if let Err(_e) = f.set_len(length).await{
             error_msg("server::storage::chunk_storage::truncate_chunk_file".to_string(), "error occurs while truncating chunk file".to_string());
         }
         
     }
     pub fn chunk_stat() -> ChunkStat{
         let statfs = statfs(Path::new(CNK.lock().unwrap().get_root_path()));
-        if let Err(e) = statfs{
+        if let Err(_e) = statfs{
             error_msg("server::storage::chunk_storage::chunk_stat".to_string(), "error occurs while get fs stat".to_string());
             return ChunkStat{
                 chunk_size: 0,

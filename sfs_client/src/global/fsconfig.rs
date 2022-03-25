@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-pub static hostfile_path: &str = "hostfile";
+pub static HOSTFILE_PATH: &str = "hostfile";
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SFSConfig {
     pub atime_state: bool,

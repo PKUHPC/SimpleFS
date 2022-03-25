@@ -1,7 +1,7 @@
-use std::{fs, sync::Arc};
+use std::sync::Arc;
 
 static SEPERATOR: char = '/';
-pub static max_length: i64 = 4096;
+pub static MAX_LENGTH: i64 = 4096;
 pub struct Stat {
     st_dev: u32,
     st_ino: u16,
@@ -36,8 +36,8 @@ impl Stat {
 pub fn match_components(path: String, components: Arc<Vec<String>>) -> (usize, usize) {
     let mut matched: usize = 0;
     let mut processed_components: usize = 0;
-    let mut comp_size: usize = 0; // size of current component
-    let mut start: usize = 0; // start index of curr component
+    let mut comp_size: usize; // size of current component
+    let mut start: usize; // start index of curr component
     let mut end: usize = 0; // end index of curr component (last processed Path Separator "separator")
 
     while end + 1 < path.len() {
