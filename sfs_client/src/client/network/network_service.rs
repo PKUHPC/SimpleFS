@@ -1,20 +1,16 @@
+use futures::stream::iter;
 use lazy_static::*;
 use serde::Serialize;
-use std::{io::Error, net::IpAddr};
-use tarpc::{
-    client::{self, RpcError},
-    context,
-    tokio_serde::formats::Json,
-};
-use tokio::task::JoinHandle;
+use std::{io::Error, collections::{HashMap, hash_map::Entry}};
 
 use crate::{
     client::endpoint::SFSEndpoint,
     global::network::{
-        post::{Post, PostOption, PostResult},
-        rpc::SFSServerClient,
+        post::{PostOption, option2i},
     },
 };
+use sfs_rpc::sfs_server::{Post, PostResult};
+use sfs_rpc::sfs_server::sfs_handle_client::SfsHandleClient;
 
 pub struct NetworkService {}
 lazy_static! {
@@ -29,70 +25,42 @@ impl NetworkService {
     ) -> Result<PostResult, Error> {
         let serialized_data = serde_json::to_string(&data)?;
         let post = Post {
-            option: opt.clone(),
+            option: option2i(opt),
             data: serialized_data,
         };
-        let buf = serde_json::to_string(&post)?;
-
-        let addr = (
-            IpAddr::V4(
-                endp.addr
-                    .as_str()
-                    .parse()
-                    .expect("fail to parse endpoint address"),
-            ),
-            8082,
-        );
-        let transport = tarpc::serde_transport::tcp::connect(&addr, Json::default);
-        let client = SFSServerClient::new(client::Config::default(), transport.await?).spawn();
-
-        let post_result = async move {
-            tokio::select! {
-                res1 = client.handle(context::current(),  buf.clone()) => {res1}
-            }
-        }
-        .await;
+        let mut client = SfsHandleClient::connect(format!("http://{}:{}", endp.addr, 8082)).await.unwrap();
+        let request = tonic::Request::new(iter(vec![post]));
+        let post_result = client.handle(request).await;
         if let Err(e) = post_result {
             return Err(Error::new(std::io::ErrorKind::NotConnected, e.to_string()));
         }
-        let result = post_result.unwrap();
-        return Ok(serde_json::from_str(&result).unwrap());
+        let mut response = post_result.unwrap().into_inner();
+        return Ok(response.message().await.unwrap().unwrap());
     }
 
     #[tokio::main]
     pub async fn group_post(posts: Vec<(SFSEndpoint, Post)>) -> Result<Vec<PostResult>, Error> {
         let mut post_results: Vec<PostResult> = Vec::new();
-        let mut handles: Vec<JoinHandle<Result<String, RpcError>>> = Vec::new();
-        for post in posts {
-            let endp = post.0;
-            let buf = serde_json::to_string(&post.1)?;
-
-            let addr = (
-                IpAddr::V4(
-                    endp.addr
-                        .as_str()
-                        .parse()
-                        .expect("fail to parse endpoint address"),
-                ),
-                8082,
-            );
-            let transport = tarpc::serde_transport::tcp::connect(&addr, Json::default);
-            let client = SFSServerClient::new(client::Config::default(), transport.await?).spawn();
-
-            let post_handle = tokio::spawn(async move {
-                tokio::select! {
-                    res1 = client.handle(context::current(),  buf.clone()) => {res1}
-                }
-            });
-            handles.push(post_handle);
-        }
-        for handle in handles {
-            let result = handle.await.unwrap();
-            if let Err(_e) = result {
-                return Err(Error::new(std::io::ErrorKind::Other, "remove failed"));
+        let mut post_map: HashMap<SFSEndpoint, Vec<Post>> = HashMap::new();
+        for (endp, post) in posts{
+            match post_map.entry(endp){
+                Entry::Occupied(mut e) => {
+                    e.get_mut().push(post);
+                },
+                Entry::Vacant(e) => {
+                    e.insert(vec![post]);
+                },
             }
-            let data = result.unwrap();
-            post_results.push(serde_json::from_str(&data).unwrap());
+        }
+        for (endp, posts) in post_map{
+            let mut client = SfsHandleClient::connect(format!("http://{}:{}", endp.addr, 8082)).await.unwrap();
+            let request = tonic::Request::new(iter(posts));
+            let post_result = client.handle(request).await;
+            if let Err(e) = post_result {
+                return Err(Error::new(std::io::ErrorKind::NotConnected, e.to_string()));
+            }
+            let mut response = post_result.unwrap().into_inner();
+            post_results.push(response.message().await.unwrap().unwrap());
         }
         return Ok(post_results);
     }

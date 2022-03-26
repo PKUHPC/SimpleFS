@@ -21,7 +21,7 @@ use crate::global::util::path_util::dirname;
 
 use super::config::CHECK_PARENT_DIR;
 #[allow(unused_imports)]
-use super::context::{DynamicContext, interception_enabled};
+use super::context::{interception_enabled, DynamicContext};
 use super::network::forward_msg::{
     forward_create, forward_decr_size, forward_get_chunk_stat, forward_get_dirents,
     forward_get_metadentry_size, forward_read, forward_remove, forward_truncate,

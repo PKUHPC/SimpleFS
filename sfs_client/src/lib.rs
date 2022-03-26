@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::ffi::CStr;
 
 use client::{
@@ -188,9 +186,10 @@ pub extern "C" fn intercept_enabled() -> bool {
 
 #[cfg(test)]
 mod tests {
-
+    #[allow(unused_imports)]
     use libc::{c_char, dirent, O_CREAT, O_RDWR, SEEK_SET, S_IFDIR, S_IFREG};
 
+    #[allow(unused_imports)]
     use crate::client::{
         context::{DynamicContext, StaticContext},
         path::resolve,

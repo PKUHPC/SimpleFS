@@ -6,7 +6,6 @@ use sfs_lib_server::{
         network::{
             config::CHUNK_SIZE,
             forward_data::{ReadData, ReadResult, TruncData, WriteData},
-            post::PostResult,
         },
         util::arith_util::{block_index, block_overrun},
     },
@@ -15,8 +14,9 @@ use sfs_lib_server::{
 use tokio::task::JoinHandle;
 
 use crate::task::{ReadChunkTask, WriteChunkTask};
+use sfs_rpc::sfs_server::PostResult;
 
-pub async fn handle_write(input: WriteData) -> String {
+pub async fn handle_write(input: WriteData) -> PostResult {
     let path = input.path;
 
     let mut chunk_ids_host: Vec<u64> = vec![0; input.chunk_n as usize];
@@ -103,7 +103,7 @@ pub async fn handle_write(input: WriteData) -> String {
         err: false,
         data: write_tot.to_string(),
     };
-    return serde_json::to_string(&post_res).unwrap();
+    return post_res;
 }
 async fn write_file(args: &WriteChunkTask) -> u64 {
     //println!("{:?}", args);
@@ -125,7 +125,7 @@ async fn write_file(args: &WriteChunkTask) -> u64 {
 
 #[allow(unused_variables)]
 #[allow(unused_assignments)]
-pub async fn handle_read(input: ReadData) -> String {
+pub async fn handle_read(input: ReadData) -> PostResult {
     let path = input.path;
 
     let mut chunk_ids_host: Vec<u64> = vec![0; input.chunk_n as usize];
@@ -210,7 +210,7 @@ pub async fn handle_read(input: ReadData) -> String {
         err: false,
         data: serde_json::to_string(&result_data).unwrap(),
     };
-    return serde_json::to_string(&post_res).unwrap();
+    return post_res;
 }
 
 async fn read_file(args: &ReadChunkTask) -> (u64, u64, String) {
@@ -230,7 +230,7 @@ async fn read_file(args: &ReadChunkTask) -> (u64, u64, String) {
     }
 }
 
-pub async fn handle_trunc(input: TruncData) -> String {
+pub async fn handle_trunc(input: TruncData) -> PostResult {
     let path = input.path;
     let size = input.new_size;
     let mut chunk_id_start = block_index(size, CHUNK_SIZE);
@@ -244,5 +244,5 @@ pub async fn handle_trunc(input: TruncData) -> String {
         err: false,
         data: "".to_string(),
     };
-    return serde_json::to_string(&post_res).unwrap();
+    return post_res;
 }

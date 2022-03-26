@@ -1,0 +1,15 @@
+syntax = "proto3";
+package sfs_server;
+
+service SFSHandle{
+    rpc handle(stream Post) returns (stream PostResult);
+}
+
+message Post{
+    int32 option = 1;
+    string data = 2;
+}
+message PostResult{
+    bool err = 1; 
+    string data = 2;
+}

@@ -16,7 +16,8 @@ use crate::global::network::forward_data::{
     ChunkStat, CreateData, DecrData, DirentData, ReadData, ReadResult, SerdeString, TruncData,
     UpdateMetadentryData, WriteData,
 };
-use crate::global::network::post::{Post, PostOption, PostResult};
+use crate::global::network::post::{PostOption, option2i};
+use sfs_rpc::sfs_server::{Post, PostResult};
 use crate::global::util::arith_util::{block_index, chunk_lpad, chunk_rpad, offset_to_chunk_id};
 
 pub fn forward_stat(path: &String) -> Result<String, Error> {
@@ -106,7 +107,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
                 .unwrap()
                 .clone(),
             Post {
-                option: PostOption::Remove,
+                option: option2i(PostOption::Remove),
                 data: serde_json::to_string(&SerdeString { str: path.clone() }).unwrap(),
             },
         ));
@@ -125,7 +126,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
                     .unwrap()
                     .clone(),
                 Post {
-                    option: PostOption::Remove,
+                    option: option2i(PostOption::Remove),
                     data: serde_json::to_string(&SerdeString { str: path.clone() }).unwrap(),
                 },
             ));
@@ -135,7 +136,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
             posts.push((
                 endp.clone(),
                 Post {
-                    option: PostOption::Remove,
+                    option: option2i(PostOption::Remove),
                     data: serde_json::to_string(&SerdeString { str: path.clone() }).unwrap(),
                 },
             ));
@@ -160,7 +161,7 @@ pub fn forward_get_chunk_stat() -> (i32, ChunkStat) {
         posts.push((
             endp.clone(),
             Post {
-                option: PostOption::ChunkStat,
+                option: option2i(PostOption::ChunkStat),
                 data: "0".to_string(),
             },
         ));
@@ -265,7 +266,7 @@ pub fn forward_truncate(path: &String, old_size: i64, new_size: i64) -> i32 {
             new_size,
         };
         let post = Post {
-            option: PostOption::Trunc,
+            option: option2i(PostOption::Trunc),
             data: serde_json::to_string(&trunc_data).unwrap(),
         };
         posts.push((
@@ -512,7 +513,7 @@ pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>) {
                 .unwrap()
                 .clone(),
             Post {
-                option: PostOption::GetDirents,
+                option: option2i(PostOption::GetDirents),
                 data: serde_json::to_string(&DirentData { path: path.clone() }).unwrap(),
             },
         ));
