@@ -464,7 +464,6 @@ hook_getdents(unsigned int fd, struct dirent* dirp, unsigned int count) {
     return syscall_no_intercept_wrapper(SYS_getdents, fd, dirp, count);
 }
 
-
 int
 hook_getdents64(unsigned int fd, struct dirent64* dirp,
                 unsigned int count) {

@@ -16,9 +16,9 @@ use crate::global::network::forward_data::{
     ChunkStat, CreateData, DecrData, DirentData, ReadData, ReadResult, SerdeString, TruncData,
     UpdateMetadentryData, WriteData,
 };
-use crate::global::network::post::{PostOption, option2i};
-use sfs_rpc::sfs_server::{Post, PostResult};
+use crate::global::network::post::{option2i, PostOption};
 use crate::global::util::arith_util::{block_index, chunk_lpad, chunk_rpad, offset_to_chunk_id};
+use sfs_rpc::sfs_server::{Post, PostResult};
 
 pub fn forward_stat(path: &String) -> Result<String, Error> {
     let endp_id = StaticContext::get_instance()

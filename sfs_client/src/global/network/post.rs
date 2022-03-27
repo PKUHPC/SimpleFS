@@ -18,7 +18,7 @@ pub enum PostOption {
     GetDirents,
     Unknown,
 }
-impl Clone for PostOption{
+impl Clone for PostOption {
     fn clone(&self) -> Self {
         match self {
             Self::Lookup => Self::Lookup,
@@ -40,7 +40,7 @@ impl Clone for PostOption{
     }
 }
 
-pub fn i2option(n: i32) -> PostOption{
+pub fn i2option(n: i32) -> PostOption {
     match n {
         0 => PostOption::Lookup,
         1 => PostOption::Stat,
@@ -55,11 +55,11 @@ pub fn i2option(n: i32) -> PostOption{
         10 => PostOption::ChunkStat,
         11 => PostOption::DecrSize,
         12 => PostOption::Trunc,
-        13 => PostOption::GetDirents,      
+        13 => PostOption::GetDirents,
         _ => PostOption::Unknown,
     }
 }
-pub fn option2i(option: PostOption) -> i32{
+pub fn option2i(option: PostOption) -> i32 {
     match option {
         PostOption::Lookup => 0,
         PostOption::Stat => 1,
@@ -74,7 +74,7 @@ pub fn option2i(option: PostOption) -> i32{
         PostOption::ChunkStat => 10,
         PostOption::DecrSize => 11,
         PostOption::Trunc => 12,
-        PostOption::GetDirents => 13,      
+        PostOption::GetDirents => 13,
         PostOption::Unknown => -1,
     }
 }

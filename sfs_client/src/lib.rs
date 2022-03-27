@@ -184,11 +184,10 @@ pub extern "C" fn get_md_mode(path: *const c_char) -> i32 {
 pub extern "C" fn intercept_enabled() -> bool {
     interception_enabled()
 }
-
 #[cfg(test)]
 mod tests {
     #[allow(unused_imports)]
-    use libc::{c_char, dirent, O_CREAT, O_RDWR, SEEK_SET, S_IFDIR, S_IFREG, stat};
+    use libc::{c_char, dirent, stat, O_CREAT, O_RDWR, SEEK_SET, S_IFDIR, S_IFREG};
 
     #[allow(unused_imports)]
     use crate::client::{
@@ -758,7 +757,7 @@ mod tests {
     #[test]
     pub fn test11() {
         let s = vec!['a' as i8; 4 * CHUNK_SIZE as usize];
-    
+
         let path = "/file1\0".to_string();
         let fd = sfs_open(
             path.as_str().as_ptr() as *const c_char,
@@ -778,7 +777,7 @@ mod tests {
                 .unwrap()
                 .get_length()
         );
-    
+
         let res = sfs_write(fd, s.as_ptr() as *mut i8, (3 * CHUNK_SIZE + 10) as i64);
         if res <= 0 {
             println!("write error ...");
@@ -786,7 +785,7 @@ mod tests {
         } else {
             println!("{} bytes written ...", res);
         }
-    
+
         sfs_lseek(fd, 13, SEEK_SET);
         let mut buf = vec![0 as u8; 3 * CHUNK_SIZE as usize];
         let res = sfs_read(fd, buf.as_mut_ptr() as *mut i8, 3 * CHUNK_SIZE as i64);
@@ -797,5 +796,4 @@ mod tests {
             println!("read: {}", String::from_utf8(buf[0..20].to_vec()).unwrap());
         }
     }
-    
 }

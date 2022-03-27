@@ -17,13 +17,13 @@ impl SFSEndpoint {
         }
     }
 }
-impl PartialEq for SFSEndpoint{
+impl PartialEq for SFSEndpoint {
     fn eq(&self, other: &Self) -> bool {
         self.addr.eq(&other.addr)
     }
 }
-impl Eq for SFSEndpoint{}
-impl Hash for SFSEndpoint{
+impl Eq for SFSEndpoint {}
+impl Hash for SFSEndpoint {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.addr.hash(state);
     }

@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 #[allow(unused_imports)]
 use libc::{
     blkcnt_t, blksize_t, c_int, c_void, dev_t, dirent, dirent64, gid_t, ino_t, memcpy, memset,
-    mode_t, nlink_t, off_t, stat, statfs, statvfs, strcpy, time_t, uid_t, DT_DIR, DT_REG, O_APPEND,
+    mode_t, nlink_t, off_t, statfs, statvfs, strcpy, time_t, uid_t, DT_DIR, DT_REG, O_APPEND,
     O_CREAT, O_DIRECTORY, O_EXCL, O_PATH, O_RDONLY, O_TRUNC, O_WRONLY, SEEK_CUR, SEEK_DATA,
     SEEK_END, SEEK_HOLE, SEEK_SET, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFMT, S_IFREG, S_IFSOCK,
 };
@@ -238,9 +238,15 @@ pub extern "C" fn sfs_access(path: *const c_char, _mask: i32, _follow_links: boo
     }
     return 0;
 }
-// exactly the same as stat in libc but with all fields public
-#[derive(Debug)]
-pub struct Stat {
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct timespec {
+    pub tv_sec: i64,
+    pub tv_nsec: i64,
+}
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct stat {
     pub st_dev: dev_t,
     pub st_ino: ino_t,
     pub st_nlink: nlink_t,
@@ -252,13 +258,10 @@ pub struct Stat {
     pub st_size: off_t,
     pub st_blksize: blksize_t,
     pub st_blocks: blkcnt_t,
-    pub st_atime: time_t,
-    pub st_atime_nsec: i64,
-    pub st_mtime: time_t,
-    pub st_mtime_nsec: i64,
-    pub st_ctime: time_t,
-    pub st_ctime_nsec: i64,
-    pub __unused: [i64; 3],
+    pub st_atim: timespec,
+    pub st_mtim: timespec,
+    pub st_ctim: timespec,
+    pub __glibc_reserved: [i64; 3],
 }
 #[no_mangle]
 pub extern "C" fn sfs_stat(path: *const c_char, buf: *mut stat, _follow_links: bool) -> i32 {
@@ -710,8 +713,17 @@ pub extern "C" fn sfs_opendir(path: *const c_char) -> i32 {
 fn align(size: usize, step: usize) -> usize {
     (size + step) & (!step + 1)
 }
+
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct linux_dirent {
+    pub d_ino: u64,
+    pub d_off: u64,
+    pub d_reclen: u16,
+    pub d_name: [u8; 256],
+}
 #[no_mangle]
-pub extern "C" fn sfs_getdents(fd: i32, dirp: *mut dirent, count: i64) -> i32 {
+pub extern "C" fn sfs_getdents(fd: i32, dirp: *mut linux_dirent, count: i64) -> i32 {
     unsafe {
         memset(dirp as *mut c_void, 0, count as usize);
     }
@@ -736,11 +748,12 @@ pub extern "C" fn sfs_getdents(fd: i32, dirp: *mut dirent, count: i64) -> i32 {
     let size = opendir.lock().unwrap().get_size() as i64;
     while pos < size {
         let de = opendir.lock().unwrap().getdent(pos);
-        let total_size = align(19 + de.get_name().len() + 3, 8);
+        let total_size = align(18 + de.get_name().len() + 1 + 1, 8);
         if total_size as i64 > count - written {
             break;
         }
-        let current_dirp = unsafe { (dirp as *mut c_char).offset(written as isize) as *mut dirent };
+        let current_dirp =
+            unsafe { (dirp as *mut c_char).offset(written as isize) as *mut linux_dirent };
         let mut s = DefaultHasher::new();
         let p = opendir.lock().unwrap().get_path().clone() + "/" + &de.get_name();
         p.hash(&mut s);
@@ -753,28 +766,25 @@ pub extern "C" fn sfs_getdents(fd: i32, dirp: *mut dirent, count: i64) -> i32 {
                 FileType::SFS_REGULAR => c = DT_REG,
                 FileType::SFS_DIRECTORY => c = DT_DIR,
             }
-            (*current_dirp).d_type = c;
+            /*
             strcpy(
                 (*current_dirp).d_name.as_ptr() as *mut i8,
                 name.as_ptr() as *const i8,
             );
-            /*
+            */
             memcpy(
-                (*current_dirp).d_name.as_ptr() as *mut c_void,
+                (current_dirp as *const c_char).offset(18) as *mut c_void,
                 name.as_ptr() as *const c_void,
                 name.len(),
             );
-            */
-            (*current_dirp).d_off = pos;
+            *(current_dirp as *mut u8).offset(total_size as isize - 1) = c;
+            (*current_dirp).d_off = pos as u64;
             pos += 1;
             written += total_size as i64;
         }
     }
-    if written == 0 {
-        return -1;
-    }
     opendir.lock().unwrap().set_pos(pos);
-    return 0;
+    return written as i32;
 }
 #[no_mangle]
 pub extern "C" fn sfs_getdents64(fd: i32, dirp: *mut dirent64, count: i64) -> i32 {
@@ -802,7 +812,7 @@ pub extern "C" fn sfs_getdents64(fd: i32, dirp: *mut dirent64, count: i64) -> i3
     let size = opendir.lock().unwrap().get_size() as i64;
     while pos < size {
         let de = opendir.lock().unwrap().getdent(pos);
-        let total_size = align(19 + de.get_name().len() + 3, 8);
+        let total_size = align(19 + de.get_name().len() + 1, 8);
         if total_size as i64 > count - written {
             break;
         }

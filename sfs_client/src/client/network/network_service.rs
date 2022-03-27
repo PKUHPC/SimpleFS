@@ -1,16 +1,17 @@
 use futures::stream::iter;
 use lazy_static::*;
 use serde::Serialize;
-use std::{io::Error, collections::{HashMap, hash_map::Entry}};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    io::Error,
+};
 
 use crate::{
     client::endpoint::SFSEndpoint,
-    global::network::{
-        post::{PostOption, option2i},
-    },
+    global::network::post::{option2i, PostOption},
 };
-use sfs_rpc::sfs_server::{Post, PostResult};
 use sfs_rpc::sfs_server::sfs_handle_client::SfsHandleClient;
+use sfs_rpc::sfs_server::{Post, PostResult};
 
 pub struct NetworkService {}
 lazy_static! {
@@ -28,7 +29,9 @@ impl NetworkService {
             option: option2i(opt),
             data: serialized_data,
         };
-        let mut client = SfsHandleClient::connect(format!("http://{}:{}", endp.addr, 8082)).await.unwrap();
+        let mut client = SfsHandleClient::connect(format!("http://{}:{}", endp.addr, 8082))
+            .await
+            .unwrap();
         let request = tonic::Request::new(iter(vec![post]));
         let post_result = client.handle(request).await;
         if let Err(e) = post_result {
@@ -42,18 +45,20 @@ impl NetworkService {
     pub async fn group_post(posts: Vec<(SFSEndpoint, Post)>) -> Result<Vec<PostResult>, Error> {
         let mut post_results: Vec<PostResult> = Vec::new();
         let mut post_map: HashMap<SFSEndpoint, Vec<Post>> = HashMap::new();
-        for (endp, post) in posts{
-            match post_map.entry(endp){
+        for (endp, post) in posts {
+            match post_map.entry(endp) {
                 Entry::Occupied(mut e) => {
                     e.get_mut().push(post);
-                },
+                }
                 Entry::Vacant(e) => {
                     e.insert(vec![post]);
-                },
+                }
             }
         }
-        for (endp, posts) in post_map{
-            let mut client = SfsHandleClient::connect(format!("http://{}:{}", endp.addr, 8082)).await.unwrap();
+        for (endp, posts) in post_map {
+            let mut client = SfsHandleClient::connect(format!("http://{}:{}", endp.addr, 8082))
+                .await
+                .unwrap();
             let request = tonic::Request::new(iter(posts));
             let post_result = client.handle(request).await;
             if let Err(e) = post_result {
