@@ -24,6 +24,7 @@ extern "C" {
 static MAX_INTERNAL_FDS: u32 = 256;
 static MAX_OPEN_FDS: u32 = 1024;
 static MIN_INTERNEL_FD: u32 = MAX_OPEN_FDS - MAX_INTERNAL_FDS;
+#[allow(dead_code)]
 static MAX_USER_FDS: u32 = MIN_INTERNEL_FD;
 static MAX_INTERNEL_FDS: u32 = 100000;
 
@@ -83,6 +84,7 @@ pub enum RelativizeStatus {
     Error,
 }
 // Context that will change in multi-thread
+#[allow(dead_code)]
 pub struct DynamicContext {
     open_file_map_: Arc<Mutex<OpenFileMap>>,
     internal_fds_: Mutex<BitVec>,

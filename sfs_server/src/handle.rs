@@ -51,7 +51,7 @@ pub async fn handle_write(input: WriteData) -> PostResult {
         }
         chunk_ids_host[chunk_id_curr as usize] = chunk_id_file;
         if chunk_id_file == input.chunk_start && input.offset > 0 {
-            let offset_size = CHUNK_SIZE - input.offset as u64;
+            let offset_size = if CHUNK_SIZE - input.offset as u64 > chunk_size_left_host {chunk_size_left_host} else {CHUNK_SIZE - input.offset as u64};
 
             buf_ptr[chunk_id_curr as usize] = chunk_ptr;
             chunk_size[chunk_id_curr as usize] = offset_size;
@@ -157,7 +157,7 @@ pub async fn handle_read(input: ReadData) -> PostResult {
         }
         chunk_ids_host[chunk_id_curr as usize] = chunk_id_file;
         if chunk_id_file == input.chunk_start && input.offset > 0 {
-            let offset_size = CHUNK_SIZE - input.offset as u64;
+            let offset_size = if CHUNK_SIZE - input.offset as u64 > chunk_size_left_host {chunk_size_left_host} else {CHUNK_SIZE - input.offset as u64};
 
             chunk_size[chunk_id_curr as usize] = offset_size;
             chunk_ptr += offset_size;
@@ -216,7 +216,7 @@ pub async fn handle_read(input: ReadData) -> PostResult {
 async fn read_file(args: &ReadChunkTask) -> (u64, u64, String) {
     //println!("{:?}", args);
     //println!("reading...");
-    let mut buf = [0 as u8; CHUNK_SIZE as usize];
+    let mut buf = vec![0; CHUNK_SIZE as usize];
     if let Ok(nreads) =
         ChunkStorage::read_chunk(&args.path, args.chunk_id, &mut buf, args.size, args.offset).await
     {

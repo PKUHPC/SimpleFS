@@ -100,7 +100,7 @@ impl ChunkStorage{
         }
         Ok(wrote_tot)
     }
-    pub async fn read_chunk(file_path: &String, chunk_id: u64, mut buf: &mut [u8], size: u64, mut offset: u64) -> Result<u64, i32>{
+    pub async fn read_chunk(file_path: &String, chunk_id: u64, buf: &mut Vec<u8>, size: u64, mut offset: u64) -> Result<u64, i32>{
         if size + offset > CNK.lock().unwrap().get_chunk_size(){
             error_msg("server::storage::chunk_storage::read_chunk".to_string(), "beyond chunk storage range".to_string());
         }
@@ -114,7 +114,7 @@ impl ChunkStorage{
         let f = open_res.unwrap();
         let mut read_tot:u64 = 0;
         let tmp = buf;
-        buf = &mut tmp[0..size as usize];
+        let mut buf = &mut tmp[0..size as usize];
         while !buf.is_empty() {
             match f.read_at(buf, offset) {
                 Ok(0) => break,

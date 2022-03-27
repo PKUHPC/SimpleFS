@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 static SEPERATOR: char = '/';
 pub static MAX_LENGTH: i64 = 4096;
+#[allow(dead_code)]
 pub struct Stat {
     st_dev: u32,
     st_ino: u16,

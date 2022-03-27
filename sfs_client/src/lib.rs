@@ -6,6 +6,7 @@ use client::{
     util::get_metadata,
 };
 use libc::{c_char, strcpy};
+
 pub mod client;
 pub mod global;
 
@@ -187,7 +188,7 @@ pub extern "C" fn intercept_enabled() -> bool {
 #[cfg(test)]
 mod tests {
     #[allow(unused_imports)]
-    use libc::{c_char, dirent, O_CREAT, O_RDWR, SEEK_SET, S_IFDIR, S_IFREG};
+    use libc::{c_char, dirent, O_CREAT, O_RDWR, SEEK_SET, S_IFDIR, S_IFREG, stat};
 
     #[allow(unused_imports)]
     use crate::client::{
@@ -199,6 +200,7 @@ mod tests {
             sfs_write, Stat,
         },
     };
+    use crate::global::network::config::CHUNK_SIZE;
 
     #[test]
     pub fn test0() {
@@ -208,7 +210,6 @@ mod tests {
             resolve(&"/home/dev/Desktop/mount/file1/a/".to_string(), false)
         );
     }
-    /*
     #[test]
     pub fn test1() {
         let s = "hello, here is the test data of sfs small-data local-host open/read/write test";
@@ -257,8 +258,8 @@ mod tests {
         }
 
         sfs_lseek(fd, 13, SEEK_SET);
-        let mut buf = [0 as u8; 100];
-        let res = sfs_read(fd, buf.as_mut_ptr() as *mut i8, 100);
+        let mut buf = vec![0 as u8; CHUNK_SIZE as usize];
+        let res = sfs_read(fd, buf.as_mut_ptr() as *mut i8, CHUNK_SIZE as i64);
         if res <= 0 {
             println!("read error ...");
             return;
@@ -266,6 +267,7 @@ mod tests {
             println!("read: {}", String::from_utf8(buf.to_vec()).unwrap());
         }
     }
+
     #[test]
     pub fn test2() {
         let s = "hello, here is the test data of sfs small-data local-host create/opendir test"
@@ -495,7 +497,7 @@ mod tests {
         };
         let res = sfs_stat(
             fpath_file1.as_str().as_ptr() as *const c_char,
-            &mut stat as *mut Stat,
+            &mut stat as *mut Stat as *mut stat,
             false,
         );
         if res < 0 {
@@ -533,7 +535,7 @@ mod tests {
         };
         let res = sfs_stat(
             fpath_file1.as_str().as_ptr() as *const c_char,
-            &mut stat as *mut Stat,
+            &mut stat as *mut Stat as *mut stat,
             false,
         );
         if res < 0 {
@@ -753,5 +755,47 @@ mod tests {
             println!("read from dupped fd: {}", String::from_utf8(buf).unwrap());
         }
     }
-    */
+    #[test]
+    pub fn test11() {
+        let s = vec!['a' as i8; 4 * CHUNK_SIZE as usize];
+    
+        let path = "/file1\0".to_string();
+        let fd = sfs_open(
+            path.as_str().as_ptr() as *const c_char,
+            S_IFREG,
+            O_CREAT | O_RDWR,
+        );
+        if fd <= 0 {
+            println!("open error ...");
+            return;
+        }
+        println!("open result: {}", fd);
+        println!(
+            "ofm length: {}",
+            DynamicContext::get_instance()
+                .get_ofm()
+                .lock()
+                .unwrap()
+                .get_length()
+        );
+    
+        let res = sfs_write(fd, s.as_ptr() as *mut i8, (3 * CHUNK_SIZE + 10) as i64);
+        if res <= 0 {
+            println!("write error ...");
+            return;
+        } else {
+            println!("{} bytes written ...", res);
+        }
+    
+        sfs_lseek(fd, 13, SEEK_SET);
+        let mut buf = vec![0 as u8; 3 * CHUNK_SIZE as usize];
+        let res = sfs_read(fd, buf.as_mut_ptr() as *mut i8, 3 * CHUNK_SIZE as i64);
+        if res <= 0 {
+            println!("read error ...");
+            return;
+        } else {
+            println!("read: {}", String::from_utf8(buf[0..20].to_vec()).unwrap());
+        }
+    }
+    
 }
