@@ -58,8 +58,7 @@ pub fn enable_interception() {
 pub fn disable_interception() {
     *INTERCEPTION_ENABLE.lock().unwrap() = InterceptionStat::Disabled;
 }
-#[no_mangle]
-pub extern "C" fn interception_enabled() -> bool {
+pub fn interception_enabled() -> bool {
     let stat = (*INTERCEPTION_ENABLE.lock().unwrap()).clone();
     match stat {
         InterceptionStat::Disabled => {

@@ -47,7 +47,7 @@ extern "C" void set_cwd(const char* cwd, bool internal);
 extern "C" void unset_env_cwd();
 extern "C" void get_sys_cwd(char* cwd);
 extern "C" int get_md_mode(const char* path);
-extern "C" bool interception_enabled();
+extern "C" bool enable_interception();
 
 
 /*

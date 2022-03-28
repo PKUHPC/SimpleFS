@@ -9,6 +9,7 @@ extern "C"{
 #include <optional>
 #include "hook.hpp"
 
+bool interception_enabled = false;
 static int
 hook(long syscall_number,
 			long arg0, long arg1,
@@ -16,7 +17,9 @@ hook(long syscall_number,
 			long arg4, long arg5,
 			long *result)
 {
-    if(!interception_enabled()){
+    if(!interception_enabled){
+        enable_interception();
+        interception_enabled = true;
         return 1;
     }
 	switch(syscall_number) {

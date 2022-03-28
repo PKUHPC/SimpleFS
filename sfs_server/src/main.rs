@@ -1,6 +1,6 @@
 pub mod handle;
 pub mod task;
-use libc::{getgid, getuid, S_IFDIR, S_IRWXG, S_IRWXO, S_IRWXU, ENOENT, EINVAL};
+use libc::{getgid, getuid, EINVAL, ENOENT, S_IFDIR, S_IRWXG, S_IRWXO, S_IRWXU};
 use sfs_lib_server::global::network::post::i2option;
 use sfs_lib_server::server::{
     filesystem::storage_context::StorageContext, storage::data::chunk_storage::*,
@@ -9,7 +9,7 @@ use sfs_lib_server::server::{
 use sfs_lib_server::{
     global::network::post::PostOption::*,
     global::{
-        fsconfig::SFSConfig,
+        fsconfig::{SFSConfig, ENABLE_OUTPUT},
         metadata::Metadata,
         network::{
             config::CHUNK_SIZE,
@@ -66,13 +66,12 @@ async fn handle_post(post: &Post) -> PostResult {
         Stat => {
             let serde_string: SerdeString = serde_json::from_str(&post.data).unwrap();
             let path = serde_string.str;
-            println!("handling metadata of '{}'....", path);
+            if ENABLE_OUTPUT {
+                println!("handling metadata of '{}'....", path);
+            }
             let md_res = MetadataDB::get_instance().get(&path);
             if let Some(md) = md_res {
-                return PostResult {
-                    err: 0,
-                    data: md,
-                };
+                return PostResult { err: 0, data: md };
             } else {
                 return PostResult {
                     err: ENOENT,
@@ -82,7 +81,9 @@ async fn handle_post(post: &Post) -> PostResult {
         }
         Create => {
             let create_data: CreateData = serde_json::from_str(post.data.as_str()).unwrap();
-            println!("handling create of '{}'....", create_data.path);
+            if ENABLE_OUTPUT {
+                println!("handling create of '{}'....", create_data.path);
+            }
             let mode = create_data.mode;
             let mut md = Metadata::new();
             md.set_mode(mode);
@@ -99,7 +100,9 @@ async fn handle_post(post: &Post) -> PostResult {
         Remove => {
             let serde_string: SerdeString = serde_json::from_str(&post.data).unwrap();
             let path = serde_string.str;
-            println!("handling remove of '{}'....", path);
+            if ENABLE_OUTPUT {
+                println!("handling remove of '{}'....", path);
+            }
             ChunkStorage::destroy_chunk_space(&path).await;
             return PostResult {
                 err: 0,
@@ -109,7 +112,9 @@ async fn handle_post(post: &Post) -> PostResult {
         RemoveMeta => {
             let serde_string: SerdeString = serde_json::from_str(&post.data).unwrap();
             let path = serde_string.str;
-            println!("handling remove metadata of '{}'....", path);
+            if ENABLE_OUTPUT {
+                println!("handling remove metadata of '{}'....", path);
+            }
             let md_res = MetadataDB::get_instance().get(&path);
             if let None = md_res {
                 return PostResult {
@@ -125,16 +130,22 @@ async fn handle_post(post: &Post) -> PostResult {
         }
         Read => {
             let read_data: ReadData = serde_json::from_str(&post.data).unwrap();
-            println!("handling read of '{}'....", read_data.path);
+            if ENABLE_OUTPUT {
+                println!("handling read of '{}'....", read_data.path);
+            }
             return handle_read(read_data).await;
         }
         Write => {
             let write_data: WriteData = serde_json::from_str(&post.data).unwrap();
-            println!("handling write of '{}'....", write_data.path);
+            if ENABLE_OUTPUT {
+                println!("handling write of '{}'....", write_data.path);
+            }
             return handle_write(write_data).await;
         }
         Lookup => {
-            println!("handling look up....");
+            if ENABLE_OUTPUT {
+                println!("handling look up....");
+            }
             let id: u64 = serde_json::from_str(&post.data).unwrap();
             StorageContext::get_instance().set_host_id(id);
             return PostResult {
@@ -143,7 +154,9 @@ async fn handle_post(post: &Post) -> PostResult {
             };
         }
         FsConfig => {
-            println!("handling fsconfig....");
+            if ENABLE_OUTPUT {
+                println!("handling fsconfig....");
+            }
             let mut fs_config = SFSConfig::new();
             fs_config.mountdir = StorageContext::get_instance().get_mountdir().to_string();
             fs_config.rootdir = StorageContext::get_instance().get_rootdir().to_string();
@@ -161,7 +174,9 @@ async fn handle_post(post: &Post) -> PostResult {
         }
         UpdateMetadentry => {
             let update_data: UpdateMetadentryData = serde_json::from_str(&post.data).unwrap();
-            println!("handling update metadentry of '{}'....", update_data.path);
+            if ENABLE_OUTPUT {
+                println!("handling update metadentry of '{}'....", update_data.path);
+            }
             MetadataDB::get_instance().increase_size(
                 &update_data.path,
                 update_data.size as usize + update_data.offset as usize,
@@ -173,7 +188,9 @@ async fn handle_post(post: &Post) -> PostResult {
             };
         }
         GetMetadentry => {
-            println!("handling get metadentry....");
+            if ENABLE_OUTPUT {
+                println!("handling get metadentry....");
+            }
             let serde_string: SerdeString = serde_json::from_str(&post.data).unwrap();
             let path = serde_string.str;
             let md_str = MetadataDB::get_instance().get(&path);
@@ -194,7 +211,9 @@ async fn handle_post(post: &Post) -> PostResult {
             }
         }
         ChunkStat => {
-            println!("handling chunk stat....");
+            if ENABLE_OUTPUT {
+                println!("handling chunk stat....");
+            }
             let chunk_stat = ChunkStorage::chunk_stat();
             let post_result = PostResult {
                 err: 0,
@@ -204,7 +223,9 @@ async fn handle_post(post: &Post) -> PostResult {
         }
         DecrSize => {
             let decr_data: DecrData = serde_json::from_str(&post.data).unwrap();
-            println!("handling decrease size of '{}'....", decr_data.path);
+            if ENABLE_OUTPUT {
+                println!("handling decrease size of '{}'....", decr_data.path);
+            }
             MetadataDB::get_instance().decrease_size(&decr_data.path, decr_data.new_size as usize);
             return PostResult {
                 err: 0,
@@ -213,13 +234,17 @@ async fn handle_post(post: &Post) -> PostResult {
         }
         Trunc => {
             let trunc_data: TruncData = serde_json::from_str(&post.data).unwrap();
-            println!("handling truncate of '{}'....", trunc_data.path);
+            if ENABLE_OUTPUT {
+                println!("handling truncate of '{}'....", trunc_data.path);
+            }
             return handle_trunc(trunc_data).await;
         }
         GetDirents => {
             let data: DirentData = serde_json::from_str(&post.data).unwrap();
             let path = data.path;
-            println!("handling get dirents of '{}'....", path);
+            if ENABLE_OUTPUT {
+                println!("handling get dirents of '{}'....", path);
+            }
             let entries = MetadataDB::get_instance().get_dirents(&path);
             if entries.len() == 0 {
                 return PostResult {

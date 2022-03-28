@@ -1,7 +1,7 @@
 use std::ffi::CStr;
 
 use client::{
-    context::{DynamicContext, StaticContext},
+    context::{DynamicContext, StaticContext, interception_enabled},
     openfile::OpenFileFlags,
     util::get_metadata,
 };
@@ -180,6 +180,10 @@ pub extern "C" fn get_md_mode(path: *const c_char) -> i32 {
     }
     return md_res.unwrap().get_mode() as i32;
 }
+#[no_mangle]
+pub extern "C" fn enable_interception(){
+    interception_enabled();
+}
 #[cfg(test)]
 mod tests {
     #[allow(unused_imports)]
@@ -195,7 +199,7 @@ mod tests {
             sfs_write, stat,
         },
     };
-    use crate::global::network::config::CHUNK_SIZE;
+    use crate::{global::network::config::CHUNK_SIZE, client::syscall::timespec};
 
     #[test]
     pub fn test0() {
@@ -262,27 +266,26 @@ mod tests {
             println!("read: {}", String::from_utf8(buf.to_vec()).unwrap());
         }
     }
-
     #[test]
     pub fn test2() {
-        let s = "hello, here is the test data of sfs small-data local-host create/opendir test"
+        let _s = "hello, here is the test data of sfs small-data local-host create/opendir test"
             .to_string();
 
         let path = "/sfs/test/create_dir/file1\0".to_string();
         let path1 = "/sfs\0".to_string();
         let path2 = "/sfs/test\0".to_string();
         let path3 = "/sfs/test/create_dir\0".to_string();
-        let res1 = sfs_create(path1.as_ptr() as *const i8, S_IFDIR);
-        let res2 = sfs_create(path2.as_ptr() as *const i8, S_IFDIR);
-        let res3 = sfs_create(path3.as_ptr() as *const i8, S_IFDIR);
+        let _res1 = sfs_create(path1.as_ptr() as *const i8, S_IFDIR);
+        let _res2 = sfs_create(path2.as_ptr() as *const i8, S_IFDIR);
+        let _res3 = sfs_create(path3.as_ptr() as *const i8, S_IFDIR);
 
-        let fd = sfs_open(
+        let _fd = sfs_open(
             path.as_str().as_ptr() as *const c_char,
             S_IFREG,
             O_CREAT | O_RDWR,
         );
         let file_path1 = "/sfs/test/create_dir/file2\0".to_string();
-        let fd = sfs_open(
+        let _fd = sfs_open(
             file_path1.as_str().as_ptr() as *const c_char,
             S_IFREG,
             O_CREAT | O_RDWR,
@@ -315,9 +318,9 @@ mod tests {
             .entries_
         );
 
-        let res = sfs_create(dir_path2.as_ptr() as *const i8, S_IFDIR);
+        let _res = sfs_create(dir_path2.as_ptr() as *const i8, S_IFDIR);
         let file_path2 = "/sfs/test/file1\0".to_string();
-        let fd = sfs_open(
+        let _fd = sfs_open(
             file_path2.as_str().as_ptr() as *const c_char,
             S_IFREG,
             O_CREAT | O_RDWR,
@@ -351,7 +354,7 @@ mod tests {
         let data = "hello, here is the test data of sfs small-data local-host remove test";
 
         let dpath_sfs = "/sfs\0".to_string();
-        let cres = sfs_create(dpath_sfs.as_ptr() as *const i8, S_IFDIR);
+        let _cres = sfs_create(dpath_sfs.as_ptr() as *const i8, S_IFDIR);
 
         let fpath_file1 = "/sfs/file1\0".to_string();
         let fd = sfs_open(
@@ -361,10 +364,10 @@ mod tests {
         );
 
         let len = data.len() as i64;
-        let wres = sfs_write(fd, data.as_ptr() as *mut i8, len);
+        let _wres = sfs_write(fd, data.as_ptr() as *mut i8, len);
 
         sfs_lseek(fd, 0, SEEK_SET);
-        let mut buf = vec![0 as u8; len as usize];
+        let buf = vec![0 as u8; len as usize];
         let res = sfs_read(fd, buf.as_ptr() as *mut i8, len);
         if res <= 0 {
             println!("read error ...");
@@ -415,7 +418,7 @@ mod tests {
         let data = "hello, here is the test data of sfs small-data local-host truncate test";
 
         let dpath_sfs = "/sfs\0".to_string();
-        let cres = sfs_create(dpath_sfs.as_ptr() as *const i8, S_IFDIR);
+        let _cres = sfs_create(dpath_sfs.as_ptr() as *const i8, S_IFDIR);
 
         let fpath_file1 = "/sfs/file1\0".to_string();
         let fd = sfs_open(
@@ -425,10 +428,10 @@ mod tests {
         );
 
         let len = data.len() as i64;
-        let wres = sfs_write(fd, data.as_ptr() as *mut i8, len);
+        let _wres = sfs_write(fd, data.as_ptr() as *mut i8, len);
 
         sfs_lseek(fd, 0, SEEK_SET);
-        let mut buf = vec![0 as u8; len as usize];
+        let buf = vec![0 as u8; len as usize];
         let res = sfs_read(fd, buf.as_ptr() as *mut i8, len);
         if res <= 0 {
             println!("read error ...");
@@ -444,7 +447,7 @@ mod tests {
         }
 
         sfs_lseek(fd, 0, SEEK_SET);
-        let mut buf = vec![0 as u8; len as usize];
+        let buf = vec![0 as u8; len as usize];
         let res = sfs_read(fd, buf.as_ptr() as *mut i8, len);
         if res <= 0 {
             println!("read error ...");
@@ -458,7 +461,7 @@ mod tests {
         let data = "hello, here is the test data of sfs small-data local-host stat test";
 
         let dpath_sfs = "/sfs\0".to_string();
-        let cres = sfs_create(dpath_sfs.as_ptr() as *const i8, S_IFDIR);
+        let _cres = sfs_create(dpath_sfs.as_ptr() as *const i8, S_IFDIR);
 
         let fpath_file1 = "/sfs/file1\0".to_string();
         let fd = sfs_open(
@@ -468,9 +471,9 @@ mod tests {
         );
 
         let len = data.len() as i64;
-        let wres = sfs_write(fd, data.as_ptr() as *mut i8, len);
+        let _wres = sfs_write(fd, data.as_ptr() as *mut i8, len);
 
-        let mut stat = Stat {
+        let mut stat: stat = stat {
             st_dev: 0,
             st_ino: 0,
             st_nlink: 0,
@@ -482,17 +485,23 @@ mod tests {
             st_size: 0,
             st_blksize: 0,
             st_blocks: 0,
-            st_atime: 0,
-            st_atime_nsec: 0,
-            st_mtime: 0,
-            st_mtime_nsec: 0,
-            st_ctime: 0,
-            st_ctime_nsec: 0,
-            __unused: [0; 3],
+            st_atim: timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            st_mtim: timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            st_ctim: timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            __glibc_reserved: [0; 3],
         };
         let res = sfs_stat(
             fpath_file1.as_str().as_ptr() as *const c_char,
-            &mut stat as *mut Stat as *mut stat,
+            &mut stat as *mut stat,
             false,
         );
         if res < 0 {
@@ -508,7 +517,7 @@ mod tests {
             return;
         }
 
-        let mut stat = Stat {
+        let mut stat: stat = stat {
             st_dev: 0,
             st_ino: 0,
             st_nlink: 0,
@@ -520,17 +529,23 @@ mod tests {
             st_size: 0,
             st_blksize: 0,
             st_blocks: 0,
-            st_atime: 0,
-            st_atime_nsec: 0,
-            st_mtime: 0,
-            st_mtime_nsec: 0,
-            st_ctime: 0,
-            st_ctime_nsec: 0,
-            __unused: [0; 3],
+            st_atim: timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            st_mtim: timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            st_ctim: timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+            __glibc_reserved: [0; 3],
         };
         let res = sfs_stat(
             fpath_file1.as_str().as_ptr() as *const c_char,
-            &mut stat as *mut Stat as *mut stat,
+            &mut stat as *mut stat,
             false,
         );
         if res < 0 {
@@ -540,13 +555,12 @@ mod tests {
             println!("stat: {:?}", stat);
         }
     }
-
     #[test]
     pub fn test6() {
         let data = "hello, here is the test data of sfs small-data local-host dup test";
 
         let dpath_sfs = "/sfs\0".to_string();
-        let cres = sfs_create(dpath_sfs.as_ptr() as *const i8, S_IFDIR);
+        let _cres = sfs_create(dpath_sfs.as_ptr() as *const i8, S_IFDIR);
 
         let fpath_file1 = "/sfs/file1\0".to_string();
         let fd = sfs_open(
@@ -562,9 +576,9 @@ mod tests {
         }
         println!("dup {} to {}", fd, fd2);
 
-        let wres = sfs_write(fd2, data.as_ptr() as *mut i8, data.len() as i64);
+        let _wres = sfs_write(fd2, data.as_ptr() as *mut i8, data.len() as i64);
         sfs_lseek(fd, 0, SEEK_SET);
-        let mut buf = vec![0 as u8; data.len()];
+        let buf = vec![0 as u8; data.len()];
         let res = sfs_read(fd, buf.as_ptr() as *mut i8, data.len() as i64);
         if res <= 0 {
             println!("read error ...");
@@ -574,7 +588,7 @@ mod tests {
         }
 
         sfs_lseek(fd2, 0, SEEK_SET);
-        let mut buf = vec![0 as u8; data.len()];
+        let buf = vec![0 as u8; data.len()];
         let res = sfs_read(fd2, buf.as_ptr() as *mut i8, data.len() as i64);
         if res <= 0 {
             println!("read error ...");
@@ -583,13 +597,12 @@ mod tests {
             println!("read from dupped fd: {}", String::from_utf8(buf).unwrap());
         }
     }
-
     #[test]
     pub fn test7() {
         let data = "hello, here is the test data of sfs small-data local-host pwrite/pread test";
 
         let dpath_sfs = "/sfs\0".to_string();
-        let cres = sfs_create(dpath_sfs.as_ptr() as *const i8, S_IFDIR);
+        let _cres = sfs_create(dpath_sfs.as_ptr() as *const i8, S_IFDIR);
 
         let fpath_file1 = "/sfs/file1\0".to_string();
         let fd = sfs_open(
@@ -598,11 +611,11 @@ mod tests {
             O_CREAT | O_RDWR,
         );
 
-        let wres = sfs_write(fd, data.as_ptr() as *mut i8, data.len() as i64);
+        let _wres = sfs_write(fd, data.as_ptr() as *mut i8, data.len() as i64);
         sfs_lseek(fd, 0, SEEK_SET);
-        let wres = sfs_pwrite(fd, data.as_ptr() as *mut i8, data.len() as i64, 9);
+        let _wres = sfs_pwrite(fd, data.as_ptr() as *mut i8, data.len() as i64, 9);
         sfs_lseek(fd, 0, SEEK_SET);
-        let mut buf = vec![0 as u8; 100];
+        let buf = vec![0 as u8; 100];
         let res = sfs_pread(fd, buf.as_ptr() as *mut i8, 200, 7);
         if res <= 0 {
             println!("read error ...");
@@ -611,16 +624,15 @@ mod tests {
             println!("read: {}", String::from_utf8(buf).unwrap());
         }
     }
-
     #[test]
     pub fn test8() {
-        let data = "hello, here is the test data of sfs small-data local-host rmdir test";
+        let _data = "hello, here is the test data of sfs small-data local-host rmdir test";
 
         let dpath_sfs = "/sfs\0".to_string();
-        let cres = sfs_create(dpath_sfs.as_ptr() as *const i8, S_IFDIR);
+        let _cres = sfs_create(dpath_sfs.as_ptr() as *const i8, S_IFDIR);
 
         let fpath_file1 = "/sfs/file1\0".to_string();
-        let fd = sfs_open(
+        let _fd = sfs_open(
             fpath_file1.as_str().as_ptr() as *const c_char,
             S_IFREG,
             O_CREAT | O_RDWR,
@@ -630,7 +642,7 @@ mod tests {
         sfs_remove(fpath_file1.as_ptr() as *const i8);
         sfs_rmdir(dpath_sfs.as_ptr() as *const i8);
     }
-
+    /*
     #[test]
     pub fn test9() {
         let data = "hello, here is the test data of sfs small-data local-host getdents test";
@@ -707,13 +719,13 @@ mod tests {
             println!("{:?}: {}", dirent, String::from_utf8(c_vec).unwrap());
         }
     }
-
+    */
     #[test]
     pub fn test10() {
         let data = "hello, here is the test data of sfs small-data local-host dup2 test";
 
         let dpath_sfs = "/sfs\0".to_string();
-        let cres = sfs_create(dpath_sfs.as_ptr() as *const i8, S_IFDIR);
+        let _cres = sfs_create(dpath_sfs.as_ptr() as *const i8, S_IFDIR);
 
         let fpath_file1 = "/sfs/file1\0".to_string();
         let fd = sfs_open(
@@ -729,9 +741,9 @@ mod tests {
         }
         println!("dup2 {} to {}", fd, fd3);
 
-        let wres = sfs_write(fd2, data.as_ptr() as *mut i8, data.len() as i64);
+        let _wres = sfs_write(fd2, data.as_ptr() as *mut i8, data.len() as i64);
         sfs_lseek(fd, 0, SEEK_SET);
-        let mut buf = vec![0 as u8; data.len()];
+        let buf = vec![0 as u8; data.len()];
         let res = sfs_read(fd, buf.as_ptr() as *mut i8, data.len() as i64);
         if res <= 0 {
             println!("read error ...");
@@ -741,7 +753,7 @@ mod tests {
         }
 
         sfs_lseek(fd2, 0, SEEK_SET);
-        let mut buf = vec![0 as u8; data.len()];
+        let buf = vec![0 as u8; data.len()];
         let res = sfs_read(fd2, buf.as_ptr() as *mut i8, data.len() as i64);
         if res <= 0 {
             println!("read error ...");
