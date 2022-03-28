@@ -171,7 +171,6 @@ hook_lstat(const char* path, struct stat* buf) {
     }
     return syscall_no_intercept_wrapper(SYS_lstat, rel_path.c_str(), buf);
 }
-
 int
 hook_fstat(unsigned int fd, struct stat* buf) {
 

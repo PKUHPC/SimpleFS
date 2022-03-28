@@ -10,6 +10,6 @@ message Post{
     string data = 2;
 }
 message PostResult{
-    bool err = 1; 
+    int32 err = 1; 
     string data = 2;
 }

@@ -100,7 +100,7 @@ pub async fn handle_write(input: WriteData) -> PostResult {
         write_tot += t.await.unwrap();
     }
     let post_res = PostResult {
-        err: false,
+        err: 0,
         data: write_tot.to_string(),
     };
     return post_res;
@@ -207,7 +207,7 @@ pub async fn handle_read(input: ReadData) -> PostResult {
     };
     //println!("{:?}", result_data);
     let post_res = PostResult {
-        err: false,
+        err: 0,
         data: serde_json::to_string(&result_data).unwrap(),
     };
     return post_res;
@@ -241,7 +241,7 @@ pub async fn handle_trunc(input: TruncData) -> PostResult {
     }
     ChunkStorage::trim_chunk_space(&path, chunk_id_start).await;
     let post_res = PostResult {
-        err: false,
+        err: 0,
         data: "".to_string(),
     };
     return post_res;

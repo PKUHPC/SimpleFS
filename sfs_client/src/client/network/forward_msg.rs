@@ -20,7 +20,7 @@ use crate::global::network::post::{option2i, PostOption};
 use crate::global::util::arith_util::{block_index, chunk_lpad, chunk_rpad, offset_to_chunk_id};
 use sfs_rpc::sfs_server::{Post, PostResult};
 
-pub fn forward_stat(path: &String) -> Result<String, Error> {
+pub fn forward_stat(path: &String) -> Result<String, i32> {
     let endp_id = StaticContext::get_instance()
         .get_distributor()
         .locate_file_metadata(path);
@@ -37,14 +37,11 @@ pub fn forward_stat(path: &String) -> Result<String, Error> {
             "client::network::forward_stat".to_string(),
             format!("error {} occurs while fetching file stat", e),
         );
-        return Err(e);
+        return Err(EBUSY);
     }
     let result = post_res.unwrap();
-    if result.err {
-        return Err(Error::new(
-            std::io::ErrorKind::NotFound,
-            "metadata not exist",
-        ));
+    if result.err != 0 {
+        return Err(result.err);
     }
     return Ok(result.data);
 }
@@ -68,11 +65,11 @@ pub fn forward_create(path: &String, mode: u32) -> Result<i32, Error> {
             "client::network::forward_create".to_string(),
             format!("error {} occurs while fetching file stat", e),
         );
-        return Err(e);
+        return Ok(EBUSY);
     } else {
         let result = post_res.unwrap();
-        if result.err {
-            return Ok(result.data.as_str().parse::<i32>().unwrap());
+        if result.err != 0 {
+            return Ok(result.err);
         }
         return Ok(0);
     }
@@ -148,8 +145,8 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
     } else {
         let result_vec = post_results.unwrap();
         for result in result_vec {
-            if result.err {
-                return Ok(result.data.as_str().parse::<i32>().unwrap());
+            if result.err != 0 {
+                return Ok(result.err);
             }
         }
     }
@@ -175,11 +172,8 @@ pub fn forward_get_chunk_stat() -> (i32, ChunkStat) {
     } else {
         let result_vec = post_results.unwrap();
         for result in result_vec {
-            if result.err {
-                return (
-                    result.data.as_str().parse::<i32>().unwrap(),
-                    ChunkStat::new(),
-                );
+            if result.err != 0 {
+                return (result.err, ChunkStat::new());
             }
             let chunk_stat: ChunkStat = serde_json::from_str(&result.data).unwrap();
             assert_eq!(chunk_stat.chunk_size, chunk_size);
@@ -213,8 +207,8 @@ pub fn forward_get_metadentry_size(path: &String) -> (i32, i64) {
         return (-1, 0);
     } else {
         let result = post_result.unwrap();
-        if result.err {
-            return (result.data.as_str().parse::<i32>().unwrap(), 0);
+        if result.err != 0 {
+            return (result.err, 0);
         }
         return (0, result.data.as_str().parse::<i64>().unwrap());
     }
@@ -238,8 +232,8 @@ pub fn forward_decr_size(path: &String, new_size: i64) -> i32 {
         return -1;
     } else {
         let result = post_result.unwrap();
-        if result.err {
-            return result.data.as_str().parse::<i32>().unwrap();
+        if result.err != 0 {
+            return result.err;
         }
         return 0;
     }
@@ -280,12 +274,12 @@ pub fn forward_truncate(path: &String, old_size: i64, new_size: i64) -> i32 {
     }
     let post_results = NetworkService::group_post(posts);
     if let Err(_e) = post_results {
-        return -1;
+        return EBUSY;
     }
     let results = post_results.unwrap();
     for result in results {
-        if result.err {
-            return 5;
+        if result.err != 0 {
+            return result.err;
         }
     }
 
@@ -319,11 +313,7 @@ pub fn forward_update_metadentry_size(
     } else {
         let res = post_result.unwrap();
         return (
-            if res.err {
-                res.data.as_str().parse::<i32>().unwrap()
-            } else {
-                0
-            },
+            if res.err != 0 { res.err } else { 0 },
             res.data.as_str().parse::<i64>().unwrap(),
         );
     }
@@ -398,8 +388,8 @@ pub fn forward_write(
             input,
             PostOption::Write,
         ) {
-            if p.err {
-                return (-1, 0);
+            if p.err != 0 {
+                return (p.err, 0);
             }
             tot_write += p
                 .data
@@ -407,7 +397,7 @@ pub fn forward_write(
                 .parse::<i64>()
                 .expect("response should be 'i64'");
         } else {
-            return (-1, 0);
+            return (EBUSY, 0);
         }
     }
     return (0, tot_write);
@@ -467,8 +457,8 @@ pub fn forward_read(path: &String, buf: *mut c_char, offset: i64, read_size: i64
             input,
             PostOption::Read,
         ) {
-            if p.err {
-                return (-1, 0);
+            if p.err != 0 {
+                return (p.err, 0);
             }
             let read_res: ReadResult = serde_json::from_str(p.data.as_str()).unwrap();
             tot_read += read_res.nreads;
@@ -493,7 +483,7 @@ pub fn forward_read(path: &String, buf: *mut c_char, offset: i64, read_size: i64
                 }
             }
         } else {
-            return (-1, 0);
+            return (EBUSY, 0);
         }
     }
     return (0, tot_read);
@@ -562,7 +552,7 @@ pub fn forward_get_fs_config(context: &mut StaticContext) -> bool {
         return false;
     }
     let result = fsconf_res.unwrap();
-    if result.err {
+    if result.err != 0 {
         return false;
     }
     let config: SFSConfig = serde_json::from_str(&result.data.as_str()).unwrap();

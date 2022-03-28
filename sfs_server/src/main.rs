@@ -1,6 +1,6 @@
 pub mod handle;
 pub mod task;
-use libc::{getgid, getuid, S_IFDIR, S_IRWXG, S_IRWXO, S_IRWXU};
+use libc::{getgid, getuid, S_IFDIR, S_IRWXG, S_IRWXO, S_IRWXU, ENOENT, EINVAL};
 use sfs_lib_server::global::network::post::i2option;
 use sfs_lib_server::server::{
     filesystem::storage_context::StorageContext, storage::data::chunk_storage::*,
@@ -70,13 +70,13 @@ async fn handle_post(post: &Post) -> PostResult {
             let md_res = MetadataDB::get_instance().get(&path);
             if let Some(md) = md_res {
                 return PostResult {
-                    err: false,
+                    err: 0,
                     data: md,
                 };
             } else {
                 return PostResult {
-                    err: true,
-                    data: "".to_string(),
+                    err: ENOENT,
+                    data: ENOENT.to_string(),
                 };
             }
         }
@@ -92,7 +92,7 @@ async fn handle_post(post: &Post) -> PostResult {
                 IGNORE_IF_EXISTS,
             );
             return PostResult {
-                err: create_res != 0,
+                err: create_res,
                 data: create_res.to_string(),
             };
         }
@@ -102,7 +102,7 @@ async fn handle_post(post: &Post) -> PostResult {
             println!("handling remove of '{}'....", path);
             ChunkStorage::destroy_chunk_space(&path).await;
             return PostResult {
-                err: false,
+                err: 0,
                 data: "0".to_string(),
             };
         }
@@ -113,13 +113,13 @@ async fn handle_post(post: &Post) -> PostResult {
             let md_res = MetadataDB::get_instance().get(&path);
             if let None = md_res {
                 return PostResult {
-                    err: true,
-                    data: "1".to_string(),
+                    err: ENOENT,
+                    data: ENOENT.to_string(),
                 };
             }
             MetadataDB::get_instance().remove(&path);
             return PostResult {
-                err: false,
+                err: 0,
                 data: "0".to_string(),
             };
         }
@@ -138,8 +138,8 @@ async fn handle_post(post: &Post) -> PostResult {
             let id: u64 = serde_json::from_str(&post.data).unwrap();
             StorageContext::get_instance().set_host_id(id);
             return PostResult {
-                err: false,
-                data: "ok".to_string(),
+                err: 0,
+                data: "0".to_string(),
             };
         }
         FsConfig => {
@@ -155,7 +155,7 @@ async fn handle_post(post: &Post) -> PostResult {
             fs_config.uid = unsafe { getuid() };
             fs_config.gid = unsafe { getgid() };
             return PostResult {
-                err: false,
+                err: 0,
                 data: serde_json::to_string(&fs_config).unwrap(),
             };
         }
@@ -168,7 +168,7 @@ async fn handle_post(post: &Post) -> PostResult {
                 update_data.append,
             );
             return PostResult {
-                err: false,
+                err: 0,
                 data: (update_data.size as usize + update_data.offset as usize).to_string(),
             };
         }
@@ -180,14 +180,14 @@ async fn handle_post(post: &Post) -> PostResult {
             match md_str {
                 None => {
                     return PostResult {
-                        err: true,
-                        data: "1".to_string(),
+                        err: ENOENT,
+                        data: ENOENT.to_string(),
                     };
                 }
                 Some(str) => {
                     let md = Metadata::deserialize(&str).unwrap();
                     return PostResult {
-                        err: false,
+                        err: 0,
                         data: md.get_size().to_string(),
                     };
                 }
@@ -197,7 +197,7 @@ async fn handle_post(post: &Post) -> PostResult {
             println!("handling chunk stat....");
             let chunk_stat = ChunkStorage::chunk_stat();
             let post_result = PostResult {
-                err: false,
+                err: 0,
                 data: serde_json::to_string(&chunk_stat).unwrap(),
             };
             return post_result;
@@ -207,7 +207,7 @@ async fn handle_post(post: &Post) -> PostResult {
             println!("handling decrease size of '{}'....", decr_data.path);
             MetadataDB::get_instance().decrease_size(&decr_data.path, decr_data.new_size as usize);
             return PostResult {
-                err: false,
+                err: 0,
                 data: "0".to_string(),
             };
         }
@@ -223,19 +223,19 @@ async fn handle_post(post: &Post) -> PostResult {
             let entries = MetadataDB::get_instance().get_dirents(&path);
             if entries.len() == 0 {
                 return PostResult {
-                    err: false,
+                    err: 0,
                     data: serde_json::to_string(&(Vec::new() as Vec<(String, bool)>)).unwrap(),
                 };
             }
             return PostResult {
-                err: false,
+                err: 0,
                 data: serde_json::to_string(&entries).unwrap(),
             };
         }
         _ => {
             return PostResult {
-                err: true,
-                data: "".to_string(),
+                err: EINVAL,
+                data: EINVAL.to_string(),
             };
         }
     }

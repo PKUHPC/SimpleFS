@@ -1,7 +1,7 @@
 use std::ffi::CStr;
 
 use client::{
-    context::{interception_enabled, DynamicContext, StaticContext},
+    context::{DynamicContext, StaticContext},
     openfile::OpenFileFlags,
     util::get_metadata,
 };
@@ -180,14 +180,10 @@ pub extern "C" fn get_md_mode(path: *const c_char) -> i32 {
     }
     return md_res.unwrap().get_mode() as i32;
 }
-#[no_mangle]
-pub extern "C" fn intercept_enabled() -> bool {
-    interception_enabled()
-}
 #[cfg(test)]
 mod tests {
     #[allow(unused_imports)]
-    use libc::{c_char, dirent, stat, O_CREAT, O_RDWR, SEEK_SET, S_IFDIR, S_IFREG};
+    use libc::{c_char, dirent, stat as Stat, O_CREAT, O_RDWR, SEEK_SET, S_IFDIR, S_IFREG};
 
     #[allow(unused_imports)]
     use crate::client::{
@@ -196,7 +192,7 @@ mod tests {
         syscall::{
             internel_truncate, sfs_create, sfs_dup, sfs_dup2, sfs_getdents, sfs_lseek, sfs_open,
             sfs_opendir, sfs_pread, sfs_pwrite, sfs_read, sfs_remove, sfs_rmdir, sfs_stat,
-            sfs_write, Stat,
+            sfs_write, stat,
         },
     };
     use crate::global::network::config::CHUNK_SIZE;

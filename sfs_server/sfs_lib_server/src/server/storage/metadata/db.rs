@@ -1,5 +1,6 @@
 use std::{sync::{Arc, Mutex, MutexGuard}, path::Path};
 
+use libc::{EEXIST, EINVAL};
 use rocksdb::{DB, Options, WriteOptions};
 
 use crate::{server::storage::metadata::merge, global::{util::path_util::{is_absolute, has_trailing_slash}, error_msg::error_msg, metadata::{Metadata, S_ISDIR}}};
@@ -71,19 +72,19 @@ impl MetadataDB{
     pub fn put(&mut self, key: &String, val: &String, ignore_if_exists: bool) -> i32{
         //println!("putting key: {} value: {}", key, val);
         if ignore_if_exists && self.exists(key){
-            return 4;
+            return EEXIST;
         }
         if !is_absolute(key) {
             error_msg("server::storage::metadata::db::put".to_string(), "key must be absolute path".to_string());
-            return 1;
+            return EINVAL;
         }
         if !key.eq(&"/".to_string()) && has_trailing_slash(key) {
             error_msg("server::storage::metadata::db::put".to_string(), "key mustn't have trailing slash".to_string());
-            return 2;
+            return EINVAL;
         }
         if let Err(_e) = self.db.as_ref().unwrap().merge_opt(key, val, &self.write_opts){
             error_msg("server::storage::metadata::db::put".to_string(), "fail to merge value".to_string());
-            return 3;
+            return EINVAL;
         }
         return 0;
     }

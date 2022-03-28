@@ -58,14 +58,14 @@ pub fn enable_interception() {
 pub fn disable_interception() {
     *INTERCEPTION_ENABLE.lock().unwrap() = InterceptionStat::Disabled;
 }
-pub fn interception_enabled() -> bool {
+#[no_mangle]
+pub extern "C" fn interception_enabled() -> bool {
     let stat = (*INTERCEPTION_ENABLE.lock().unwrap()).clone();
     match stat {
         InterceptionStat::Disabled => {
             start_interception();
             if StaticContext::get_instance().init_flag {
                 enable_interception();
-                //println!("client context initialized");
                 true
             } else {
                 false
@@ -141,8 +141,7 @@ impl DynamicContext {
                     return (RelativizeStatus::FdUnknown, raw_path.to_string());
                 }
                 if let Some(dir) = self.open_file_map_.lock().unwrap().get_dir(dirfd) {
-                    path = SCTX.get_mountdir().clone();
-                    path = dir.lock().unwrap().get_path().clone() + &path;
+                    path = SCTX.get_mountdir().clone() + dir.lock().unwrap().get_path();
                     path.push(SEPERATOR);
                     path.push_str(raw_path);
                 } else {

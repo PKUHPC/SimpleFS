@@ -1,11 +1,12 @@
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
-    io::Error,
 };
 
+use errno::{set_errno, Errno};
 use libc::{gethostname, makedev};
 
+#[allow(unused_imports)]
 use crate::{
     client::context::StaticContext,
     global::{metadata::Metadata, network::config::CHUNK_SIZE},
@@ -13,9 +14,10 @@ use crate::{
 
 use super::{network::forward_msg, syscall::stat};
 
-pub fn get_metadata(path: &String, _follow_link: bool) -> Result<Metadata, Error> {
+pub fn get_metadata(path: &String, _follow_link: bool) -> Result<Metadata, i32> {
     let md_res = forward_msg::forward_stat(path);
     if let Err(e) = md_res {
+        set_errno(Errno(e));
         return Err(e);
     }
     return Ok(Metadata::deserialize(&md_res.unwrap()).unwrap());

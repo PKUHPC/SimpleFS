@@ -16,8 +16,8 @@ hook(long syscall_number,
 			long arg4, long arg5,
 			long *result)
 {
-    if(!intercept_enabled()){
-            return 1;
+    if(!interception_enabled()){
+        return 1;
     }
 	switch(syscall_number) {
 

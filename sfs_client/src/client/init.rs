@@ -10,7 +10,9 @@ use rand::seq::SliceRandom;
 use regex::Regex;
 
 use crate::global::{
-    distributor::SimpleHashDistributor, error_msg::error_msg, fsconfig::HOSTFILE_PATH,
+    distributor::SimpleHashDistributor,
+    error_msg::error_msg,
+    fsconfig::{ENABLE_OUTPUT, HOSTFILE_PATH},
     util::env_util::get_var,
 };
 
@@ -59,7 +61,9 @@ fn lookup_endpoint(uri: &String, max_retries: i32, host_id: u64) -> Result<SFSEn
             host_id,
             crate::global::network::post::PostOption::Lookup,
         ) {
-            println!("connected: '{}'", uri);
+            if ENABLE_OUTPUT {
+                println!("connected: '{}'", uri);
+            }
             return Ok(endp);
         } else {
             error_msg(
@@ -81,7 +85,9 @@ fn lookup_endpoint(uri: &String, max_retries: i32, host_id: u64) -> Result<SFSEn
 }
 fn connect_hosts(hosts: &mut Vec<(String, String)>, context: &mut StaticContext) -> bool {
     let local_hostname = get_hostname(true);
-    println!("localhost name: {}", local_hostname);
+    if ENABLE_OUTPUT {
+        println!("localhost name: {}", local_hostname);
+    }
     let mut local_host_found = false;
     let mut addrs = vec![SFSEndpoint::new(); hosts.len()];
     let mut host_id: Vec<u64> = (0..(hosts.len() as u64)).collect();
@@ -134,7 +140,9 @@ pub fn init_environment() -> StaticContext {
     let mut hosts = read_host_file();
 
     let mut context = StaticContext::new();
-    println!("found hosts: {:?}", hosts);
+    if ENABLE_OUTPUT {
+        println!("found hosts: {:?}", hosts);
+    }
     if !connect_hosts(&mut hosts, &mut context) {
         return context;
     }
