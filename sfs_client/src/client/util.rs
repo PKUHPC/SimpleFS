@@ -6,11 +6,9 @@ use std::{
 use errno::{set_errno, Errno};
 use libc::{gethostname, makedev};
 
+use crate::client::context::StaticContext;
 #[allow(unused_imports)]
-use crate::{
-    client::context::StaticContext,
-    global::{metadata::Metadata, network::config::CHUNK_SIZE},
-};
+use sfs_global::global::{metadata::Metadata, network::config::CHUNK_SIZE};
 
 use super::{network::forward_msg, syscall::stat};
 

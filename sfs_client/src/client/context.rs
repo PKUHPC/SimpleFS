@@ -7,10 +7,12 @@ use bit_vec::*;
 use crate::client::endpoint::SFSEndpoint;
 use crate::client::init::init_environment;
 use crate::client::openfile::OpenFileMap;
-use crate::global::distributor::SimpleHashDistributor;
-use crate::global::error_msg::error_msg;
-use crate::global::fsconfig::SFSConfig;
-use crate::global::util::path_util::{has_trailing_slash, is_absolute, is_relative, split_path};
+use sfs_global::global::distributor::SimpleHashDistributor;
+use sfs_global::global::error_msg::error_msg;
+use sfs_global::global::fsconfig::SFSConfig;
+use sfs_global::global::util::path_util::{
+    has_trailing_slash, is_absolute, is_relative, split_path,
+};
 
 use super::path::resolve;
 

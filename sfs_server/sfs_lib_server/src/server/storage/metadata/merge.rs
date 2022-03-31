@@ -1,6 +1,6 @@
 use rocksdb::MergeOperands;
 
-use crate::{global::{error_msg::error_msg, metadata::Metadata}};
+use sfs_global::{global::{error_msg::error_msg, metadata::Metadata}};
 enum OperandID{
     Create,
     IncreaseSize,

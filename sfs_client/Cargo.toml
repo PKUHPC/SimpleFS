@@ -30,4 +30,5 @@ futures = '*'
 prost = "0.9.0"
 tonic = { version = "0.6.2", features = ["tls"]}
 sfs_rpc = {path = "../sfs_rpc"}
+sfs_global = {path = "../sfs_global"}
 errno = "0.2.8"

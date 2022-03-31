@@ -14,11 +14,11 @@ use libc::{
 };
 use libc::{statx, EBADF, EBUSY, EINVAL, EISDIR, ENOENT, ENOTDIR, ENOTEMPTY, ENOTSUP};
 
-use crate::global;
-use crate::global::error_msg::error_msg;
-use crate::global::fsconfig::ZERO_BUF_BEFORE_READ;
-use crate::global::metadata::{S_ISDIR, S_ISREG};
-use crate::global::util::path_util::dirname;
+use sfs_global::global;
+use sfs_global::global::error_msg::error_msg;
+use sfs_global::global::fsconfig::ZERO_BUF_BEFORE_READ;
+use sfs_global::global::metadata::{S_ISDIR, S_ISREG};
+use sfs_global::global::util::path_util::dirname;
 
 use super::config::CHECK_PARENT_DIR;
 #[allow(unused_imports)]

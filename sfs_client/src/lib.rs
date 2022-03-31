@@ -1,14 +1,13 @@
 use std::ffi::CStr;
 
 use client::{
-    context::{DynamicContext, StaticContext, interception_enabled},
+    context::{interception_enabled, DynamicContext, StaticContext},
     openfile::OpenFileFlags,
     util::get_metadata,
 };
 use libc::{c_char, strcpy};
 
 pub mod client;
-pub mod global;
 
 #[no_mangle]
 pub extern "C" fn relativize_fd_path(
@@ -181,7 +180,7 @@ pub extern "C" fn get_md_mode(path: *const c_char) -> i32 {
     return md_res.unwrap().get_mode() as i32;
 }
 #[no_mangle]
-pub extern "C" fn enable_interception(){
+pub extern "C" fn enable_interception() {
     interception_enabled();
 }
 #[cfg(test)]
@@ -189,6 +188,7 @@ mod tests {
     #[allow(unused_imports)]
     use libc::{c_char, dirent, stat as Stat, O_CREAT, O_RDWR, SEEK_SET, S_IFDIR, S_IFREG};
 
+    use crate::client::syscall::timespec;
     #[allow(unused_imports)]
     use crate::client::{
         context::{DynamicContext, StaticContext},
@@ -199,7 +199,7 @@ mod tests {
             sfs_write, stat,
         },
     };
-    use crate::{global::network::config::CHUNK_SIZE, client::syscall::timespec};
+    use sfs_global::global::network::config::CHUNK_SIZE;
 
     #[test]
     pub fn test0() {
@@ -257,8 +257,8 @@ mod tests {
         }
 
         sfs_lseek(fd, 13, SEEK_SET);
-        let mut buf = vec![0 as u8; CHUNK_SIZE as usize];
-        let res = sfs_read(fd, buf.as_mut_ptr() as *mut i8, CHUNK_SIZE as i64);
+        let mut buf = vec![0 as u8; 100 as usize];
+        let res = sfs_read(fd, buf.as_mut_ptr() as *mut i8, 100 as i64);
         if res <= 0 {
             println!("read error ...");
             return;
@@ -764,7 +764,7 @@ mod tests {
     }
     #[test]
     pub fn test11() {
-        let s = vec!['a' as i8; 4 * CHUNK_SIZE as usize];
+        let s = vec!['a' as i8; 8 * CHUNK_SIZE as usize];
 
         let path = "/file1\0".to_string();
         let fd = sfs_open(
@@ -786,7 +786,7 @@ mod tests {
                 .get_length()
         );
 
-        let res = sfs_write(fd, s.as_ptr() as *mut i8, (3 * CHUNK_SIZE + 10) as i64);
+        let res = sfs_write(fd, s.as_ptr() as *mut i8, (7 * CHUNK_SIZE + 10) as i64);
         if res <= 0 {
             println!("write error ...");
             return;

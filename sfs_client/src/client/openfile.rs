@@ -4,7 +4,7 @@ use std::{
     sync::{atomic::AtomicBool, Arc, Mutex},
 };
 
-use crate::global::error_msg::error_msg;
+use sfs_global::global::error_msg::error_msg;
 
 pub static O_RDONLY: i32 = 0x0000; // open for reading only
 pub static O_WRONLY: i32 = 0x0001; // open for writing only

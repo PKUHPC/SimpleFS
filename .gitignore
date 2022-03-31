@@ -4,6 +4,8 @@
 /sfs_client/cargo.lock
 /sfs_server/cargo.lock
 /sfs_rpc/cargo.lock
+/sfs_global/target
+/sfs_global/cargo.lock
 /.vscode
 /wrapper/libsfs_client.a
 /wrapper/call_rust

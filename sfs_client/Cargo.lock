@@ -1018,11 +1018,22 @@ dependencies = [
  "regex",
  "serde",
  "serde_json",
+ "sfs_global",
  "sfs_rpc",
  "sha2",
  "syscalls",
  "tokio",
  "tonic",
+]
+
+[[package]]
+name = "sfs_global"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+ "sha2",
 ]
 
 [[package]]

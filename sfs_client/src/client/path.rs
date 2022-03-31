@@ -1,4 +1,4 @@
-use crate::global::{
+use sfs_global::global::{
     error_msg::error_msg, fsconfig::CWD, path::match_components, util::path_util::is_absolute,
 };
 use std::{

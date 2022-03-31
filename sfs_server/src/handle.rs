@@ -1,16 +1,14 @@
 use std::collections::HashMap;
 
-use sfs_lib_server::{
-    global::{
-        distributor::{Distributor, SimpleHashDistributor},
-        network::{
-            config::CHUNK_SIZE,
-            forward_data::{ReadData, ReadResult, TruncData, WriteData},
-        },
-        util::arith_util::{block_index, block_overrun},
+use sfs_global::global::{
+    distributor::{Distributor, SimpleHashDistributor},
+    network::{
+        config::CHUNK_SIZE,
+        forward_data::{ReadData, ReadResult, TruncData, WriteData},
     },
-    server::storage::data::chunk_storage::ChunkStorage,
+    util::arith_util::{block_index, block_overrun},
 };
+use sfs_lib_server::server::storage::data::chunk_storage::ChunkStorage;
 use tokio::task::JoinHandle;
 
 use crate::task::{ReadChunkTask, WriteChunkTask};
@@ -51,7 +49,11 @@ pub async fn handle_write(input: WriteData) -> PostResult {
         }
         chunk_ids_host[chunk_id_curr as usize] = chunk_id_file;
         if chunk_id_file == input.chunk_start && input.offset > 0 {
-            let offset_size = if CHUNK_SIZE - input.offset as u64 > chunk_size_left_host {chunk_size_left_host} else {CHUNK_SIZE - input.offset as u64};
+            let offset_size = if CHUNK_SIZE - input.offset as u64 > chunk_size_left_host {
+                chunk_size_left_host
+            } else {
+                CHUNK_SIZE - input.offset as u64
+            };
 
             buf_ptr[chunk_id_curr as usize] = chunk_ptr;
             chunk_size[chunk_id_curr as usize] = offset_size;
@@ -157,7 +159,11 @@ pub async fn handle_read(input: ReadData) -> PostResult {
         }
         chunk_ids_host[chunk_id_curr as usize] = chunk_id_file;
         if chunk_id_file == input.chunk_start && input.offset > 0 {
-            let offset_size = if CHUNK_SIZE - input.offset as u64 > chunk_size_left_host {chunk_size_left_host} else {CHUNK_SIZE - input.offset as u64};
+            let offset_size = if CHUNK_SIZE - input.offset as u64 > chunk_size_left_host {
+                chunk_size_left_host
+            } else {
+                CHUNK_SIZE - input.offset as u64
+            };
 
             chunk_size[chunk_id_curr as usize] = offset_size;
             chunk_ptr += offset_size;

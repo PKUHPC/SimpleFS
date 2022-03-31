@@ -9,7 +9,7 @@ use std::{
 use rand::seq::SliceRandom;
 use regex::Regex;
 
-use crate::global::{
+use sfs_global::global::{
     distributor::SimpleHashDistributor,
     error_msg::error_msg,
     fsconfig::{ENABLE_OUTPUT, HOSTFILE_PATH},
@@ -59,7 +59,7 @@ fn lookup_endpoint(uri: &String, max_retries: i32, host_id: u64) -> Result<SFSEn
         if let Ok(_post_res) = NetworkService::post::<u64>(
             &endp,
             host_id,
-            crate::global::network::post::PostOption::Lookup,
+            sfs_global::global::network::post::PostOption::Lookup,
         ) {
             if ENABLE_OUTPUT {
                 println!("connected: '{}'", uri);

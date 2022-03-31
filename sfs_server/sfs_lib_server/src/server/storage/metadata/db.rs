@@ -3,7 +3,8 @@ use std::{sync::{Arc, Mutex, MutexGuard}, path::Path};
 use libc::{EEXIST, EINVAL};
 use rocksdb::{DB, Options, WriteOptions};
 
-use crate::{server::storage::metadata::merge, global::{util::path_util::{is_absolute, has_trailing_slash}, error_msg::error_msg, metadata::{Metadata, S_ISDIR}}};
+use crate::{server::storage::metadata::merge};
+use sfs_global::global::{util::path_util::{is_absolute, has_trailing_slash}, error_msg::error_msg, metadata::{Metadata, S_ISDIR}};
 static USE_WRITE_AHEAD_LOG: bool = false;
 
 use lazy_static::*;

@@ -8,16 +8,18 @@ use libc::{c_char, strncpy, EBUSY};
 use crate::client::endpoint::SFSEndpoint;
 use crate::client::openfile::{FileType, OpenFile, O_RDONLY};
 use crate::client::{context::StaticContext, network::network_service::NetworkService};
-use crate::global::distributor::Distributor;
-use crate::global::error_msg::error_msg;
-use crate::global::fsconfig::SFSConfig;
-use crate::global::network::config::CHUNK_SIZE;
-use crate::global::network::forward_data::{
+use sfs_global::global::distributor::Distributor;
+use sfs_global::global::error_msg::error_msg;
+use sfs_global::global::fsconfig::SFSConfig;
+use sfs_global::global::network::config::{CHUNK_SIZE, READ_PER_CHUNK, WRITE_PER_CHUNK};
+use sfs_global::global::network::forward_data::{
     ChunkStat, CreateData, DecrData, DirentData, ReadData, ReadResult, SerdeString, TruncData,
     UpdateMetadentryData, WriteData,
 };
-use crate::global::network::post::{option2i, PostOption};
-use crate::global::util::arith_util::{block_index, chunk_lpad, chunk_rpad, offset_to_chunk_id};
+use sfs_global::global::network::post::{option2i, PostOption};
+use sfs_global::global::util::arith_util::{
+    block_index, chunk_lpad, chunk_rpad, offset_to_chunk_id,
+};
 use sfs_rpc::sfs_server::{Post, PostResult};
 
 pub fn forward_stat(path: &String) -> Result<String, i32> {
@@ -104,7 +106,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
                 .unwrap()
                 .clone(),
             Post {
-                option: option2i(PostOption::Remove),
+                option: option2i(&PostOption::Remove),
                 data: serde_json::to_string(&SerdeString { str: path.clone() }).unwrap(),
             },
         ));
@@ -123,7 +125,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
                     .unwrap()
                     .clone(),
                 Post {
-                    option: option2i(PostOption::Remove),
+                    option: option2i(&PostOption::Remove),
                     data: serde_json::to_string(&SerdeString { str: path.clone() }).unwrap(),
                 },
             ));
@@ -133,7 +135,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
             posts.push((
                 endp.clone(),
                 Post {
-                    option: option2i(PostOption::Remove),
+                    option: option2i(&PostOption::Remove),
                     data: serde_json::to_string(&SerdeString { str: path.clone() }).unwrap(),
                 },
             ));
@@ -158,7 +160,7 @@ pub fn forward_get_chunk_stat() -> (i32, ChunkStat) {
         posts.push((
             endp.clone(),
             Post {
-                option: option2i(PostOption::ChunkStat),
+                option: option2i(&PostOption::ChunkStat),
                 data: "0".to_string(),
             },
         ));
@@ -260,7 +262,7 @@ pub fn forward_truncate(path: &String, old_size: i64, new_size: i64) -> i32 {
             new_size,
         };
         let post = Post {
-            option: option2i(PostOption::Trunc),
+            option: option2i(&PostOption::Trunc),
             data: serde_json::to_string(&trunc_data).unwrap(),
         };
         posts.push((
@@ -368,36 +370,103 @@ pub fn forward_write(
         if target == chunk_end_target {
             tot_chunk_size -= chunk_rpad(offset + write_size, CHUNK_SIZE);
         }
+        if WRITE_PER_CHUNK {
+            let buf = unsafe { CStr::from_ptr(buf).to_string_lossy().into_owned() };
+            let mut write_datas: Vec<WriteData> = Vec::new();
+            for chunk in target_chunks.get(&target).unwrap() {
+                let total_size = if *chunk == chunk_start {
+                    if *chunk == chunk_end {
+                        write_size as u64
+                    } else {
+                        chunk_rpad(offset, CHUNK_SIZE)
+                    }
+                } else if *chunk == chunk_end {
+                    chunk_lpad(offset + write_size, CHUNK_SIZE)
+                } else {
+                    CHUNK_SIZE
+                };
 
-        let input = WriteData {
-            path: path.clone(),
-            offset: chunk_lpad(offset, CHUNK_SIZE) as i64,
-            host_id: target,
-            host_size: StaticContext::get_instance().get_hosts().len() as u64,
-            chunk_n: target_chunks.get(&target).unwrap().len() as u64,
-            chunk_start: chunk_start,
-            chunk_end: chunk_end,
-            total_chunk_size: tot_chunk_size,
-            buffers: unsafe { CStr::from_ptr(buf).to_string_lossy().into_owned() },
-        };
-        if let Ok(p) = NetworkService::post::<WriteData>(
-            StaticContext::get_instance()
-                .get_hosts()
-                .get(target as usize)
-                .unwrap(),
-            input,
-            PostOption::Write,
-        ) {
-            if p.err != 0 {
-                return (p.err, 0);
+                let offset_start = if *chunk == chunk_start {
+                    0
+                } else {
+                    (*chunk - chunk_start) * CHUNK_SIZE - offset as u64 % CHUNK_SIZE
+                } as usize;
+
+                let offset_end = if *chunk == chunk_end {
+                    write_size as u64
+                } else if *chunk == chunk_start {
+                    chunk_rpad(offset, CHUNK_SIZE)
+                } else {
+                    (*chunk - chunk_start + 1) * CHUNK_SIZE - offset as u64 % CHUNK_SIZE
+                } as usize;
+                write_datas.push(WriteData {
+                    path: path.clone(),
+                    offset: if *chunk == chunk_start {
+                        chunk_lpad(offset, CHUNK_SIZE) as i64
+                    } else {
+                        0
+                    },
+                    host_id: target,
+                    host_size: StaticContext::get_instance().get_hosts().len() as u64,
+                    chunk_n: 1,
+                    chunk_start: *chunk,
+                    chunk_end: *chunk,
+                    total_chunk_size: total_size,
+                    buffers: buf[offset_start..offset_end].to_string(),
+                });
             }
-            tot_write += p
-                .data
-                .as_str()
-                .parse::<i64>()
-                .expect("response should be 'i64'");
+            if let Ok(results) = NetworkService::post_stream::<WriteData>(
+                StaticContext::get_instance()
+                    .get_hosts()
+                    .get(target as usize)
+                    .unwrap(),
+                write_datas,
+                PostOption::Write,
+            ) {
+                for result in results {
+                    if result.err != 0 {
+                        return (result.err, tot_write);
+                    }
+                    tot_write += result
+                        .data
+                        .as_str()
+                        .parse::<i64>()
+                        .expect("response should be 'i64'");
+                }
+            } else {
+                return (EBUSY, 0);
+            }
         } else {
-            return (EBUSY, 0);
+            let input = WriteData {
+                path: path.clone(),
+                offset: chunk_lpad(offset, CHUNK_SIZE) as i64,
+                host_id: target,
+                host_size: StaticContext::get_instance().get_hosts().len() as u64,
+                chunk_n: target_chunks.get(&target).unwrap().len() as u64,
+                chunk_start: chunk_start,
+                chunk_end: chunk_end,
+                total_chunk_size: tot_chunk_size,
+                buffers: unsafe { CStr::from_ptr(buf).to_string_lossy().into_owned() },
+            };
+            if let Ok(p) = NetworkService::post::<WriteData>(
+                StaticContext::get_instance()
+                    .get_hosts()
+                    .get(target as usize)
+                    .unwrap(),
+                input,
+                PostOption::Write,
+            ) {
+                if p.err != 0 {
+                    return (p.err, 0);
+                }
+                tot_write += p
+                    .data
+                    .as_str()
+                    .parse::<i64>()
+                    .expect("response should be 'i64'");
+            } else {
+                return (EBUSY, 0);
+            }
         }
     }
     return (0, tot_write);
@@ -439,51 +508,120 @@ pub fn forward_read(path: &String, buf: *mut c_char, offset: i64, read_size: i64
             tot_chunk_size -= chunk_rpad(offset + read_size, CHUNK_SIZE);
         }
 
-        let input = ReadData {
-            path: path.clone(),
-            offset: chunk_lpad(offset, CHUNK_SIZE) as i64,
-            host_id: target,
-            host_size: StaticContext::get_instance().get_hosts().len() as u64,
-            chunk_n: target_chunks.get(&target).unwrap().len() as u64,
-            chunk_start: chunk_start,
-            chunk_end: chunk_end,
-            total_chunk_size: tot_chunk_size,
-        };
-        if let Ok(p) = NetworkService::post::<ReadData>(
-            StaticContext::get_instance()
-                .get_hosts()
-                .get(target as usize)
-                .unwrap(),
-            input,
-            PostOption::Read,
-        ) {
-            if p.err != 0 {
-                return (p.err, 0);
+        if READ_PER_CHUNK {
+            let mut read_datas: Vec<ReadData> = Vec::new();
+            for chunk in target_chunks.get(&target).unwrap() {
+                let total_size = if *chunk == chunk_start {
+                    if *chunk == chunk_end {
+                        read_size as u64
+                    } else {
+                        chunk_rpad(offset, CHUNK_SIZE)
+                    }
+                } else if *chunk == chunk_end {
+                    chunk_lpad(offset + read_size, CHUNK_SIZE)
+                } else {
+                    CHUNK_SIZE
+                };
+                read_datas.push(ReadData {
+                    path: path.clone(),
+                    offset: if *chunk == chunk_start {
+                        chunk_lpad(offset, CHUNK_SIZE) as i64
+                    } else {
+                        0
+                    },
+                    host_id: target,
+                    host_size: StaticContext::get_instance().get_hosts().len() as u64,
+                    chunk_n: 1,
+                    chunk_start: *chunk,
+                    chunk_end: *chunk,
+                    total_chunk_size: total_size,
+                })
             }
-            let read_res: ReadResult = serde_json::from_str(p.data.as_str()).unwrap();
-            tot_read += read_res.nreads;
-            let data = read_res.data;
-            for chnk in data {
-                let local_offset = if chnk.0 == chunk_start {
-                    0
-                } else {
-                    chnk.0 * CHUNK_SIZE - (offset as u64 % CHUNK_SIZE)
-                };
-                let data = if chnk.0 == chunk_end {
-                    chnk.1 + "\0"
-                } else {
-                    chnk.1
-                };
-                unsafe {
-                    strncpy(
-                        buf.offset(local_offset as isize),
-                        data.as_ptr() as *const i8,
-                        data.len(),
-                    );
+            if let Ok(results) = NetworkService::post_stream::<ReadData>(
+                StaticContext::get_instance()
+                    .get_hosts()
+                    .get(target as usize)
+                    .unwrap(),
+                read_datas,
+                PostOption::Read,
+            ) {
+                for result in results {
+                    if result.err != 0 {
+                        return (result.err, tot_read);
+                    }
+                    let read_res: ReadResult = serde_json::from_str(result.data.as_str()).unwrap();
+                    tot_read += read_res.nreads;
+                    let data = read_res.data;
+                    for chnk in data {
+                        let local_offset = if chnk.0 == chunk_start {
+                            0
+                        } else {
+                            (chnk.0 - chunk_start) * CHUNK_SIZE - (offset as u64 % CHUNK_SIZE)
+                        };
+                        let data = if chnk.0 == chunk_end {
+                            chnk.1 + "\0"
+                        } else {
+                            chnk.1
+                        };
+                        unsafe {
+                            strncpy(
+                                buf.offset(local_offset as isize),
+                                data.as_ptr() as *const i8,
+                                data.len(),
+                            );
+                        }
+                    }
                 }
+            } else {
+                return (EBUSY, 0);
             }
         } else {
-            return (EBUSY, 0);
+            let input = ReadData {
+                path: path.clone(),
+                offset: chunk_lpad(offset, CHUNK_SIZE) as i64,
+                host_id: target,
+                host_size: StaticContext::get_instance().get_hosts().len() as u64,
+                chunk_n: target_chunks.get(&target).unwrap().len() as u64,
+                chunk_start: chunk_start,
+                chunk_end: chunk_end,
+                total_chunk_size: tot_chunk_size,
+            };
+            if let Ok(p) = NetworkService::post::<ReadData>(
+                StaticContext::get_instance()
+                    .get_hosts()
+                    .get(target as usize)
+                    .unwrap(),
+                input,
+                PostOption::Read,
+            ) {
+                if p.err != 0 {
+                    return (p.err, 0);
+                }
+                let read_res: ReadResult = serde_json::from_str(p.data.as_str()).unwrap();
+                tot_read += read_res.nreads;
+                let data = read_res.data;
+                for chnk in data {
+                    let local_offset = if chnk.0 == chunk_start {
+                        0
+                    } else {
+                        (chnk.0 - chunk_start) * CHUNK_SIZE - (offset as u64 % CHUNK_SIZE)
+                    };
+                    let data = if chnk.0 == chunk_end {
+                        chnk.1 + "\0"
+                    } else {
+                        chnk.1
+                    };
+                    unsafe {
+                        strncpy(
+                            buf.offset(local_offset as isize),
+                            data.as_ptr() as *const i8,
+                            data.len(),
+                        );
+                    }
+                }
+            } else {
+                return (EBUSY, 0);
+            }
         }
     }
     return (0, tot_read);
@@ -503,7 +641,7 @@ pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>) {
                 .unwrap()
                 .clone(),
             Post {
-                option: option2i(PostOption::GetDirents),
+                option: option2i(&PostOption::GetDirents),
                 data: serde_json::to_string(&DirentData { path: path.clone() }).unwrap(),
             },
         ));

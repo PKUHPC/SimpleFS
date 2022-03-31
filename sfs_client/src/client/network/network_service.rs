@@ -6,10 +6,8 @@ use std::{
     io::Error,
 };
 
-use crate::{
-    client::endpoint::SFSEndpoint,
-    global::network::post::{option2i, PostOption},
-};
+use crate::client::endpoint::SFSEndpoint;
+use sfs_global::global::network::post::{option2i, PostOption};
 use sfs_rpc::sfs_server::sfs_handle_client::SfsHandleClient;
 use sfs_rpc::sfs_server::{Post, PostResult};
 
@@ -26,7 +24,7 @@ impl NetworkService {
     ) -> Result<PostResult, Error> {
         let serialized_data = serde_json::to_string(&data)?;
         let post = Post {
-            option: option2i(opt),
+            option: option2i(&opt),
             data: serialized_data,
         };
         let mut client = SfsHandleClient::connect(format!("http://{}:{}", endp.addr, 8082))
@@ -65,7 +63,37 @@ impl NetworkService {
                 return Err(Error::new(std::io::ErrorKind::NotConnected, e.to_string()));
             }
             let mut response = post_result.unwrap().into_inner();
-            post_results.push(response.message().await.unwrap().unwrap());
+            while let Some(res) = response.message().await.unwrap() {
+                post_results.push(res);
+            }
+        }
+        return Ok(post_results);
+    }
+    #[tokio::main]
+    pub async fn post_stream<T: Serialize>(
+        endp: &SFSEndpoint,
+        data: Vec<T>,
+        opt: PostOption,
+    ) -> Result<Vec<PostResult>, Error> {
+        let mut post_results: Vec<PostResult> = Vec::new();
+        let mut client = SfsHandleClient::connect(format!("http://{}:{}", endp.addr, 8082))
+            .await
+            .unwrap();
+        let posts = data
+            .iter()
+            .map(|x| Post {
+                option: option2i(&opt),
+                data: serde_json::to_string(&x).unwrap(),
+            })
+            .collect::<Vec<_>>();
+        let request = tonic::Request::new(iter(posts));
+        let post_result = client.handle(request).await;
+        if let Err(e) = post_result {
+            return Err(Error::new(std::io::ErrorKind::NotConnected, e.to_string()));
+        }
+        let mut response = post_result.unwrap().into_inner();
+        while let Some(res) = response.message().await.unwrap() {
+            post_results.push(res);
         }
         return Ok(post_results);
     }

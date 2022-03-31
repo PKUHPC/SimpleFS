@@ -59,7 +59,7 @@ pub fn i2option(n: i32) -> PostOption {
         _ => PostOption::Unknown,
     }
 }
-pub fn option2i(option: PostOption) -> i32 {
+pub fn option2i(option: &PostOption) -> i32 {
     match option {
         PostOption::Lookup => 0,
         PostOption::Stat => 1,

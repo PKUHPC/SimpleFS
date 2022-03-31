@@ -7,9 +7,9 @@ use libc::{S_IRUSR, S_IWUSR};
 use nix::sys::statfs::statfs;
 use std::sync::{MutexGuard, Mutex};
 
-use crate::global::network::config::CHUNK_SIZE;
-use crate::global::network::forward_data::ChunkStat;
-use crate::global::{util::path_util::is_absolute, error_msg::error_msg};
+use sfs_global::global::network::config::CHUNK_SIZE;
+use sfs_global::global::network::forward_data::ChunkStat;
+use sfs_global::global::{util::path_util::is_absolute, error_msg::error_msg};
 
 use lazy_static::*;
 

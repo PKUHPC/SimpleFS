@@ -983,6 +983,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sfs_global"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
 name = "sfs_lib_server"
 version = "0.1.0"
 dependencies = [
@@ -994,6 +1004,7 @@ dependencies = [
  "rocksdb",
  "serde",
  "serde_json",
+ "sfs_global",
  "sha2",
  "tokio",
 ]
@@ -1017,6 +1028,7 @@ dependencies = [
  "prost",
  "serde",
  "serde_json",
+ "sfs_global",
  "sfs_lib_server",
  "sfs_rpc",
  "tokio",
