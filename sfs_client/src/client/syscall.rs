@@ -18,6 +18,7 @@ use sfs_global::global;
 use sfs_global::global::error_msg::error_msg;
 use sfs_global::global::fsconfig::ZERO_BUF_BEFORE_READ;
 use sfs_global::global::metadata::{S_ISDIR, S_ISREG};
+use sfs_global::global::network::config::{READ_PER_CHUNK, WRITE_PER_CHUNK};
 use sfs_global::global::util::path_util::dirname;
 
 use super::config::CHECK_PARENT_DIR;
@@ -25,8 +26,8 @@ use super::config::CHECK_PARENT_DIR;
 use super::context::{interception_enabled, DynamicContext};
 use super::network::forward_msg::{
     forward_create, forward_decr_size, forward_get_chunk_stat, forward_get_dirents,
-    forward_get_metadentry_size, forward_read, forward_remove, forward_truncate,
-    forward_update_metadentry_size, forward_write,
+    forward_get_metadentry_size, forward_read, forward_read_stream, forward_remove,
+    forward_truncate, forward_update_metadentry_size, forward_write, forward_write_stream,
 };
 use super::openfile::{FileType, OpenFile};
 use super::util::{get_metadata, metadata_to_stat};
@@ -554,7 +555,12 @@ fn internal_pwrite(f: Arc<Mutex<OpenFile>>, buf: *const c_char, count: i64, offs
         return -1;
     }
     let updated_size = ret_update_size.1;
-    let write_res = forward_write(&path, buf, append_flag, offset, count, updated_size);
+    let write_res = if WRITE_PER_CHUNK {
+        forward_write_stream(&path, buf, append_flag, offset, count, updated_size)
+    } else {
+        forward_write(&path, buf, append_flag, offset, count, updated_size)
+    };
+
     if write_res.0 != 0 {
         error_msg(
             "client::sfs_pwrite".to_string(),
@@ -630,7 +636,11 @@ fn internal_pread(f: Arc<Mutex<OpenFile>>, buf: *mut c_char, count: i64, offset:
         }
     }
     let path = f.lock().unwrap().get_path().clone();
-    let read_res = forward_read(&path, buf, offset, count);
+    let read_res = if READ_PER_CHUNK {
+        forward_read_stream(&path, buf, offset, count)
+    } else {
+        forward_read(&path, buf, offset, count)
+    };
     if read_res.0 != 0 {
         error_msg(
             "client::sfs_pread".to_string(),

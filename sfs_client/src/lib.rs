@@ -764,7 +764,7 @@ mod tests {
     }
     #[test]
     pub fn test11() {
-        let s = vec!['a' as i8; 8 * CHUNK_SIZE as usize];
+        let s = vec!['a' as i8; 50 * CHUNK_SIZE as usize];
 
         let path = "/file1\0".to_string();
         let fd = sfs_open(
@@ -786,7 +786,7 @@ mod tests {
                 .get_length()
         );
 
-        let res = sfs_write(fd, s.as_ptr() as *mut i8, (7 * CHUNK_SIZE + 10) as i64);
+        let res = sfs_write(fd, s.as_ptr() as *mut i8, (1999 * CHUNK_SIZE + 10) as i64);
         if res <= 0 {
             println!("write error ...");
             return;
@@ -795,13 +795,13 @@ mod tests {
         }
 
         sfs_lseek(fd, 13, SEEK_SET);
-        let mut buf = vec![0 as u8; 3 * CHUNK_SIZE as usize];
-        let res = sfs_read(fd, buf.as_mut_ptr() as *mut i8, 3 * CHUNK_SIZE as i64);
+        let mut buf = vec![0 as u8; 10 * CHUNK_SIZE as usize];
+        let res = sfs_read(fd, buf.as_mut_ptr() as *mut i8, 10 * CHUNK_SIZE as i64);
         if res <= 0 {
             println!("read error ...");
             return;
         } else {
-            println!("read: {}", String::from_utf8(buf[0..20].to_vec()).unwrap());
+            println!("{} bytes read", res);
         }
     }
 }
