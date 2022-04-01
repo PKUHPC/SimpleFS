@@ -5,7 +5,6 @@ use std::os::unix::fs::PermissionsExt;
 
 use libc::{S_IRUSR, S_IWUSR};
 use nix::sys::statfs::statfs;
-use std::sync::{MutexGuard, Mutex};
 
 use sfs_global::global::network::config::CHUNK_SIZE;
 use sfs_global::global::network::forward_data::ChunkStat;
@@ -13,30 +12,44 @@ use sfs_global::global::{util::path_util::is_absolute, error_msg::error_msg};
 
 use lazy_static::*;
 
+use crate::server::config::TRUNCATE_DIRECTORY;
+use crate::server::filesystem::storage_context::StorageContext;
+
+#[allow(unused_must_use)]
+pub fn init_chunk() -> ChunkStorage{
+    let chunk_storage_path =
+        StorageContext::get_instance().get_rootdir().clone() + &"/data/chunks".to_string();
+    if TRUNCATE_DIRECTORY {
+        fs::remove_dir_all(Path::new(&chunk_storage_path));
+    }
+    std::fs::create_dir_all(Path::new(&chunk_storage_path))
+        .expect("fail to create chunk storage directory");
+        
+    return ChunkStorage::new(&chunk_storage_path, CHUNK_SIZE).expect("fail to create chunk storage");
+}
 pub struct ChunkStorage{
     pub root_path_: String,
     pub chunk_size_: u64,
 }
 lazy_static!{
-    static ref CNK: Mutex<ChunkStorage> = Mutex::new(ChunkStorage{
-        root_path_: "".to_string(),
-        chunk_size_: CHUNK_SIZE
-    });
+    static ref CNK: ChunkStorage = init_chunk();
 }
 impl ChunkStorage{
-    pub fn get_instance() -> MutexGuard<'static, ChunkStorage>{
-        CNK.lock().unwrap()
+    pub fn get_instance() -> &'static ChunkStorage{
+        &CNK
     }
-    pub fn set_storage(storage_: ChunkStorage){
-        CNK.lock().unwrap().root_path_ = storage_.root_path_;
-        CNK.lock().unwrap().chunk_size_ = storage_.chunk_size_;
+    pub fn default() -> ChunkStorage{
+        ChunkStorage{
+            root_path_: "".to_string(),
+            chunk_size_: CHUNK_SIZE
+        }
     }
     pub fn absolute(internel_path: &String) -> String{
         if is_absolute(&internel_path) {
             error_msg("server::storage::chunk_storage::absolute".to_string(), "path should be relative".to_string());
             return internel_path.clone();
         }
-        format!("{}/{}", CNK.lock().unwrap().get_root_path(), internel_path)
+        format!("{}/{}", CNK.get_root_path(), internel_path)
     }
     pub fn get_chunks_dir(file_path: &String) -> String{
         if !is_absolute(file_path) {
@@ -82,7 +95,7 @@ impl ChunkStorage{
         }
     }
     pub async fn write_chunk(file_path: &String, chunk_id: u64, buf: &[u8], size: u64, offset: u64) -> Result<u64, i32>{
-        if size+ offset > CNK.lock().unwrap().get_chunk_size(){
+        if size+ offset > CNK.get_chunk_size(){
             error_msg("server::storage::chunk_storage::write_chunk".to_string(), "beyond chunk storage range".to_string());
         }
         ChunkStorage::init_chunk_space(file_path).await;
@@ -101,7 +114,7 @@ impl ChunkStorage{
         Ok(wrote_tot)
     }
     pub async fn read_chunk(file_path: &String, chunk_id: u64, buf: &mut Vec<u8>, size: u64, mut offset: u64) -> Result<u64, i32>{
-        if size + offset > CNK.lock().unwrap().get_chunk_size(){
+        if size + offset > CNK.get_chunk_size(){
             error_msg("server::storage::chunk_storage::read_chunk".to_string(), "beyond chunk storage range".to_string());
         }
         ChunkStorage::init_chunk_space(file_path).await;
@@ -158,7 +171,7 @@ impl ChunkStorage{
         }
     }
     pub async fn truncate_chunk_file(file_path: &String, chunk_id: u64, length: u64){
-        if length > CNK.lock().unwrap().get_chunk_size(){
+        if length > CNK.get_chunk_size(){
             error_msg("server::storage::chunk_storage::truncate_chunk_file".to_string(), "invalid length".to_string());
             return;
         }
@@ -174,7 +187,7 @@ impl ChunkStorage{
         
     }
     pub fn chunk_stat() -> ChunkStat{
-        let statfs = statfs(Path::new(CNK.lock().unwrap().get_root_path()));
+        let statfs = statfs(Path::new(CNK.get_root_path()));
         if let Err(_e) = statfs{
             error_msg("server::storage::chunk_storage::chunk_stat".to_string(), "error occurs while get fs stat".to_string());
             return ChunkStat{
@@ -187,9 +200,9 @@ impl ChunkStorage{
         let bytes_tot = statfs.block_size() as u64 * statfs.blocks();
         let bytes_free = statfs.block_size() as u64 * statfs.blocks_available();
         ChunkStat{
-            chunk_size: CNK.lock().unwrap().get_chunk_size(),
-            chunk_total: bytes_tot / CNK.lock().unwrap().get_chunk_size(),
-            chunk_free: bytes_free / CNK.lock().unwrap().get_chunk_size()
+            chunk_size: CNK.get_chunk_size(),
+            chunk_total: bytes_tot / CNK.get_chunk_size(),
+            chunk_free: bytes_free / CNK.get_chunk_size()
         }
     }
     pub fn get_chunk_size(&self) -> u64{

@@ -17,18 +17,15 @@ use sfs_global::{
         util::net_util::get_my_hostname,
     },
 };
-use sfs_lib_server::server::{
-    config::{ServerConfig, IGNORE_IF_EXISTS, TRUNCATE_DIRECTORY},
-    network::network_context::NetworkContext,
-};
+use sfs_lib_server::server::{config::IGNORE_IF_EXISTS, network::network_context::NetworkContext};
 use sfs_lib_server::server::{
     filesystem::storage_context::StorageContext, storage::data::chunk_storage::*,
     storage::metadata::db::MetadataDB,
 };
 use std::net::SocketAddrV4;
 use std::{
-    fs::{self, OpenOptions},
-    io::{BufWriter, Error, Read, Write},
+    fs::OpenOptions,
+    io::{BufWriter, Error, Write},
     net::{Ipv4Addr, SocketAddr},
     path::Path,
 };
@@ -146,8 +143,6 @@ async fn handle_post(post: &Post) -> PostResult {
             if ENABLE_OUTPUT {
                 println!("handling look up....");
             }
-            let id: u64 = serde_json::from_str(&post.data).unwrap();
-            StorageContext::get_instance().set_host_id(id);
             return PostResult {
                 err: 0,
                 data: "0".to_string(),
@@ -324,35 +319,8 @@ fn populates_host_file() -> Option<Error> {
     None
 }
 async fn init_environment() -> Result<(), Error> {
-    let chunk_storage_path =
-        StorageContext::get_instance().get_rootdir().clone() + &"/data/chunks".to_string();
-    let metadata_path =
-        StorageContext::get_instance().get_metadir().clone() + &"/rocksdb".to_string();
-
-    if TRUNCATE_DIRECTORY {
-        fs::remove_dir_all(Path::new(&chunk_storage_path))?;
-        fs::remove_dir_all(Path::new(&metadata_path))?;
-    }
-    // init metadata storage
-
-    fs::create_dir_all(Path::new(&metadata_path))
-        .expect("fail to create metadata data base directory");
-    StorageContext::set_mdb(
-        MetadataDB::new(&metadata_path).expect("fail to create metadata data base"),
-    );
-
-    // init chunk storage
-    fs::create_dir_all(Path::new(&chunk_storage_path))
-        .expect("fail to create chunk storage directory");
-    StorageContext::set_storage(
-        ChunkStorage::new(&chunk_storage_path, CHUNK_SIZE).expect("fail to create chunk storage"),
-    );
-
-    StorageContext::get_instance().set_atime_state(true);
-    StorageContext::get_instance().set_mtime_state(true);
-    StorageContext::get_instance().set_ctime_state(true);
-    StorageContext::get_instance().set_link_count_state(true);
-    StorageContext::get_instance().set_blocks_state(true);
+    ChunkStorage::get_instance();
+    MetadataDB::get_instance();
 
     let mut root_md = Metadata::new();
     root_md.set_mode(S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO);
@@ -371,39 +339,7 @@ async fn init_environment() -> Result<(), Error> {
 pub async fn main() -> Result<(), Error> {
     //let RPC_PROTOCOL: String = String::from("tcp");
 
-    let mut json: Vec<u8> = Vec::new();
-    let mut f = std::fs::OpenOptions::new()
-        .read(true)
-        .open("config.json".to_string())?;
-
-    f.read_to_end(&mut json).expect("fail to read config file");
-    let s = String::from_utf8(json.clone()).unwrap();
-    let config: ServerConfig =
-        serde_json::from_str(s.as_str()).expect("JSON was not well-formatted");
-
-    fs::create_dir_all(Path::new(&config.mountdir)).expect("fail to create mount directory");
-    fs::create_dir_all(Path::new(&config.metadir)).expect("fail to create meta directory");
-    StorageContext::get_instance().set_mountdir(
-        fs::canonicalize(&config.mountdir)
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .to_string(),
-    );
-    let root_dirpath = config.rootdir;
-    //let root_dirpath = root_dir + &std::process::id().to_string();
-    fs::create_dir_all(Path::new(&root_dirpath)).expect("fail to create root directory");
-    StorageContext::get_instance().set_rootdir(root_dirpath);
-    StorageContext::get_instance().set_metadir(
-        fs::canonicalize(&config.metadir)
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .to_string(),
-    );
-    StorageContext::get_instance().set_hosts_file(config.hosts_file);
-    //StorageContext::get_instance().set_bind_addr(format!("{}://{}", RPC_PROTOCOL, config.listen));
-    StorageContext::get_instance().set_bind_addr(config.listen);
+    StorageContext::get_instance();
 
     init_environment().await?;
     /*

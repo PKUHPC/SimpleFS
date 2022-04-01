@@ -1,9 +1,53 @@
 use lazy_static::*;
-use std::sync::{Mutex, MutexGuard};
+use std::{io::Read, path::Path, fs};
 
-use crate::server::storage::{metadata::db::MetadataDB, data::chunk_storage::ChunkStorage};
+use crate::server::{storage::{metadata::db::MetadataDB}, config::ServerConfig};
 
+pub fn init_context() -> StorageContext{
+    let mut context = StorageContext::new();
+    let mut json: Vec<u8> = Vec::new();
+    let mut f = std::fs::OpenOptions::new()
+        .read(true)
+        .open("config.json".to_string())
+        .unwrap();
 
+    f.read_to_end(&mut json).expect("fail to read config file");
+    let s = String::from_utf8(json.clone()).unwrap();
+    let config: ServerConfig =
+        serde_json::from_str(s.as_str()).expect("JSON was not well-formatted");
+
+    fs::create_dir_all(Path::new(&config.mountdir)).expect("fail to create mount directory");
+    fs::create_dir_all(Path::new(&config.metadir)).expect("fail to create meta directory");
+    context.set_mountdir(
+        fs::canonicalize(&config.mountdir)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string(),
+    );
+    let root_dirpath = config.rootdir;
+    //let root_dirpath = root_dir + &std::process::id().to_string();
+    fs::create_dir_all(Path::new(&root_dirpath)).expect("fail to create root directory");
+    context.set_rootdir(root_dirpath);
+    context.set_metadir(
+        fs::canonicalize(&config.metadir)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string(),
+    );
+    context.set_hosts_file(config.hosts_file);
+    //context.set_bind_addr(format!("{}://{}", RPC_PROTOCOL, config.listen));
+    context.set_bind_addr(config.listen);
+    
+    context.set_atime_state(true);
+    context.set_mtime_state(true);
+    context.set_ctime_state(true);
+    context.set_link_count_state(true);
+    context.set_blocks_state(true);
+
+    context
+}
 pub struct StorageContext{
     host_id_: u64,
     rootdir_: String,
@@ -22,27 +66,30 @@ pub struct StorageContext{
     blocks_state_: bool
 }
 lazy_static!{
-    static ref CTX: Mutex<StorageContext> = Mutex::new(StorageContext{
-        host_id_: 0,
-        rootdir_: String::from(""),
-        mountdir_: String::from(""),
-        metadir_: String::from(""),
-
-        rpc_protocol_: String::from(""),
-        bind_addr_: String::from(""),
-        hosts_file_: String::from(""),
-        use_auto_sm_: true,
-
-        atime_state_: true,
-        mtime_state_: true,
-        ctime_state_: true,
-        link_count_state_: true,
-        blocks_state_: true
-    });
+    static ref CTX: StorageContext = init_context();
 }
 impl StorageContext{
-    pub fn get_instance() -> MutexGuard<'static, StorageContext>{
-        CTX.lock().unwrap()
+    pub fn get_instance() -> &'static StorageContext{
+        &CTX
+    }
+    pub fn new() -> StorageContext{
+        StorageContext{
+            host_id_: 0,
+            rootdir_: String::from(""),
+            mountdir_: String::from(""),
+            metadir_: String::from(""),
+    
+            rpc_protocol_: String::from(""),
+            bind_addr_: String::from(""),
+            hosts_file_: String::from(""),
+            use_auto_sm_: true,
+    
+            atime_state_: true,
+            mtime_state_: true,
+            ctime_state_: true,
+            link_count_state_: true,
+            blocks_state_: true
+        }
     }
     pub fn get_rootdir(&self) -> &String{
         &self.rootdir_
@@ -117,18 +164,12 @@ impl StorageContext{
         self.blocks_state_ = blocks_state_;
     }
 
-    pub fn get_mdb(&self) -> MutexGuard<'static, MetadataDB>{
+    pub fn get_mdb(&self) -> &'static MetadataDB{
         MetadataDB::get_instance()
-    }
-    pub fn set_mdb(mdb_: MetadataDB){
-        MetadataDB::set_mdb(mdb_);
     }
     //pub fn get_storage() -> &'static ChunkStorage{
     //    ChunkStorage::get_instance()
     //}
-    pub fn set_storage(storage_: ChunkStorage){
-        ChunkStorage::set_storage(storage_);
-    }
     pub fn set_host_id(&mut self, id: u64){
         self.host_id_ = id;
     }

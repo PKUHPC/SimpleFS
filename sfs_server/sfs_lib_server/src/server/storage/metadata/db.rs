@@ -1,14 +1,24 @@
-use std::{sync::{Arc, Mutex, MutexGuard}, path::Path};
+use std::{sync::{Arc}, path::Path};
 
 use libc::{EEXIST, EINVAL};
 use rocksdb::{DB, Options, WriteOptions};
 
-use crate::{server::storage::metadata::merge};
+use crate::{server::{storage::metadata::merge, filesystem::storage_context::StorageContext, config::TRUNCATE_DIRECTORY}};
 use sfs_global::global::{util::path_util::{is_absolute, has_trailing_slash}, error_msg::error_msg, metadata::{Metadata, S_ISDIR}};
 static USE_WRITE_AHEAD_LOG: bool = false;
 
 use lazy_static::*;
 
+#[allow(unused_must_use)]
+pub fn init_mdb() -> MetadataDB{
+    let metadata_path =
+        StorageContext::get_instance().get_metadir().clone() + &"/rocksdb".to_string();
+
+    if TRUNCATE_DIRECTORY {
+        std::fs::remove_dir_all(Path::new(&metadata_path));
+    }
+    return MetadataDB::new(&metadata_path).unwrap();
+}
 pub struct MetadataDB{
     pub db: Option<Arc<DB>>,
     options: Options,
@@ -16,24 +26,11 @@ pub struct MetadataDB{
     path: String
 }
 lazy_static!{
-    static ref MDB: Mutex<MetadataDB> = Mutex::new(
-        MetadataDB{
-            db: None,
-            options: Options::default(),
-            write_opts: WriteOptions::default(),
-            path: "".to_string()
-        }
-    );
+    static ref MDB: MetadataDB = init_mdb();
 }
 impl MetadataDB{
-    pub fn get_instance() -> MutexGuard<'static, MetadataDB>{
-        MDB.lock().unwrap()
-    }
-    pub fn set_mdb(mdb_: MetadataDB){
-        MetadataDB::get_instance().db = mdb_.db;
-        MetadataDB::get_instance().options = mdb_.options;
-        MetadataDB::get_instance().write_opts = mdb_.write_opts;
-        MetadataDB::get_instance().path = mdb_.path;
+    pub fn get_instance() -> &'static MetadataDB{
+        &MDB
     }
     pub fn optimize_rocksdb_options(options:&mut Options){
         options.set_max_successive_merges(128);
@@ -70,7 +67,7 @@ impl MetadataDB{
             None
         }
     }
-    pub fn put(&mut self, key: &String, val: &String, ignore_if_exists: bool) -> i32{
+    pub fn put(&self, key: &String, val: &String, ignore_if_exists: bool) -> i32{
         //println!("putting key: {} value: {}", key, val);
         if ignore_if_exists && self.exists(key){
             return EEXIST;
@@ -89,7 +86,7 @@ impl MetadataDB{
         }
         return 0;
     }
-    pub fn remove(&mut self, key: &String){
+    pub fn remove(&self, key: &String){
         if let Err(_e) = self.db.as_ref().unwrap().delete(key){
             error_msg("server::storage::metadata::db::delete".to_string(), "fail to delete key".to_string());
         }
@@ -104,7 +101,7 @@ impl MetadataDB{
             false
         }
     }
-    pub fn update(&mut self, old_key: &String, new_key: &String, val: &String){
+    pub fn update(&self, old_key: &String, new_key: &String, val: &String){
         let mut batch = rocksdb::WriteBatch::default();
         batch.delete(old_key);
         batch.put(new_key, val);
@@ -112,13 +109,13 @@ impl MetadataDB{
             error_msg("server::storage::metadata::db::update".to_string(), "fail to write batch".to_string());
         }
     }
-    pub fn increase_size(&mut self, key: &String, size: usize, append: bool){
+    pub fn increase_size(&self, key: &String, size: usize, append: bool){
         let op_s = format!("i|{}|{}", size, append);
         if let Err(_e) = self.db.as_ref().unwrap().merge_opt(key, op_s, &self.write_opts){
             error_msg("server::storage::metadata::db::increase_size".to_string(), "fail to merge operands".to_string()); 
         }
     }
-    pub fn decrease_size(&mut self, key: &String, size: usize){
+    pub fn decrease_size(&self, key: &String, size: usize){
         let op_s = format!("d|{}", size);
         if let Err(_e) = self.db.as_ref().unwrap().merge_opt(key, op_s, &self.write_opts){
             error_msg("server::storage::metadata::db::decrease_size".to_string(), "fail to merge operands".to_string()); 
