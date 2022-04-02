@@ -41,11 +41,18 @@ use tokio_stream::wrappers::ReceiverStream;
 struct ServerHandler {}
 #[tonic::async_trait]
 impl SfsHandle for ServerHandler {
-    type handleStream = ReceiverStream<Result<PostResult, Status>>;
+    type handle_streamStream = ReceiverStream<Result<PostResult, Status>>;
     async fn handle(
         &self,
+        request: tonic::Request<Post>,
+    ) -> Result<tonic::Response<PostResult>, tonic::Status>{
+        let post = request.into_inner();
+        return Ok(Response::new(handle_post(&post).await));
+    }
+    async fn handle_stream(
+        &self,
         request: Request<tonic::Streaming<Post>>,
-    ) -> Result<Response<Self::handleStream>, Status> {
+    ) -> Result<Response<Self::handle_streamStream>, Status> {
         let mut streamer = request.into_inner();
         let (tx, rx) = mpsc::channel((CHUNK_SIZE / 8) as usize);
         tokio::spawn(async move {

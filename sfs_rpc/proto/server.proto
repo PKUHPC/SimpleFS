@@ -2,7 +2,8 @@ syntax = "proto3";
 package sfs_server;
 
 service SFSHandle{
-    rpc handle(stream Post) returns (stream PostResult);
+    rpc handle(Post) returns (PostResult);
+    rpc handle_stream(stream Post) returns (stream PostResult);
 }
 
 message Post{

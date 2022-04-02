@@ -30,13 +30,13 @@ impl NetworkService {
         let mut client = SfsHandleClient::connect(format!("http://{}:{}", endp.addr, 8082))
             .await
             .unwrap();
-        let request = tonic::Request::new(iter(vec![post]));
+        let request = tonic::Request::new(post);
         let post_result = client.handle(request).await;
         if let Err(e) = post_result {
             return Err(Error::new(std::io::ErrorKind::NotConnected, e.to_string()));
         }
-        let mut response = post_result.unwrap().into_inner();
-        return Ok(response.message().await.unwrap().unwrap());
+        let response = post_result.unwrap().into_inner();
+        return Ok(response);
     }
 
     #[tokio::main]
@@ -58,7 +58,7 @@ impl NetworkService {
                 .await
                 .unwrap();
             let request = tonic::Request::new(iter(posts));
-            let post_result = client.handle(request).await;
+            let post_result = client.handle_stream(request).await;
             if let Err(e) = post_result {
                 return Err(Error::new(std::io::ErrorKind::NotConnected, e.to_string()));
             }
@@ -88,7 +88,7 @@ impl NetworkService {
             })
             .collect::<Vec<_>>();
         let request = tonic::Request::new(iter(posts));
-        let post_result = client.handle(request).await;
+        let post_result = client.handle_stream(request).await;
         if let Err(e) = post_result {
             return Err(Error::new(std::io::ErrorKind::NotConnected, e.to_string()));
         }
