@@ -764,7 +764,8 @@ mod tests {
     }
     #[test]
     pub fn test11() {
-        let s = vec!['a' as i8; 50 * CHUNK_SIZE as usize];
+        let cnt = 2000;
+        let s = vec!['a' as i8; cnt * CHUNK_SIZE as usize];
 
         let path = "/file1\0".to_string();
         let fd = sfs_open(
@@ -786,7 +787,11 @@ mod tests {
                 .get_length()
         );
 
-        let res = sfs_write(fd, s.as_ptr() as *mut i8, (1999 * CHUNK_SIZE + 10) as i64);
+        let res = sfs_write(
+            fd,
+            s.as_ptr() as *mut i8,
+            ((cnt - 1) * CHUNK_SIZE as usize + 10) as i64,
+        );
         if res <= 0 {
             println!("write error ...");
             return;
