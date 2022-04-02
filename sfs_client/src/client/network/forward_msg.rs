@@ -322,7 +322,6 @@ pub fn forward_update_metadentry_size(
         );
     }
 }
-
 #[tokio::main]
 pub async fn forward_write_stream(
     path: &String,
