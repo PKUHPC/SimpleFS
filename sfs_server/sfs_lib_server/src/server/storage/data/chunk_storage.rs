@@ -20,7 +20,7 @@ pub fn init_chunk() -> ChunkStorage{
     let chunk_storage_path =
         StorageContext::get_instance().get_rootdir().clone() + &"/data/chunks".to_string();
     if TRUNCATE_DIRECTORY {
-        fs::remove_dir_all(Path::new(&chunk_storage_path));
+        std::fs::remove_dir_all(Path::new(&chunk_storage_path));
     }
     std::fs::create_dir_all(Path::new(&chunk_storage_path))
         .expect("fail to create chunk storage directory");

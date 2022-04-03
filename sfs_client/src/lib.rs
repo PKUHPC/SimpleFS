@@ -185,6 +185,8 @@ pub extern "C" fn enable_interception() {
 }
 #[cfg(test)]
 mod tests {
+    use std::thread;
+
     #[allow(unused_imports)]
     use libc::{c_char, dirent, stat as Stat, O_CREAT, O_RDWR, SEEK_SET, S_IFDIR, S_IFREG};
 
@@ -763,7 +765,7 @@ mod tests {
         }
     }
     #[test]
-    pub fn test11() {
+    pub fn test_bigdata() {
         let cnt = 2000;
         let s = vec!['a' as i8; cnt * CHUNK_SIZE as usize];
 
@@ -807,6 +809,38 @@ mod tests {
             return;
         } else {
             println!("{} bytes read", res);
+        }
+    }
+    #[test]
+    #[allow(unused_must_use)]
+    pub fn test_parallel() {
+        let mut handles = Vec::new();
+        for i in 0..10 {
+            handles.push(thread::spawn(move || {
+                let path = "/file".to_string() + (i as i32).to_string().as_str() + "\0";
+                let fd = sfs_open(
+                    path.as_str().as_ptr() as *const c_char,
+                    S_IFREG,
+                    O_CREAT | O_RDWR,
+                );
+                if fd <= 0 {
+                    println!("open error on thread {} ...", i);
+                    return;
+                }
+                //println!("file {} opened on thread {} ...", fd, i);
+                let cnt = 160;
+                let data = vec!['a' as i8; cnt * CHUNK_SIZE as usize];
+                let res = sfs_write(fd, data.as_ptr() as *mut i8, data.len() as i64);
+                if res <= 0 {
+                    println!("write error on thread {} ...", i);
+                    return;
+                } else {
+                    //println!("{} bytes written on thread {} ...", res, i);
+                }
+            }))
+        }
+        for handle in handles {
+            handle.join();
         }
     }
 }

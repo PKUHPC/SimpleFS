@@ -1,46 +1,37 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct WriteData {
-    pub path: String,
+pub struct WriteData<'a> {
+    pub path: &'a str,
     pub offset: i64,
-    pub host_id: u64,
-    pub host_size: u64,
-    pub chunk_n: u64,
-    pub chunk_start: u64,
-    pub chunk_end: u64,
-    pub total_chunk_size: u64,
-    pub buffers: String,
+    pub chunk_id: u64,
+    pub write_size: u64,
+    pub buffers: &'a str,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ReadData {
-    pub path: String,
+pub struct ReadData<'a> {
+    pub path: &'a str,
     pub offset: i64,
-    pub host_id: u64,
-    pub host_size: u64,
-    pub chunk_n: u64,
-    pub chunk_start: u64,
-    pub chunk_end: u64,
-    pub total_chunk_size: u64,
+    pub chunk_id: u64,
+    pub read_size: u64,
 }
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ReadResult {
+pub struct ReadResult<'a> {
     pub nreads: u64,
-    pub data: HashMap<u64, String>,
+    pub chunk_id: u64,
+    pub data: &'a str
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct CreateData {
-    pub path: String,
+pub struct CreateData<'a> {
+    pub path: &'a str,
     pub mode: u32,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct UpdateMetadentryData {
-    pub path: String,
+pub struct UpdateMetadentryData<'a> {
+    pub path: &'a str,
     pub size: u64,
     pub offset: i64,
     pub append: bool,
@@ -61,24 +52,24 @@ impl ChunkStat {
     }
 }
 #[derive(Serialize, Deserialize, Debug)]
-pub struct DecrData {
-    pub path: String,
+pub struct DecrData<'a> {
+    pub path: &'a str,
     pub new_size: i64,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct TruncData {
-    pub path: String,
+pub struct TruncData<'a> {
+    pub path: &'a str,
     pub new_size: i64,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct DirentData {
-    pub path: String,
+pub struct DirentData<'a> {
+    pub path: &'a str,
     // RDMA buffer?
 }
 #[derive(Serialize, Deserialize, Debug)]
-pub struct SerdeString {
-    pub str: String,
+pub struct SerdeString<'a> {
+    pub str: &'a str,
     // RDMA buffer?
 }

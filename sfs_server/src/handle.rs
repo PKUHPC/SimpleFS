@@ -1,7 +1,5 @@
-use std::collections::HashMap;
 
 use sfs_global::global::{
-    distributor::{Distributor, SimpleHashDistributor},
     network::{
         config::CHUNK_SIZE,
         forward_data::{ReadData, ReadResult, TruncData, WriteData},
@@ -9,113 +7,25 @@ use sfs_global::global::{
     util::arith_util::{block_index, block_overrun},
 };
 use sfs_lib_server::server::storage::data::chunk_storage::ChunkStorage;
-use tokio::task::JoinHandle;
-
-use crate::task::{ReadChunkTask, WriteChunkTask};
 use sfs_rpc::sfs_server::PostResult;
 
-pub async fn handle_write(input: WriteData) -> PostResult {
-    let path = input.path;
-
-    let mut chunk_ids_host: Vec<u64> = vec![0; input.chunk_n as usize];
-
-    let mut chunk_id_curr = 0;
-
-    let mut chunk_size: Vec<u64> = vec![0; input.chunk_n as usize];
-
-    let mut buf_ptr: Vec<u64> = vec![0; input.chunk_n as usize];
-
-    let mut task_args: Vec<WriteChunkTask> = vec![WriteChunkTask::new(); input.chunk_n as usize];
-
-    let mut tasks: Vec<JoinHandle<u64>> = Vec::new();
-    tasks.reserve(input.chunk_n as usize);
-
-    let host_id = input.host_id;
-    let host_size = input.host_size;
-    let mut chunk_size_left_host = input.total_chunk_size;
-
-    let buf = input.buffers.as_bytes();
-    let mut chunk_ptr = 0;
-
-    let mut transfer_size = CHUNK_SIZE;
-
-    let distributor = SimpleHashDistributor::new(host_id, host_size);
-    for chunk_id_file in input.chunk_start..(input.chunk_end + 1) {
-        if chunk_id_curr >= input.chunk_n {
-            break;
-        }
-        if distributor.locate_data(&path, chunk_id_file) != host_id {
-            continue;
-        }
-        chunk_ids_host[chunk_id_curr as usize] = chunk_id_file;
-        if chunk_id_file == input.chunk_start && input.offset > 0 {
-            let offset_size = if CHUNK_SIZE - input.offset as u64 > chunk_size_left_host {
-                chunk_size_left_host
-            } else {
-                CHUNK_SIZE - input.offset as u64
-            };
-
-            buf_ptr[chunk_id_curr as usize] = chunk_ptr;
-            chunk_size[chunk_id_curr as usize] = offset_size;
-            chunk_ptr += offset_size;
-            chunk_size_left_host -= offset_size;
-        } else {
-            //let local_offset = input.total_chunk_size - chunk_size_left_host;
-            let mut origin_offset = (chunk_id_file - input.chunk_start) * CHUNK_SIZE;
-            if input.offset > 0 {
-                origin_offset = (CHUNK_SIZE - input.offset as u64)
-                    + ((chunk_id_file - input.chunk_start) - 1) * CHUNK_SIZE;
-            }
-            chunk_ptr = origin_offset;
-            if chunk_id_curr == input.chunk_n - 1 {
-                transfer_size = chunk_size_left_host;
-            }
-
-            buf_ptr[chunk_id_curr as usize] = chunk_ptr;
-            chunk_size[chunk_id_curr as usize] = transfer_size;
-            chunk_ptr += transfer_size;
-            chunk_size_left_host -= transfer_size;
-        }
-
-        let write_task = WriteChunkTask {
-            path: path.clone(),
-            buf: String::from_utf8(
-                buf[buf_ptr[chunk_id_curr as usize] as usize..chunk_ptr as usize].to_vec(),
-            )
-            .unwrap(),
-            chunk_id: chunk_ids_host[chunk_id_curr as usize],
-            size: chunk_size[chunk_id_curr as usize],
-            offset: if chunk_id_file == input.chunk_start {
-                input.offset as u64
-            } else {
-                0
-            },
-        };
-        task_args[chunk_id_curr as usize] = write_task.clone();
-        // write to chunk
-
-        tasks.push(tokio::spawn(async move { write_file(&write_task).await }));
-        chunk_id_curr += 1;
-    }
-    let mut write_tot = 0;
-    for t in tasks {
-        write_tot += t.await.unwrap();
-    }
+pub async fn handle_write(input: WriteData<'_>) -> PostResult {
+    let write_tot = write_file(&input).await;
     let post_res = PostResult {
         err: 0,
         data: write_tot.to_string(),
     };
     return post_res;
 }
-async fn write_file(args: &WriteChunkTask) -> u64 {
+async fn write_file(args: &WriteData<'_>) -> u64 {
     //println!("{:?}", args);
     //println!("writing...");
     if let Ok(nwrite) = ChunkStorage::write_chunk(
-        &args.path,
+        &args.path.to_string(),
         args.chunk_id,
-        args.buf.as_bytes(),
-        args.size,
-        args.offset,
+        args.buffers.as_bytes(),
+        args.write_size,
+        args.offset as u64,
     )
     .await
     {
@@ -127,104 +37,27 @@ async fn write_file(args: &WriteChunkTask) -> u64 {
 
 #[allow(unused_variables)]
 #[allow(unused_assignments)]
-pub async fn handle_read(input: ReadData) -> PostResult {
-    let path = input.path;
-
-    let mut chunk_ids_host: Vec<u64> = vec![0; input.chunk_n as usize];
-
-    let mut chunk_id_curr = 0;
-
-    let mut chunk_size: Vec<u64> = vec![0; input.chunk_n as usize];
-
-    let mut task_args: Vec<ReadChunkTask> = vec![ReadChunkTask::new(); input.chunk_n as usize];
-
-    let mut tasks: Vec<JoinHandle<(u64, u64, String)>> = Vec::new();
-    tasks.reserve(input.chunk_n as usize);
-
-    let host_id = input.host_id;
-    let host_size = input.host_size;
-    let mut chunk_size_left_host = input.total_chunk_size;
-
-    let mut chunk_ptr: u64 = 0;
-
-    let mut transfer_size = CHUNK_SIZE;
-
-    let distributor = SimpleHashDistributor::new(host_id, host_size);
-    for chunk_id_file in input.chunk_start..(input.chunk_end + 1) {
-        if chunk_id_curr >= input.chunk_n {
-            break;
-        }
-        if distributor.locate_data(&path, chunk_id_file) != host_id {
-            continue;
-        }
-        chunk_ids_host[chunk_id_curr as usize] = chunk_id_file;
-        if chunk_id_file == input.chunk_start && input.offset > 0 {
-            let offset_size = if CHUNK_SIZE - input.offset as u64 > chunk_size_left_host {
-                chunk_size_left_host
-            } else {
-                CHUNK_SIZE - input.offset as u64
-            };
-
-            chunk_size[chunk_id_curr as usize] = offset_size;
-            chunk_ptr += offset_size;
-            chunk_size_left_host -= offset_size;
-        } else {
-            let local_offset = input.total_chunk_size - chunk_size_left_host;
-            let mut origin_offset = (chunk_id_file - input.chunk_start) * CHUNK_SIZE;
-            if input.offset > 0 {
-                origin_offset = (CHUNK_SIZE - input.offset as u64)
-                    + ((chunk_id_file - input.chunk_start) - 1) * CHUNK_SIZE;
-            }
-            if chunk_id_curr == input.chunk_n - 1 {
-                transfer_size = chunk_size_left_host;
-            }
-
-            chunk_size[chunk_id_curr as usize] = transfer_size;
-            chunk_ptr += transfer_size;
-            chunk_size_left_host -= transfer_size;
-        }
-
-        let read_task = ReadChunkTask {
-            path: path.clone(),
-            chunk_id: chunk_ids_host[chunk_id_curr as usize],
-            size: chunk_size[chunk_id_curr as usize],
-            offset: if chunk_id_file == input.chunk_start {
-                input.offset as u64
-            } else {
-                0
-            },
-        };
-        task_args[chunk_id_curr as usize] = read_task.clone();
-        // write to chunk
-
-        tasks.push(tokio::spawn(async move { read_file(&read_task).await }));
-        chunk_id_curr += 1;
-    }
-    let mut read_result: HashMap<u64, String> = HashMap::new();
-    let mut read_tot = 0;
-    for t in tasks {
-        let result = t.await.unwrap();
-        read_tot += result.1;
-        read_result.insert(result.0, result.2);
-    }
-    let result_data = ReadResult {
-        nreads: read_tot,
-        data: read_result,
-    };
-    //println!("{:?}", result_data);
+pub async fn handle_read(input: ReadData<'_>) -> PostResult {
+    let read_res = read_file(&input).await;
     let post_res = PostResult {
         err: 0,
-        data: serde_json::to_string(&result_data).unwrap(),
+        data: serde_json::to_string(
+            &ReadResult{
+                nreads: read_res.1,
+                chunk_id: read_res.0,
+                data: read_res.2.as_str(),
+            }
+        ).unwrap(),
     };
     return post_res;
 }
 
-async fn read_file(args: &ReadChunkTask) -> (u64, u64, String) {
+async fn read_file(args: &ReadData<'_>) -> (u64, u64, String) {
     //println!("{:?}", args);
     //println!("reading...");
     let mut buf = vec![0; CHUNK_SIZE as usize];
     if let Ok(nreads) =
-        ChunkStorage::read_chunk(&args.path, args.chunk_id, &mut buf, args.size, args.offset).await
+        ChunkStorage::read_chunk(&args.path.to_string(), args.chunk_id, &mut buf, args.read_size, args.offset as u64).await
     {
         (
             args.chunk_id,
@@ -236,16 +69,16 @@ async fn read_file(args: &ReadChunkTask) -> (u64, u64, String) {
     }
 }
 
-pub async fn handle_trunc(input: TruncData) -> PostResult {
+pub async fn handle_trunc(input: TruncData<'_>) -> PostResult {
     let path = input.path;
     let size = input.new_size;
     let mut chunk_id_start = block_index(size, CHUNK_SIZE);
     let left_pad = block_overrun(size, CHUNK_SIZE);
     if left_pad != 0 {
-        ChunkStorage::truncate_chunk_file(&path, chunk_id_start, left_pad).await;
+        ChunkStorage::truncate_chunk_file(&path.to_string(), chunk_id_start, left_pad).await;
         chunk_id_start += 1;
     }
-    ChunkStorage::trim_chunk_space(&path, chunk_id_start).await;
+    ChunkStorage::trim_chunk_space(&path.to_string(), chunk_id_start).await;
     let post_res = PostResult {
         err: 0,
         data: "".to_string(),

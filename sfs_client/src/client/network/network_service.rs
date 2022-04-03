@@ -1,10 +1,7 @@
 use futures::stream::iter;
 use lazy_static::*;
 use serde::Serialize;
-use std::{
-    collections::{hash_map::Entry, HashMap},
-    io::Error,
-};
+use std::io::Error;
 
 use crate::client::endpoint::SFSEndpoint;
 use sfs_global::global::network::post::{option2i, PostOption};
@@ -42,30 +39,17 @@ impl NetworkService {
     #[tokio::main]
     pub async fn group_post(posts: Vec<(SFSEndpoint, Post)>) -> Result<Vec<PostResult>, Error> {
         let mut post_results: Vec<PostResult> = Vec::new();
-        let mut post_map: HashMap<SFSEndpoint, Vec<Post>> = HashMap::new();
         for (endp, post) in posts {
-            match post_map.entry(endp) {
-                Entry::Occupied(mut e) => {
-                    e.get_mut().push(post);
-                }
-                Entry::Vacant(e) => {
-                    e.insert(vec![post]);
-                }
-            }
-        }
-        for (endp, posts) in post_map {
             let mut client = SfsHandleClient::connect(format!("http://{}:{}", endp.addr, 8082))
                 .await
                 .unwrap();
-            let request = tonic::Request::new(iter(posts));
-            let post_result = client.handle_stream(request).await;
+            let request = tonic::Request::new(post);
+            let post_result = client.handle(request).await;
             if let Err(e) = post_result {
                 return Err(Error::new(std::io::ErrorKind::NotConnected, e.to_string()));
             }
-            let mut response = post_result.unwrap().into_inner();
-            while let Some(res) = response.message().await.unwrap() {
-                post_results.push(res);
-            }
+            let response = post_result.unwrap().into_inner();
+            post_results.push(response);
         }
         return Ok(post_results);
     }

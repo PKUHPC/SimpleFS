@@ -33,7 +33,7 @@ pub fn forward_stat(path: &String) -> Result<String, i32> {
             .get_hosts()
             .get(endp_id as usize)
             .unwrap(),
-        SerdeString { str: path.clone() },
+        SerdeString { str: path.as_str() },
         PostOption::Stat,
     );
     if let Err(e) = post_res {
@@ -59,7 +59,7 @@ pub fn forward_create(path: &String, mode: u32) -> Result<i32, Error> {
             .get(endp_id as usize)
             .unwrap(),
         CreateData {
-            path: path.clone(),
+            path: path.as_str(),
             mode: mode,
         },
         PostOption::Create,
@@ -87,7 +87,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
             .get_hosts()
             .get(endp_id as usize)
             .unwrap(),
-        SerdeString { str: path.clone() },
+        SerdeString { str: path.as_str() },
         PostOption::RemoveMeta,
     )?;
     if remove_metadentry_only {
@@ -109,7 +109,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
                 .clone(),
             Post {
                 option: option2i(&PostOption::Remove),
-                data: serde_json::to_string(&SerdeString { str: path.clone() }).unwrap(),
+                data: serde_json::to_string(&SerdeString { str: path.as_str() }).unwrap(),
             },
         ));
 
@@ -128,7 +128,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
                     .clone(),
                 Post {
                     option: option2i(&PostOption::Remove),
-                    data: serde_json::to_string(&SerdeString { str: path.clone() }).unwrap(),
+                    data: serde_json::to_string(&SerdeString { str: path.as_str() }).unwrap(),
                 },
             ));
         }
@@ -138,7 +138,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
                 endp.clone(),
                 Post {
                     option: option2i(&PostOption::Remove),
-                    data: serde_json::to_string(&SerdeString { str: path.clone() }).unwrap(),
+                    data: serde_json::to_string(&SerdeString { str: path.as_str() }).unwrap(),
                 },
             ));
         }
@@ -204,7 +204,7 @@ pub fn forward_get_metadentry_size(path: &String) -> (i32, i64) {
                     .locate_file_metadata(&path) as usize,
             )
             .unwrap(),
-        SerdeString { str: path.clone() },
+        SerdeString { str: path.as_str() },
         PostOption::UpdateMetadentry,
     );
     if let Err(_e) = post_result {
@@ -227,7 +227,7 @@ pub fn forward_decr_size(path: &String, new_size: i64) -> i32 {
             .get(host_id)
             .unwrap(),
         DecrData {
-            path: path.clone(),
+            path: path.as_str(),
             new_size,
         },
         PostOption::DecrSize,
@@ -260,7 +260,7 @@ pub fn forward_truncate(path: &String, old_size: i64, new_size: i64) -> i32 {
     let mut posts: Vec<(SFSEndpoint, Post)> = Vec::new();
     for host in hosts {
         let trunc_data = TruncData {
-            path: path.clone(),
+            path: path.as_str(),
             new_size,
         };
         let post = Post {
@@ -296,7 +296,7 @@ pub fn forward_update_metadentry_size(
     append_flag: bool,
 ) -> (i32, i64) {
     let update_data = UpdateMetadentryData {
-        path: path.clone(),
+        path: path.as_str(),
         size,
         offset,
         append: append_flag,
@@ -357,7 +357,8 @@ pub async fn forward_write_stream(
         }
     }
     let mut tot_write = 0;
-    let buf = unsafe { CStr::from_ptr(buf).to_string_lossy().into_owned() };
+    //let buf = unsafe { CStr::from_ptr(buf).to_string_lossy().into_owned() };
+    let buf = unsafe { std::str::from_utf8(CStr::from_ptr(buf).to_bytes()).unwrap() };
     if SEND_MSG_EACH_CHUNK {
         let mut handles = Vec::new();
         for target in targets.iter() {
@@ -399,19 +400,15 @@ pub async fn forward_write_stream(
                     (*chunk - chunk_start + 1) * CHUNK_SIZE - offset as u64 % CHUNK_SIZE
                 } as usize;
                 let data = WriteData {
-                    path: path.clone(),
+                    path: path.as_str(),
                     offset: if *chunk == chunk_start {
                         chunk_lpad(offset, CHUNK_SIZE) as i64
                     } else {
                         0
                     },
-                    host_id: target.clone(),
-                    host_size: StaticContext::get_instance().get_hosts().len() as u64,
-                    chunk_n: 1,
-                    chunk_start: *chunk,
-                    chunk_end: *chunk,
-                    total_chunk_size: total_size,
-                    buffers: buf[offset_start..offset_end].to_string(),
+                    chunk_id: *chunk,
+                    write_size: total_size,
+                    buffers: &buf[offset_start..offset_end],
                 };
                 let post = Post {
                     option: option2i(&PostOption::Write),
@@ -481,19 +478,15 @@ pub async fn forward_write_stream(
                     (*chunk - chunk_start + 1) * CHUNK_SIZE - offset as u64 % CHUNK_SIZE
                 } as usize;
                 write_datas.push(WriteData {
-                    path: path.clone(),
+                    path: path.as_str(),
                     offset: if *chunk == chunk_start {
                         chunk_lpad(offset, CHUNK_SIZE) as i64
                     } else {
                         0
                     },
-                    host_id: target.clone(),
-                    host_size: StaticContext::get_instance().get_hosts().len() as u64,
-                    chunk_n: 1,
-                    chunk_start: *chunk,
-                    chunk_end: *chunk,
-                    total_chunk_size: total_size,
-                    buffers: buf[offset_start..offset_end].to_string(),
+                    chunk_id: *chunk,
+                    write_size: total_size,
+                    buffers: &buf[offset_start..offset_end],
                 });
             }
             let posts = write_datas
@@ -528,6 +521,7 @@ pub async fn forward_write_stream(
     }
     return (0, tot_write);
 }
+#[allow(unused_variables)]
 pub fn forward_write(
     path: &String,
     buf: *const c_char,
@@ -536,6 +530,7 @@ pub fn forward_write(
     write_size: i64,
     updated_metadentry_size: i64,
 ) -> (i32, i64) {
+    /*
     if write_size < 0 {
         return (-1, 0);
     }
@@ -579,7 +574,7 @@ pub fn forward_write(
             tot_chunk_size -= chunk_rpad(offset + write_size, CHUNK_SIZE);
         }
         let input = WriteData {
-            path: path.clone(),
+            path: path.as_str(),
             offset: chunk_lpad(offset, CHUNK_SIZE) as i64,
             host_id: target,
             host_size: StaticContext::get_instance().get_hosts().len() as u64,
@@ -610,6 +605,8 @@ pub fn forward_write(
         }
     }
     return (0, tot_write);
+    */
+    return (EBUSY, 0);
 }
 #[tokio::main]
 pub async fn forward_read_stream(
@@ -664,18 +661,14 @@ pub async fn forward_read_stream(
                     CHUNK_SIZE
                 };
                 let data = ReadData {
-                    path: path.clone(),
+                    path: path.as_str(),
                     offset: if *chunk == chunk_start {
                         chunk_lpad(offset, CHUNK_SIZE) as i64
                     } else {
                         0
                     },
-                    host_id: target,
-                    host_size: StaticContext::get_instance().get_hosts().len() as u64,
-                    chunk_n: 1,
-                    chunk_start: *chunk,
-                    chunk_end: *chunk,
-                    total_chunk_size: total_size,
+                    chunk_id: *chunk,
+                    read_size: total_size,
                 };
                 let post = Post {
                     option: option2i(&PostOption::Read),
@@ -699,25 +692,23 @@ pub async fn forward_read_stream(
             }
             let read_res: ReadResult = serde_json::from_str(res.data.as_str()).unwrap();
             tot_read += read_res.nreads;
-            let data = read_res.data;
-            for chnk in data {
-                let local_offset = if chnk.0 == chunk_start {
-                    0
-                } else {
-                    (chnk.0 - chunk_start) * CHUNK_SIZE - (offset as u64 % CHUNK_SIZE)
-                };
-                let data = if chnk.0 == chunk_end {
-                    chnk.1 + "\0"
-                } else {
-                    chnk.1
-                };
-                unsafe {
-                    strncpy(
-                        buf.offset(local_offset as isize),
-                        data.as_ptr() as *const i8,
-                        data.len(),
-                    );
-                }
+            let data = read_res.data.to_string();
+            let local_offset = if read_res.chunk_id == chunk_start {
+                0
+            } else {
+                (read_res.chunk_id - chunk_start) * CHUNK_SIZE - (offset as u64 % CHUNK_SIZE)
+            };
+            let data = if read_res.chunk_id == chunk_end {
+                data.to_string() + "\0"
+            } else {
+                data
+            };
+            unsafe {
+                strncpy(
+                    buf.offset(local_offset as isize),
+                    data.as_ptr() as *const i8,
+                    data.len(),
+                );
             }
         }
     } else {
@@ -737,18 +728,14 @@ pub async fn forward_read_stream(
                     CHUNK_SIZE
                 };
                 read_datas.push(ReadData {
-                    path: path.clone(),
+                    path: path.as_str(),
                     offset: if *chunk == chunk_start {
                         chunk_lpad(offset, CHUNK_SIZE) as i64
                     } else {
                         0
                     },
-                    host_id: target,
-                    host_size: StaticContext::get_instance().get_hosts().len() as u64,
-                    chunk_n: 1,
-                    chunk_start: *chunk,
-                    chunk_end: *chunk,
-                    total_chunk_size: total_size,
+                    chunk_id: *chunk,
+                    read_size: total_size,
                 })
             }
             let mut client = SfsHandleClient::connect(format!(
@@ -786,32 +773,32 @@ pub async fn forward_read_stream(
                 }
                 let read_res: ReadResult = serde_json::from_str(res.data.as_str()).unwrap();
                 tot_read += read_res.nreads;
-                let data = read_res.data;
-                for chnk in data {
-                    let local_offset = if chnk.0 == chunk_start {
-                        0
-                    } else {
-                        (chnk.0 - chunk_start) * CHUNK_SIZE - (offset as u64 % CHUNK_SIZE)
-                    };
-                    let data = if chnk.0 == chunk_end {
-                        chnk.1 + "\0"
-                    } else {
-                        chnk.1
-                    };
-                    unsafe {
-                        strncpy(
-                            buf.offset(local_offset as isize),
-                            data.as_ptr() as *const i8,
-                            data.len(),
-                        );
-                    }
+                let data = read_res.data.to_string();
+                let local_offset = if read_res.chunk_id == chunk_start {
+                    0
+                } else {
+                    (read_res.chunk_id - chunk_start) * CHUNK_SIZE - (offset as u64 % CHUNK_SIZE)
+                };
+                let data = if read_res.chunk_id == chunk_end {
+                    data + "\0"
+                } else {
+                    data
+                };
+                unsafe {
+                    strncpy(
+                        buf.offset(local_offset as isize),
+                        data.as_ptr() as *const i8,
+                        data.len(),
+                    );
                 }
             }
         }
     }
     return (0, tot_read);
 }
+#[allow(unused_variables)]
 pub fn forward_read(path: &String, buf: *mut c_char, offset: i64, read_size: i64) -> (i32, u64) {
+    /*
     let chunk_start = offset_to_chunk_id(offset, CHUNK_SIZE);
     let chunk_end = offset_to_chunk_id(offset + read_size - 1, CHUNK_SIZE);
     let mut target_chunks: HashMap<u64, Vec<u64>> = HashMap::new();
@@ -848,7 +835,7 @@ pub fn forward_read(path: &String, buf: *mut c_char, offset: i64, read_size: i64
             tot_chunk_size -= chunk_rpad(offset + read_size, CHUNK_SIZE);
         }
         let input = ReadData {
-            path: path.clone(),
+            path: path.as_str(),
             offset: chunk_lpad(offset, CHUNK_SIZE) as i64,
             host_id: target,
             host_size: StaticContext::get_instance().get_hosts().len() as u64,
@@ -895,6 +882,8 @@ pub fn forward_read(path: &String, buf: *mut c_char, offset: i64, read_size: i64
         }
     }
     return (0, tot_read);
+    */
+    return (EBUSY, 0);
 }
 pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>) {
     let targets = StaticContext::get_instance()
@@ -912,7 +901,10 @@ pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>) {
                 .clone(),
             Post {
                 option: option2i(&PostOption::GetDirents),
-                data: serde_json::to_string(&DirentData { path: path.clone() }).unwrap(),
+                data: serde_json::to_string(&DirentData {
+                    path: path.as_str(),
+                })
+                .unwrap(),
             },
         ));
     }
