@@ -12,5 +12,5 @@ message Post{
 }
 message PostResult{
     int32 err = 1; 
-    string data = 2;
+    bytes data = 2;
 }

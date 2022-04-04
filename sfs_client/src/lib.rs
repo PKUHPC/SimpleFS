@@ -819,17 +819,16 @@ mod tests {
         } else {
             println!("{} bytes written ...", res);
         }
-        /*
+        drop(s);
         sfs_lseek(fd, 13, SEEK_SET);
-        let mut buf = vec![0 as u8; 10 * CHUNK_SIZE as usize];
-        let res = sfs_read(fd, buf.as_mut_ptr() as *mut i8, 10 * CHUNK_SIZE as i64);
+        let mut buf = vec![0 as u8; cnt * CHUNK_SIZE as usize];
+        let res = sfs_read(fd, buf.as_mut_ptr() as *mut i8, (cnt - 1) as i64 * CHUNK_SIZE as i64);
         if res <= 0 {
             println!("read error ...");
             return;
         } else {
             println!("{} bytes read", res);
         }
-        */
     }
     #[test]
     #[allow(unused_must_use)]
@@ -847,7 +846,7 @@ mod tests {
                     println!("open error on thread {} ...", i);
                     return;
                 }
-                //println!("file {} opened on thread {} ...", fd, i);
+                println!("file {} opened on thread {} ...", fd, i);
                 let cnt = 160;
                 let data = vec!['a' as i8; cnt * CHUNK_SIZE as usize];
                 let res = sfs_write(fd, data.as_ptr() as *mut i8, data.len() as i64);
@@ -855,7 +854,7 @@ mod tests {
                     println!("write error on thread {} ...", i);
                     return;
                 } else {
-                    //println!("{} bytes written on thread {} ...", res, i);
+                    println!("{} bytes written on thread {} ...", res, i);
                 }
             }))
         }

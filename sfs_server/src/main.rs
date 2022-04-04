@@ -1,7 +1,7 @@
 pub mod handle;
 use libc::{getgid, getuid, EINVAL, ENOENT, S_IFDIR, S_IRWXG, S_IRWXO, S_IRWXU};
 use sfs_global::global::network::post::i2option;
-use sfs_global::global::util::serde_util::deserialize;
+use sfs_global::global::util::serde_util::{deserialize, serialize};
 use sfs_global::{
     global::network::post::PostOption::*,
     global::{
@@ -23,7 +23,6 @@ use sfs_lib_server::server::{
     storage::metadata::db::MetadataDB,
 };
 use std::net::SocketAddrV4;
-use std::time::Instant;
 use std::{
     fs::OpenOptions,
     io::{BufWriter, Error, Write},
@@ -49,11 +48,11 @@ fn handle_request(post: &Post) -> PostResult {
             }
             let md_res = MetadataDB::get_instance().get(&path.to_string());
             if let Some(md) = md_res {
-                return PostResult { err: 0, data: md };
+                return PostResult { err: 0, data: md.as_bytes().to_vec() };
             } else {
                 return PostResult {
                     err: ENOENT,
-                    data: ENOENT.to_string(),
+                    data: ENOENT.to_string().as_bytes().to_vec(),
                 };
             }
         }
@@ -72,7 +71,7 @@ fn handle_request(post: &Post) -> PostResult {
             );
             return PostResult {
                 err: create_res,
-                data: create_res.to_string(),
+                data: create_res.to_string().as_bytes().to_vec(),
             };
         }
         Remove => {
@@ -84,7 +83,7 @@ fn handle_request(post: &Post) -> PostResult {
             ChunkStorage::destroy_chunk_space(&path.to_string());
             return PostResult {
                 err: 0,
-                data: "0".to_string(),
+                data: "0".to_string().as_bytes().to_vec(),
             };
         }
         RemoveMeta => {
@@ -97,13 +96,13 @@ fn handle_request(post: &Post) -> PostResult {
             if let None = md_res {
                 return PostResult {
                     err: ENOENT,
-                    data: ENOENT.to_string(),
+                    data: ENOENT.to_string().as_bytes().to_vec(),
                 };
             } else {
                 MetadataDB::get_instance().remove(&path.to_string());
                 return PostResult {
                     err: 0,
-                    data: "0".to_string(),
+                    data: "0".to_string().as_bytes().to_vec(),
                 };
             }
         }
@@ -113,7 +112,7 @@ fn handle_request(post: &Post) -> PostResult {
             }
             return PostResult {
                 err: 0,
-                data: "0".to_string(),
+                data: "0".to_string().as_bytes().to_vec(),
             };
         }
         FsConfig => {
@@ -132,7 +131,7 @@ fn handle_request(post: &Post) -> PostResult {
             fs_config.gid = unsafe { getgid() };
             return PostResult {
                 err: 0,
-                data: serde_json::to_string(&fs_config).unwrap(),
+                data: serialize(&fs_config),
             };
         }
         UpdateMetadentry => {
@@ -147,7 +146,7 @@ fn handle_request(post: &Post) -> PostResult {
             );
             return PostResult {
                 err: 0,
-                data: (update_data.size as usize + update_data.offset as usize).to_string(),
+                data: (update_data.size as usize + update_data.offset as usize).to_string().as_bytes().to_vec(),
             };
         }
         GetMetadentry => {
@@ -161,14 +160,14 @@ fn handle_request(post: &Post) -> PostResult {
                 None => {
                     return PostResult {
                         err: ENOENT,
-                        data: ENOENT.to_string(),
+                        data: ENOENT.to_string().as_bytes().to_vec(),
                     };
                 }
                 Some(str) => {
                     let md = Metadata::deserialize(&str).unwrap();
                     return PostResult {
                         err: 0,
-                        data: md.get_size().to_string(),
+                        data: md.get_size().to_string().as_bytes().to_vec(),
                     };
                 }
             }
@@ -180,7 +179,7 @@ fn handle_request(post: &Post) -> PostResult {
             let chunk_stat = ChunkStorage::chunk_stat();
             let post_result = PostResult {
                 err: 0,
-                data: serde_json::to_string(&chunk_stat).unwrap(),
+                data: serialize(&chunk_stat),
             };
             return post_result;
         }
@@ -193,7 +192,7 @@ fn handle_request(post: &Post) -> PostResult {
                 .decrease_size(&decr_data.path.to_string(), decr_data.new_size as usize);
             return PostResult {
                 err: 0,
-                data: "0".to_string(),
+                data: "0".to_string().as_bytes().to_vec(),
             };
         }
         Trunc => {
@@ -213,12 +212,12 @@ fn handle_request(post: &Post) -> PostResult {
             if entries.len() == 0 {
                 return PostResult {
                     err: 0,
-                    data: serde_json::to_string(&(Vec::new() as Vec<(String, bool)>)).unwrap(),
+                    data: serialize(&(Vec::new() as Vec<(String, bool)>)),
                 };
             } else {
                 return PostResult {
                     err: 0,
-                    data: serde_json::to_string(&entries).unwrap(),
+                    data: serialize(&entries),
                 };
             }
         }
@@ -240,7 +239,7 @@ fn handle_request(post: &Post) -> PostResult {
             println!("invalid option on 'handle': {:?}", option);
             return PostResult {
                 err: EINVAL,
-                data: EINVAL.to_string(),
+                data: EINVAL.to_string().as_bytes().to_vec(),
             };
         }
     }
@@ -288,7 +287,7 @@ impl SfsHandle for ServerHandler {
                         println!("invalid option on 'handle_stream': {:?}", option);
                         handle_result = PostResult {
                             err: EINVAL,
-                            data: EINVAL.to_string(),
+                            data: EINVAL.to_string().as_bytes().to_vec(),
                         };
                     }
                 }

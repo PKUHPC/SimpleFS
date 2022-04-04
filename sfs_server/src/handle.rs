@@ -3,7 +3,7 @@ use sfs_global::global::{
         config::CHUNK_SIZE,
         forward_data::{ReadData, ReadResult, TruncData, WriteData},
     },
-    util::arith_util::{block_index, block_overrun},
+    util::{arith_util::{block_index, block_overrun}, serde_util::serialize},
 };
 use sfs_lib_server::server::storage::data::chunk_storage::ChunkStorage;
 use sfs_rpc::sfs_server::PostResult;
@@ -23,7 +23,7 @@ pub fn handle_write(input: &WriteData) -> PostResult {
     };
     let post_res = PostResult {
         err: 0,
-        data: write_tot.to_string(),
+        data: write_tot.to_string().as_bytes().to_vec(),
     };
     return post_res;
 }
@@ -34,12 +34,11 @@ pub fn handle_read(input: &ReadData) -> PostResult {
     let read_res = read_file(&input);
     let post_res = PostResult {
         err: 0,
-        data: serde_json::to_string(&ReadResult {
+        data: serialize(&ReadResult {
             nreads: read_res.1,
             chunk_id: read_res.0,
             data: read_res.2.as_str(),
-        })
-        .unwrap(),
+        }),
     };
     return post_res;
 }
@@ -79,7 +78,7 @@ pub fn handle_trunc(input: TruncData<'_>) -> PostResult {
     ChunkStorage::trim_chunk_space(&path.to_string(), chunk_id_start);
     let post_res = PostResult {
         err: 0,
-        data: "".to_string(),
+        data: vec![0; 1],
     };
     return post_res;
 }

@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 
 use futures::stream::iter;
 use libc::{c_char, strncpy, EBUSY};
-use sfs_global::global::util::serde_util::serialize;
+use sfs_global::global::util::serde_util::{serialize, deserialize};
 use sfs_rpc::sfs_server::sfs_handle_client::SfsHandleClient;
 
 use crate::client::config::SEND_MSG_EACH_CHUNK;
@@ -49,7 +49,7 @@ pub fn forward_stat(path: &String) -> Result<String, i32> {
     if result.err != 0 {
         return Err(result.err);
     }
-    return Ok(result.data);
+    return Ok(String::from_utf8(result.data).unwrap());
 }
 pub fn forward_create(path: &String, mode: u32) -> Result<i32, Error> {
     let endp_id = StaticContext::get_instance()
@@ -181,7 +181,7 @@ pub fn forward_get_chunk_stat() -> (i32, ChunkStat) {
             if result.err != 0 {
                 return (result.err, ChunkStat::new());
             }
-            let chunk_stat: ChunkStat = serde_json::from_str(&result.data).unwrap();
+            let chunk_stat: ChunkStat = deserialize::<ChunkStat>(&result.data);
             assert_eq!(chunk_stat.chunk_size, chunk_size);
             chunk_total += chunk_stat.chunk_total;
             chunk_free += chunk_stat.chunk_free;
@@ -216,7 +216,7 @@ pub fn forward_get_metadentry_size(path: &String) -> (i32, i64) {
         if result.err != 0 {
             return (result.err, 0);
         }
-        return (0, result.data.as_str().parse::<i64>().unwrap());
+        return (0, String::from_utf8(result.data).unwrap().as_str().parse::<i64>().unwrap());
     }
 }
 pub fn forward_decr_size(path: &String, new_size: i64) -> i32 {
@@ -320,7 +320,7 @@ pub fn forward_update_metadentry_size(
         let res = post_result.unwrap();
         return (
             if res.err != 0 { res.err } else { 0 },
-            res.data.as_str().parse::<i64>().unwrap(),
+            String::from_utf8(res.data).unwrap().as_str().parse::<i64>().unwrap(),
         );
     }
 }
@@ -432,8 +432,7 @@ pub async fn forward_write_stream(
             if res.err != 0 {
                 return (res.err, tot_write);
             }
-            tot_write += res
-                .data
+            tot_write += String::from_utf8(res.data).unwrap()
                 .as_str()
                 .parse::<i64>()
                 .expect("response should be 'i64'");
@@ -513,8 +512,8 @@ pub async fn forward_write_stream(
                 if res.err != 0 {
                     return (res.err, tot_write);
                 }
-                tot_write += res
-                    .data
+                tot_write += String::from_utf8(res
+                    .data).unwrap()
                     .as_str()
                     .parse::<i64>()
                     .expect("response should be 'i64'");
@@ -692,7 +691,7 @@ pub async fn forward_read_stream(
             if res.err != 0 {
                 return (res.err, tot_read);
             }
-            let read_res: ReadResult = serde_json::from_str(res.data.as_str()).unwrap();
+            let read_res: ReadResult = deserialize::<ReadResult>(&res.data);
             tot_read += read_res.nreads;
             let data = read_res.data.to_string();
             let local_offset = if read_res.chunk_id == chunk_start {
@@ -773,7 +772,7 @@ pub async fn forward_read_stream(
                 if res.err != 0 {
                     return (res.err, tot_read);
                 }
-                let read_res: ReadResult = serde_json::from_str(res.data.as_str()).unwrap();
+                let read_res: ReadResult = deserialize::<ReadResult>(&res.data);
                 tot_read += read_res.nreads;
                 let data = read_res.data.to_string();
                 let local_offset = if read_res.chunk_id == chunk_start {
@@ -928,7 +927,7 @@ pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>) {
     );
 
     for result in results {
-        let entries: Vec<(String, bool)> = serde_json::from_str(&result.data).unwrap();
+        let entries: Vec<(String, bool)> = deserialize::<Vec<(String, bool)>>(&result.data);
         for entry in entries {
             open_dir.add(
                 entry.0,
@@ -956,7 +955,7 @@ pub fn forward_get_fs_config(context: &mut StaticContext) -> bool {
     if result.err != 0 {
         return false;
     }
-    let config: SFSConfig = serde_json::from_str(&result.data.as_str()).unwrap();
+    let config: SFSConfig = deserialize::<SFSConfig>(&result.data);
     context.set_mountdir(config.mountdir.clone());
     context.set_fsconfig(config);
     return true;
