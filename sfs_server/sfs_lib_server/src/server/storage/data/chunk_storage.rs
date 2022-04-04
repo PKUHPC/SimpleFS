@@ -1,6 +1,6 @@
 use std::os::unix::prelude::FileExt;
 use std::path::Path;
-use tokio::fs;
+use std::fs;
 use std::os::unix::fs::PermissionsExt;
 
 use libc::{S_IRUSR, S_IWUSR};
@@ -62,13 +62,13 @@ impl ChunkStorage{
     pub fn get_chunks_path(file_path: &String, chunk_id: u64) -> String{
         format!("{}/{}", ChunkStorage::get_chunks_dir(file_path), chunk_id)
     }
-    pub async fn init_chunk_space(file_path: &String){
+    pub fn init_chunk_space(file_path: &String){
         let chunk_dir = ChunkStorage::absolute(&ChunkStorage::get_chunks_dir(file_path));
         let path = Path::new(&chunk_dir);
         if path.exists(){
             return;
         }
-        if let Err(_e) = fs::create_dir_all(path).await{
+        if let Err(_e) = fs::create_dir_all(path){
             error_msg("server::storage::chunk_storage::init_chunk_space".to_string(), "fail to create chunk directory".to_string());
         }
     }
@@ -88,17 +88,17 @@ impl ChunkStorage{
             chunk_size_: chunk_size
         })
     }
-    pub async fn destroy_chunk_space(file_path: &String){
+    pub fn destroy_chunk_space(file_path: &String){
         let chunk_dir = ChunkStorage::absolute(&ChunkStorage::get_chunks_dir(file_path));
-        if let Err(_e) = fs::remove_dir_all(Path::new(&chunk_dir)).await{
+        if let Err(_e) = fs::remove_dir_all(Path::new(&chunk_dir)){
             error_msg("server::storage::chunk_storage::destroy_chunk_space".to_string(), "fail to remove chunk directory".to_string());
         }
     }
-    pub async fn write_chunk(file_path: &String, chunk_id: u64, buf: &[u8], size: u64, offset: u64) -> Result<u64, i32>{
+    pub fn write_chunk(file_path: &String, chunk_id: u64, buf: &[u8], size: u64, offset: u64) -> Result<u64, i32>{
         if size+ offset > CNK.get_chunk_size(){
             error_msg("server::storage::chunk_storage::write_chunk".to_string(), "beyond chunk storage range".to_string());
         }
-        ChunkStorage::init_chunk_space(file_path).await;
+        ChunkStorage::init_chunk_space(file_path);
         let chunk_path = ChunkStorage::absolute(&ChunkStorage::get_chunks_path(file_path, chunk_id));
         let f = std::fs::OpenOptions::new().create(true).write(true).read(true).open(chunk_path).unwrap();
         let mut wrote_tot:u64 = 0;
@@ -113,11 +113,11 @@ impl ChunkStorage{
         }
         Ok(wrote_tot)
     }
-    pub async fn read_chunk(file_path: &String, chunk_id: u64, buf: &mut Vec<u8>, size: u64, mut offset: u64) -> Result<u64, i32>{
+    pub fn read_chunk(file_path: &String, chunk_id: u64, buf: &mut Vec<u8>, size: u64, mut offset: u64) -> Result<u64, i32>{
         if size + offset > CNK.get_chunk_size(){
             error_msg("server::storage::chunk_storage::read_chunk".to_string(), "beyond chunk storage range".to_string());
         }
-        ChunkStorage::init_chunk_space(file_path).await;
+        ChunkStorage::init_chunk_space(file_path);
         let chunk_path = ChunkStorage::absolute(&ChunkStorage::get_chunks_path(file_path, chunk_id));
         let open_res = std::fs::OpenOptions::new().write(true).read(true).open(chunk_path);
         if let Err(_e) = open_res{
@@ -150,7 +150,7 @@ impl ChunkStorage{
             Ok(read_tot)
         }
     }
-    pub async fn trim_chunk_space(file_path: &String, chunk_start: u64){
+    pub fn trim_chunk_space(file_path: &String, chunk_start: u64){
         let chunk_dir = ChunkStorage::absolute(&ChunkStorage::get_chunks_dir(file_path));
         let dir_iter = std::fs::read_dir(Path::new(&chunk_dir)).unwrap();
         let err = false;
@@ -159,7 +159,7 @@ impl ChunkStorage{
             let chunk_path = entry.path();
             let chunk_id = chunk_path.file_name().unwrap().to_str().unwrap().parse::<u64>().unwrap();
             if chunk_id >= chunk_start{
-                if let Err(_e) = fs::remove_file(chunk_path.as_path()).await{
+                if let Err(_e) = fs::remove_file(chunk_path.as_path()){
                     continue;
                     //error_msg("server::storage::chunk_storage::trim_chunk_space".to_string(), "fail to remove file".to_string());
                     //err = true;
@@ -170,18 +170,18 @@ impl ChunkStorage{
             error_msg("server::storage::chunk_storage::trim_chunk_space".to_string(), "error occurs while truncating".to_string());
         }
     }
-    pub async fn truncate_chunk_file(file_path: &String, chunk_id: u64, length: u64){
+    pub fn truncate_chunk_file(file_path: &String, chunk_id: u64, length: u64){
         if length > CNK.get_chunk_size(){
             error_msg("server::storage::chunk_storage::truncate_chunk_file".to_string(), "invalid length".to_string());
             return;
         }
         let chunk_path = ChunkStorage::absolute(&ChunkStorage::get_chunks_path(file_path, chunk_id));
-        let f_res = fs::OpenOptions::new().write(true).read(true).open(Path::new(&chunk_path)).await;
+        let f_res = fs::OpenOptions::new().write(true).read(true).open(Path::new(&chunk_path));
         if let Err(_e) = f_res{
             return;
         }
         let f = f_res.unwrap();
-        if let Err(_e) = f.set_len(length).await{
+        if let Err(_e) = f.set_len(length){
             error_msg("server::storage::chunk_storage::truncate_chunk_file".to_string(), "error occurs while truncating chunk file".to_string());
         }
         

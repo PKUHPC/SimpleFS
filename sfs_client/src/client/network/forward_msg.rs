@@ -5,15 +5,17 @@ use std::sync::{Arc, Mutex};
 
 use futures::stream::iter;
 use libc::{c_char, strncpy, EBUSY};
+use sfs_global::global::util::serde_util::serialize;
 use sfs_rpc::sfs_server::sfs_handle_client::SfsHandleClient;
 
+use crate::client::config::SEND_MSG_EACH_CHUNK;
 use crate::client::endpoint::SFSEndpoint;
 use crate::client::openfile::{FileType, OpenFile, O_RDONLY};
 use crate::client::{context::StaticContext, network::network_service::NetworkService};
 use sfs_global::global::distributor::Distributor;
 use sfs_global::global::error_msg::error_msg;
 use sfs_global::global::fsconfig::SFSConfig;
-use sfs_global::global::network::config::{CHUNK_SIZE, SEND_MSG_EACH_CHUNK};
+use sfs_global::global::network::config::CHUNK_SIZE;
 use sfs_global::global::network::forward_data::{
     ChunkStat, CreateData, DecrData, DirentData, ReadData, ReadResult, SerdeString, TruncData,
     UpdateMetadentryData, WriteData,
@@ -109,7 +111,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
                 .clone(),
             Post {
                 option: option2i(&PostOption::Remove),
-                data: serde_json::to_string(&SerdeString { str: path.as_str() }).unwrap(),
+                data: serialize(&SerdeString { str: path.as_str() }),
             },
         ));
 
@@ -128,7 +130,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
                     .clone(),
                 Post {
                     option: option2i(&PostOption::Remove),
-                    data: serde_json::to_string(&SerdeString { str: path.as_str() }).unwrap(),
+                    data: serialize(&SerdeString { str: path.as_str() }),
                 },
             ));
         }
@@ -138,7 +140,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
                 endp.clone(),
                 Post {
                     option: option2i(&PostOption::Remove),
-                    data: serde_json::to_string(&SerdeString { str: path.as_str() }).unwrap(),
+                    data: serialize(&SerdeString { str: path.as_str() }),
                 },
             ));
         }
@@ -163,7 +165,7 @@ pub fn forward_get_chunk_stat() -> (i32, ChunkStat) {
             endp.clone(),
             Post {
                 option: option2i(&PostOption::ChunkStat),
-                data: "0".to_string(),
+                data: "0".as_bytes().to_vec(),
             },
         ));
     }
@@ -265,7 +267,7 @@ pub fn forward_truncate(path: &String, old_size: i64, new_size: i64) -> i32 {
         };
         let post = Post {
             option: option2i(&PostOption::Trunc),
-            data: serde_json::to_string(&trunc_data).unwrap(),
+            data: serialize(&trunc_data),
         };
         posts.push((
             StaticContext::get_instance()
@@ -412,7 +414,7 @@ pub async fn forward_write_stream(
                 };
                 let post = Post {
                     option: option2i(&PostOption::Write),
-                    data: serde_json::to_string(&data).unwrap(),
+                    data: serialize(&data),
                 };
                 let request = tonic::Request::new(post);
                 let mut move_client = client.clone();
@@ -493,7 +495,7 @@ pub async fn forward_write_stream(
                 .iter()
                 .map(|x| Post {
                     option: option2i(&PostOption::Write),
-                    data: serde_json::to_string(&x).unwrap(),
+                    data: serialize(&x),
                 })
                 .collect::<Vec<_>>();
             let request = tonic::Request::new(iter(posts));
@@ -672,7 +674,7 @@ pub async fn forward_read_stream(
                 };
                 let post = Post {
                     option: option2i(&PostOption::Read),
-                    data: serde_json::to_string(&data).unwrap(),
+                    data: serialize(&data),
                 };
                 let request = tonic::Request::new(post);
                 let mut move_client = client.clone();
@@ -753,7 +755,7 @@ pub async fn forward_read_stream(
                 .iter()
                 .map(|x| Post {
                     option: option2i(&PostOption::Read),
-                    data: serde_json::to_string(&x).unwrap(),
+                    data: serialize(&x),
                 })
                 .collect::<Vec<_>>();
             let request = tonic::Request::new(iter(posts));
@@ -901,10 +903,9 @@ pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>) {
                 .clone(),
             Post {
                 option: option2i(&PostOption::GetDirents),
-                data: serde_json::to_string(&DirentData {
+                data: serialize(&DirentData {
                     path: path.as_str(),
-                })
-                .unwrap(),
+                }),
             },
         ));
     }

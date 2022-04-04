@@ -10,4 +10,5 @@ sha2 = '0.10.2'
 libc = '*'
 serde = { version = "1.0.104", features = ["derive"] }
 serde_json = "*"
+flexbuffers = "2.0.0"
 

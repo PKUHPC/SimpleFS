@@ -20,3 +20,4 @@ sfs_lib_server = { path = "sfs_lib_server" }
 sfs_global = {path = "../sfs_global"}
 sfs_rpc = {path = "../sfs_rpc"}
 tokio-stream = "0.1.8"
+flexbuffers = "2.0.0"

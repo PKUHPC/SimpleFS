@@ -18,10 +18,9 @@ use sfs_global::global;
 use sfs_global::global::error_msg::error_msg;
 use sfs_global::global::fsconfig::ZERO_BUF_BEFORE_READ;
 use sfs_global::global::metadata::{S_ISDIR, S_ISREG};
-use sfs_global::global::network::config::{READ_PER_CHUNK, WRITE_PER_CHUNK};
 use sfs_global::global::util::path_util::dirname;
 
-use super::config::CHECK_PARENT_DIR;
+use super::config::{CHECK_PARENT_DIR, READ_PER_CHUNK, WRITE_PER_CHUNK};
 #[allow(unused_imports)]
 use super::context::{interception_enabled, DynamicContext};
 use super::network::forward_msg::{

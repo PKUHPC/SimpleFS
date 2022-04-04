@@ -185,10 +185,11 @@ pub extern "C" fn enable_interception() {
 }
 #[cfg(test)]
 mod tests {
-    use std::thread;
+    use std::{thread, time::Instant};
 
     #[allow(unused_imports)]
     use libc::{c_char, dirent, stat as Stat, O_CREAT, O_RDWR, SEEK_SET, S_IFDIR, S_IFREG};
+    use serde::{Deserialize, Serialize};
 
     use crate::client::syscall::timespec;
     #[allow(unused_imports)]
@@ -205,11 +206,29 @@ mod tests {
 
     #[test]
     pub fn test0() {
-        println!("{:?}", StaticContext::get_instance().get_mountdir());
-        println!(
-            "{:?}",
-            resolve(&"/home/dev/Desktop/mount/file1/a/".to_string(), false)
-        );
+        #[derive(Debug, Serialize, Deserialize)]
+        struct Data<'a> {
+            pub s: &'a str,
+        }
+        
+        let str = String::from_utf8(vec!['c' as u8; 524288]).unwrap();
+        let data = Data { s: str.as_str() };
+
+        let start = Instant::now();
+        let mut s = flexbuffers::FlexbufferSerializer::new();
+        data.serialize(&mut s).unwrap();
+        let duration = start.elapsed();
+        println!("serialize cost: {:?}", duration);
+
+        let bytes = s.view().to_vec();
+
+        let start = Instant::now();
+        let reader = flexbuffers::Reader::get_root(&bytes as &[u8]).unwrap();
+        let data = Data::deserialize(reader).unwrap();
+        let duration = start.elapsed();
+        println!("deserialize cost: {:?}", duration);
+
+        println!("{}", &data.s[0..20]);
     }
     #[test]
     pub fn test1() {
@@ -766,7 +785,7 @@ mod tests {
     }
     #[test]
     pub fn test_bigdata() {
-        let cnt = 2000;
+        let cnt = 1500;
         let s = vec!['a' as i8; cnt * CHUNK_SIZE as usize];
 
         let path = "/file1\0".to_string();
@@ -800,7 +819,7 @@ mod tests {
         } else {
             println!("{} bytes written ...", res);
         }
-
+        /*
         sfs_lseek(fd, 13, SEEK_SET);
         let mut buf = vec![0 as u8; 10 * CHUNK_SIZE as usize];
         let res = sfs_read(fd, buf.as_mut_ptr() as *mut i8, 10 * CHUNK_SIZE as i64);
@@ -810,6 +829,7 @@ mod tests {
         } else {
             println!("{} bytes read", res);
         }
+        */
     }
     #[test]
     #[allow(unused_must_use)]

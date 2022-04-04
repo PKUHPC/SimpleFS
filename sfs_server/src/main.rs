@@ -1,6 +1,7 @@
 pub mod handle;
 use libc::{getgid, getuid, EINVAL, ENOENT, S_IFDIR, S_IRWXG, S_IRWXO, S_IRWXU};
 use sfs_global::global::network::post::i2option;
+use sfs_global::global::util::serde_util::deserialize;
 use sfs_global::{
     global::network::post::PostOption::*,
     global::{
@@ -22,6 +23,7 @@ use sfs_lib_server::server::{
     storage::metadata::db::MetadataDB,
 };
 use std::net::SocketAddrV4;
+use std::time::Instant;
 use std::{
     fs::OpenOptions,
     io::{BufWriter, Error, Write},
@@ -36,6 +38,213 @@ use sfs_rpc::sfs_server::sfs_handle_server::{SfsHandle, SfsHandleServer};
 use sfs_rpc::sfs_server::{Post, PostResult};
 use tokio_stream::wrappers::ReceiverStream;
 
+fn handle_request(post: &Post) -> PostResult {
+    let option = i2option(post.option);
+    match option {
+        Stat => {
+            let serde_string: SerdeString = deserialize::<SerdeString>(&post.data);
+            let path = serde_string.str;
+            if ENABLE_OUTPUT {
+                println!("handling metadata of '{}'....", path);
+            }
+            let md_res = MetadataDB::get_instance().get(&path.to_string());
+            if let Some(md) = md_res {
+                return PostResult { err: 0, data: md };
+            } else {
+                return PostResult {
+                    err: ENOENT,
+                    data: ENOENT.to_string(),
+                };
+            }
+        }
+        Create => {
+            let create_data: CreateData = deserialize::<CreateData>(&post.data);
+            if ENABLE_OUTPUT {
+                println!("handling create of '{}'....", create_data.path);
+            }
+            let mode = create_data.mode;
+            let mut md = Metadata::new();
+            md.set_mode(mode);
+            let create_res = MetadataDB::get_instance().put(
+                &create_data.path.to_string(),
+                &md.serialize(),
+                IGNORE_IF_EXISTS,
+            );
+            return PostResult {
+                err: create_res,
+                data: create_res.to_string(),
+            };
+        }
+        Remove => {
+            let serde_string: SerdeString = deserialize::<SerdeString>(&post.data);
+            let path = serde_string.str;
+            if ENABLE_OUTPUT {
+                println!("handling remove of '{}'....", path);
+            }
+            ChunkStorage::destroy_chunk_space(&path.to_string());
+            return PostResult {
+                err: 0,
+                data: "0".to_string(),
+            };
+        }
+        RemoveMeta => {
+            let serde_string: SerdeString = deserialize::<SerdeString>(&post.data);
+            let path = serde_string.str;
+            if ENABLE_OUTPUT {
+                println!("handling remove metadata of '{}'....", path);
+            }
+            let md_res = MetadataDB::get_instance().get(&path.to_string());
+            if let None = md_res {
+                return PostResult {
+                    err: ENOENT,
+                    data: ENOENT.to_string(),
+                };
+            } else {
+                MetadataDB::get_instance().remove(&path.to_string());
+                return PostResult {
+                    err: 0,
+                    data: "0".to_string(),
+                };
+            }
+        }
+        Lookup => {
+            if ENABLE_OUTPUT {
+                println!("handling look up....");
+            }
+            return PostResult {
+                err: 0,
+                data: "0".to_string(),
+            };
+        }
+        FsConfig => {
+            if ENABLE_OUTPUT {
+                println!("handling fsconfig....");
+            }
+            let mut fs_config = SFSConfig::new();
+            fs_config.mountdir = StorageContext::get_instance().get_mountdir().to_string();
+            fs_config.rootdir = StorageContext::get_instance().get_rootdir().to_string();
+            fs_config.atime_state = StorageContext::get_instance().get_atime_state();
+            fs_config.ctime_state = StorageContext::get_instance().get_ctime_state();
+            fs_config.mtime_state = StorageContext::get_instance().get_mtime_state();
+            fs_config.link_cnt_state = StorageContext::get_instance().get_link_count_state();
+            fs_config.blocks_state = StorageContext::get_instance().get_blocks_state();
+            fs_config.uid = unsafe { getuid() };
+            fs_config.gid = unsafe { getgid() };
+            return PostResult {
+                err: 0,
+                data: serde_json::to_string(&fs_config).unwrap(),
+            };
+        }
+        UpdateMetadentry => {
+            let update_data: UpdateMetadentryData = deserialize::<UpdateMetadentryData>(&post.data);
+            if ENABLE_OUTPUT {
+                println!("handling update metadentry of '{}'....", update_data.path);
+            }
+            MetadataDB::get_instance().increase_size(
+                &update_data.path.to_string(),
+                update_data.size as usize + update_data.offset as usize,
+                update_data.append,
+            );
+            return PostResult {
+                err: 0,
+                data: (update_data.size as usize + update_data.offset as usize).to_string(),
+            };
+        }
+        GetMetadentry => {
+            if ENABLE_OUTPUT {
+                println!("handling get metadentry....");
+            }
+            let serde_string: SerdeString = deserialize::<SerdeString>(&post.data);
+            let path = serde_string.str;
+            let md_str = MetadataDB::get_instance().get(&path.to_string());
+            match md_str {
+                None => {
+                    return PostResult {
+                        err: ENOENT,
+                        data: ENOENT.to_string(),
+                    };
+                }
+                Some(str) => {
+                    let md = Metadata::deserialize(&str).unwrap();
+                    return PostResult {
+                        err: 0,
+                        data: md.get_size().to_string(),
+                    };
+                }
+            }
+        }
+        ChunkStat => {
+            if ENABLE_OUTPUT {
+                println!("handling chunk stat....");
+            }
+            let chunk_stat = ChunkStorage::chunk_stat();
+            let post_result = PostResult {
+                err: 0,
+                data: serde_json::to_string(&chunk_stat).unwrap(),
+            };
+            return post_result;
+        }
+        DecrSize => {
+            let decr_data: DecrData = deserialize::<DecrData>(&post.data);
+            if ENABLE_OUTPUT {
+                println!("handling decrease size of '{}'....", decr_data.path);
+            }
+            MetadataDB::get_instance()
+                .decrease_size(&decr_data.path.to_string(), decr_data.new_size as usize);
+            return PostResult {
+                err: 0,
+                data: "0".to_string(),
+            };
+        }
+        Trunc => {
+            let trunc_data: TruncData = deserialize::<TruncData>(&post.data);
+            if ENABLE_OUTPUT {
+                println!("handling truncate of '{}'....", trunc_data.path);
+            }
+            return handle_trunc(trunc_data);
+        }
+        GetDirents => {
+            let data: DirentData = deserialize::<DirentData>(&post.data);
+            let path = data.path;
+            if ENABLE_OUTPUT {
+                println!("handling get dirents of '{}'....", path);
+            }
+            let entries = MetadataDB::get_instance().get_dirents(&path.to_string());
+            if entries.len() == 0 {
+                return PostResult {
+                    err: 0,
+                    data: serde_json::to_string(&(Vec::new() as Vec<(String, bool)>)).unwrap(),
+                };
+            } else {
+                return PostResult {
+                    err: 0,
+                    data: serde_json::to_string(&entries).unwrap(),
+                };
+            }
+        }
+        Read => {
+            let read_data: ReadData = deserialize(&post.data);
+            if ENABLE_OUTPUT {
+                println!("handling read of '{}'....", read_data.path);
+            }
+            return handle_read(&deserialize(&post.data));
+        }
+        Write => {
+            let write_data: WriteData = deserialize(&post.data);
+            if ENABLE_OUTPUT {
+                println!("handling write of '{}'....", write_data.path);
+            }
+            return handle_write(&write_data);
+        }
+        _ => {
+            println!("invalid option on 'handle': {:?}", option);
+            return PostResult {
+                err: EINVAL,
+                data: EINVAL.to_string(),
+            };
+        }
+    }
+}
 #[derive(Clone, Default)]
 struct ServerHandler {}
 #[tonic::async_trait]
@@ -46,217 +255,7 @@ impl SfsHandle for ServerHandler {
         request: tonic::Request<Post>,
     ) -> Result<tonic::Response<PostResult>, tonic::Status> {
         let post = request.into_inner();
-        let handle_result = tokio::spawn(
-            async move {
-                let option = i2option(post.option);
-                match option {
-                    Stat => {
-                        let serde_string: SerdeString = serde_json::from_str(&post.data).unwrap();
-                        let path = serde_string.str;
-                        if ENABLE_OUTPUT {
-                            println!("handling metadata of '{}'....", path);
-                        }
-                        let md_res = MetadataDB::get_instance().get(&path.to_string());
-                        if let Some(md) = md_res {
-                            return PostResult { err: 0, data: md };
-                        } else {
-                            return PostResult {
-                                err: ENOENT,
-                                data: ENOENT.to_string(),
-                            };
-                        }
-                    }
-                    Create => {
-                        let create_data: CreateData = serde_json::from_str(post.data.as_str()).unwrap();
-                        if ENABLE_OUTPUT {
-                            println!("handling create of '{}'....", create_data.path);
-                        }
-                        let mode = create_data.mode;
-                        let mut md = Metadata::new();
-                        md.set_mode(mode);
-                        let create_res = MetadataDB::get_instance().put(
-                            &create_data.path.to_string(),
-                            &md.serialize(),
-                            IGNORE_IF_EXISTS,
-                        );
-                        return PostResult {
-                            err: create_res,
-                            data: create_res.to_string(),
-                        };
-                    }
-                    Remove => {
-                        let serde_string: SerdeString = serde_json::from_str(&post.data).unwrap();
-                        let path = serde_string.str;
-                        if ENABLE_OUTPUT {
-                            println!("handling remove of '{}'....", path);
-                        }
-                        ChunkStorage::destroy_chunk_space(&path.to_string()).await;
-                        return PostResult {
-                            err: 0,
-                            data: "0".to_string(),
-                        };
-                    }
-                    RemoveMeta => {
-                        let serde_string: SerdeString = serde_json::from_str(&post.data).unwrap();
-                        let path = serde_string.str;
-                        if ENABLE_OUTPUT {
-                            println!("handling remove metadata of '{}'....", path);
-                        }
-                        let md_res = MetadataDB::get_instance().get(&path.to_string());
-                        if let None = md_res {
-                            return PostResult {
-                                err: ENOENT,
-                                data: ENOENT.to_string(),
-                            };
-                        }
-                        else{
-                            MetadataDB::get_instance().remove(&path.to_string());
-                            return PostResult {
-                                err: 0,
-                                data: "0".to_string(),
-                            };
-                        }
-                    },
-                    Lookup => {
-                        if ENABLE_OUTPUT {
-                            println!("handling look up....");
-                        }
-                        return PostResult {
-                            err: 0,
-                            data: "0".to_string(),
-                        };
-                    }
-                    FsConfig => {
-                        if ENABLE_OUTPUT {
-                            println!("handling fsconfig....");
-                        }
-                        let mut fs_config = SFSConfig::new();
-                        fs_config.mountdir = StorageContext::get_instance().get_mountdir().to_string();
-                        fs_config.rootdir = StorageContext::get_instance().get_rootdir().to_string();
-                        fs_config.atime_state = StorageContext::get_instance().get_atime_state();
-                        fs_config.ctime_state = StorageContext::get_instance().get_ctime_state();
-                        fs_config.mtime_state = StorageContext::get_instance().get_mtime_state();
-                        fs_config.link_cnt_state = StorageContext::get_instance().get_link_count_state();
-                        fs_config.blocks_state = StorageContext::get_instance().get_blocks_state();
-                        fs_config.uid = unsafe { getuid() };
-                        fs_config.gid = unsafe { getgid() };
-                        return PostResult {
-                            err: 0,
-                            data: serde_json::to_string(&fs_config).unwrap(),
-                        };
-                    }
-                    UpdateMetadentry => {
-                        let update_data: UpdateMetadentryData = serde_json::from_str(&post.data).unwrap();
-                        if ENABLE_OUTPUT {
-                            println!("handling update metadentry of '{}'....", update_data.path);
-                        }
-                        MetadataDB::get_instance().increase_size(
-                            &update_data.path.to_string(),
-                            update_data.size as usize + update_data.offset as usize,
-                            update_data.append,
-                        );
-                        return PostResult {
-                            err: 0,
-                            data: (update_data.size as usize + update_data.offset as usize).to_string(),
-                        };
-                    }
-                    GetMetadentry => {
-                        if ENABLE_OUTPUT {
-                            println!("handling get metadentry....");
-                        }
-                        let serde_string: SerdeString = serde_json::from_str(&post.data).unwrap();
-                        let path = serde_string.str;
-                        let md_str = MetadataDB::get_instance().get(&path.to_string());
-                        match md_str {
-                            None => {
-                                return PostResult {
-                                    err: ENOENT,
-                                    data: ENOENT.to_string(),
-                                };
-                            }
-                            Some(str) => {
-                                let md = Metadata::deserialize(&str).unwrap();
-                                return PostResult {
-                                    err: 0,
-                                    data: md.get_size().to_string(),
-                                };
-                            }
-                        }
-                    }
-                    ChunkStat => {
-                        if ENABLE_OUTPUT {
-                            println!("handling chunk stat....");
-                        }
-                        let chunk_stat = ChunkStorage::chunk_stat();
-                        let post_result = PostResult {
-                            err: 0,
-                            data: serde_json::to_string(&chunk_stat).unwrap(),
-                        };
-                        return post_result;
-                    }
-                    DecrSize => {
-                        let decr_data: DecrData = serde_json::from_str(&post.data).unwrap();
-                        if ENABLE_OUTPUT {
-                            println!("handling decrease size of '{}'....", decr_data.path);
-                        }
-                        MetadataDB::get_instance()
-                            .decrease_size(&decr_data.path.to_string(), decr_data.new_size as usize);
-                        return PostResult {
-                            err: 0,
-                            data: "0".to_string(),
-                        };
-                    }
-                    Trunc => {
-                        let trunc_data: TruncData = serde_json::from_str(&post.data).unwrap();
-                        if ENABLE_OUTPUT {
-                            println!("handling truncate of '{}'....", trunc_data.path);
-                        }
-                        return handle_trunc(trunc_data).await;
-                    }
-                    GetDirents => {
-                        let data: DirentData = serde_json::from_str(&post.data).unwrap();
-                        let path = data.path;
-                        if ENABLE_OUTPUT {
-                            println!("handling get dirents of '{}'....", path);
-                        }
-                        let entries = MetadataDB::get_instance().get_dirents(&path.to_string());
-                        if entries.len() == 0 {
-                            return PostResult {
-                                err: 0,
-                                data: serde_json::to_string(&(Vec::new() as Vec<(String, bool)>)).unwrap(),
-                            };
-                        }
-                        else{
-                            return PostResult {
-                                err: 0,
-                                data: serde_json::to_string(&entries).unwrap(),
-                            };
-                        }
-                    },
-                    Read => {
-                        let read_data: ReadData = serde_json::from_str(&post.data).unwrap();
-                        if ENABLE_OUTPUT {
-                            println!("handling read of '{}'....", read_data.path);
-                        }
-                        return handle_read(serde_json::from_str(&post.data).unwrap()).await;
-                    }
-                    Write => {
-                        let write_data: WriteData = serde_json::from_str(&post.data).unwrap();
-                        if ENABLE_OUTPUT {
-                            println!("handling write of '{}'....", write_data.path);
-                        }
-                        return handle_write(write_data).await;
-                    },
-                    _ => {
-                        println!("invalid option on 'handle': {:?}", option);
-                        return PostResult {
-                            err: EINVAL,
-                            data: EINVAL.to_string(),
-                        };
-                    }
-                }
-            }
-        ).await.unwrap();
+        let handle_result = handle_request(&post);
         return Ok(Response::new(handle_result));
     }
     async fn handle_stream(
@@ -271,19 +270,20 @@ impl SfsHandle for ServerHandler {
                 let option = i2option(post.option);
                 match option {
                     Read => {
-                        let read_data: ReadData = serde_json::from_str(&post.data).unwrap();
+                        let read_data: ReadData = deserialize::<ReadData>(&post.data);
                         if ENABLE_OUTPUT {
                             println!("handling read of '{}'....", read_data.path);
                         }
-                        handle_result = handle_read(serde_json::from_str(&post.data).unwrap()).await;
+                        handle_result =
+                            handle_read(&read_data);
                     }
                     Write => {
-                        let write_data: WriteData = serde_json::from_str(&post.data).unwrap();
+                        let write_data: WriteData = deserialize::<WriteData>(&post.data);
                         if ENABLE_OUTPUT {
                             println!("handling write of '{}'....", write_data.path);
                         }
-                        handle_result = handle_write(write_data).await;
-                    },
+                        handle_result = handle_write(&write_data);
+                    }
                     _ => {
                         println!("invalid option on 'handle_stream': {:?}", option);
                         handle_result = PostResult {

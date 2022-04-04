@@ -1,6 +1,7 @@
 use futures::stream::iter;
 use lazy_static::*;
 use serde::Serialize;
+use sfs_global::global::util::serde_util::serialize;
 use std::io::Error;
 
 use crate::client::endpoint::SFSEndpoint;
@@ -19,7 +20,7 @@ impl NetworkService {
         data: T,
         opt: PostOption,
     ) -> Result<PostResult, Error> {
-        let serialized_data = serde_json::to_string(&data)?;
+        let serialized_data = serialize(&data);
         let post = Post {
             option: option2i(&opt),
             data: serialized_data,
@@ -68,7 +69,7 @@ impl NetworkService {
             .iter()
             .map(|x| Post {
                 option: option2i(&opt),
-                data: serde_json::to_string(&x).unwrap(),
+                data: serialize(&x),
             })
             .collect::<Vec<_>>();
         let request = tonic::Request::new(iter(posts));
