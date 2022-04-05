@@ -2,10 +2,12 @@ use std::collections::HashMap;
 use std::ffi::CStr;
 use std::io::Error;
 use std::sync::{Arc, Mutex};
+#[allow(unused)]
+use std::time::Instant;
 
 use futures::stream::iter;
 use libc::{c_char, strncpy, EBUSY};
-use sfs_global::global::util::serde_util::{serialize, deserialize};
+use sfs_global::global::util::serde_util::{deserialize, serialize};
 use sfs_rpc::sfs_server::sfs_handle_client::SfsHandleClient;
 
 use crate::client::config::SEND_MSG_EACH_CHUNK;
@@ -216,7 +218,14 @@ pub fn forward_get_metadentry_size(path: &String) -> (i32, i64) {
         if result.err != 0 {
             return (result.err, 0);
         }
-        return (0, String::from_utf8(result.data).unwrap().as_str().parse::<i64>().unwrap());
+        return (
+            0,
+            String::from_utf8(result.data)
+                .unwrap()
+                .as_str()
+                .parse::<i64>()
+                .unwrap(),
+        );
     }
 }
 pub fn forward_decr_size(path: &String, new_size: i64) -> i32 {
@@ -320,7 +329,11 @@ pub fn forward_update_metadentry_size(
         let res = post_result.unwrap();
         return (
             if res.err != 0 { res.err } else { 0 },
-            String::from_utf8(res.data).unwrap().as_str().parse::<i64>().unwrap(),
+            String::from_utf8(res.data)
+                .unwrap()
+                .as_str()
+                .parse::<i64>()
+                .unwrap(),
         );
     }
 }
@@ -418,9 +431,9 @@ pub async fn forward_write_stream(
                 };
                 let request = tonic::Request::new(post);
                 let mut move_client = client.clone();
-                handles.push(tokio::spawn(
-                    async move { move_client.handle(request).await },
-                ));
+                handles.push(tokio::spawn(async move {
+                    move_client.handle(request).await
+                }));
             }
         }
         for handle in handles {
@@ -432,7 +445,8 @@ pub async fn forward_write_stream(
             if res.err != 0 {
                 return (res.err, tot_write);
             }
-            tot_write += String::from_utf8(res.data).unwrap()
+            tot_write += String::from_utf8(res.data)
+                .unwrap()
                 .as_str()
                 .parse::<i64>()
                 .expect("response should be 'i64'");
@@ -512,8 +526,8 @@ pub async fn forward_write_stream(
                 if res.err != 0 {
                     return (res.err, tot_write);
                 }
-                tot_write += String::from_utf8(res
-                    .data).unwrap()
+                tot_write += String::from_utf8(res.data)
+                    .unwrap()
                     .as_str()
                     .parse::<i64>()
                     .expect("response should be 'i64'");

@@ -37,6 +37,9 @@ use sfs_rpc::sfs_server::sfs_handle_server::{SfsHandle, SfsHandleServer};
 use sfs_rpc::sfs_server::{Post, PostResult};
 use tokio_stream::wrappers::ReceiverStream;
 
+#[allow(unused)]
+use std::time::Instant;
+
 fn handle_request(post: &Post) -> PostResult {
     let option = i2option(post.option);
     match option {
@@ -254,7 +257,7 @@ impl SfsHandle for ServerHandler {
         request: tonic::Request<Post>,
     ) -> Result<tonic::Response<PostResult>, tonic::Status> {
         let post = request.into_inner();
-        let handle_result = handle_request(&post);
+        let handle_result = tokio::spawn(async move {handle_request(&post)}).await.unwrap();
         return Ok(Response::new(handle_result));
     }
     async fn handle_stream(

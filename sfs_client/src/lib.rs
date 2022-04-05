@@ -210,7 +210,7 @@ mod tests {
         struct Data<'a> {
             pub s: &'a str,
         }
-        
+
         let str = String::from_utf8(vec!['c' as u8; 524288]).unwrap();
         let data = Data { s: str.as_str() };
 
@@ -820,6 +820,7 @@ mod tests {
             println!("{} bytes written ...", res);
         }
         drop(s);
+        /*
         sfs_lseek(fd, 13, SEEK_SET);
         let mut buf = vec![0 as u8; cnt * CHUNK_SIZE as usize];
         let res = sfs_read(fd, buf.as_mut_ptr() as *mut i8, (cnt - 1) as i64 * CHUNK_SIZE as i64);
@@ -829,12 +830,13 @@ mod tests {
         } else {
             println!("{} bytes read", res);
         }
+        */
     }
     #[test]
     #[allow(unused_must_use)]
     pub fn test_parallel() {
         let mut handles = Vec::new();
-        for i in 0..10 {
+        for i in 0..160 {
             handles.push(thread::spawn(move || {
                 let path = "/file".to_string() + (i as i32).to_string().as_str() + "\0";
                 let fd = sfs_open(
@@ -846,15 +848,15 @@ mod tests {
                     println!("open error on thread {} ...", i);
                     return;
                 }
-                println!("file {} opened on thread {} ...", fd, i);
-                let cnt = 160;
+                //println!("file {} opened on thread {} ...", fd, i);
+                let cnt = 10;
                 let data = vec!['a' as i8; cnt * CHUNK_SIZE as usize];
                 let res = sfs_write(fd, data.as_ptr() as *mut i8, data.len() as i64);
                 if res <= 0 {
                     println!("write error on thread {} ...", i);
                     return;
                 } else {
-                    println!("{} bytes written on thread {} ...", res, i);
+                    //println!("{} bytes written on thread {} ...", res, i);
                 }
             }))
         }
