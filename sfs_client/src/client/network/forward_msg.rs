@@ -431,9 +431,9 @@ pub async fn forward_write_stream(
                 };
                 let request = tonic::Request::new(post);
                 let mut move_client = client.clone();
-                handles.push(tokio::spawn(async move {
-                    move_client.handle(request).await
-                }));
+                handles.push(tokio::spawn(
+                    async move { move_client.handle(request).await },
+                ));
             }
         }
         for handle in handles {
@@ -454,17 +454,6 @@ pub async fn forward_write_stream(
     } else {
         let mut handles = Vec::new();
         for target in targets.iter() {
-            let mut client = SfsHandleClient::connect(format!(
-                "http://{}:{}",
-                StaticContext::get_instance()
-                    .get_hosts()
-                    .get(target.clone() as usize)
-                    .unwrap()
-                    .addr,
-                8082
-            ))
-            .await
-            .unwrap();
             let mut write_datas: Vec<WriteData> = Vec::new();
             for chunk in target_chunks.get(&target).unwrap() {
                 let total_size = if *chunk == chunk_start {
@@ -511,10 +500,18 @@ pub async fn forward_write_stream(
                     data: serialize(&x),
                 })
                 .collect::<Vec<_>>();
-            let request = tonic::Request::new(iter(posts));
-            handles.push(tokio::spawn(
-                async move { client.handle_stream(request).await },
-            ));
+            let addr = &StaticContext::get_instance()
+                .get_hosts()
+                .get(target.clone() as usize)
+                .unwrap()
+                .addr;
+            handles.push(tokio::spawn(async move {
+                let mut client = SfsHandleClient::connect(format!("http://{}:{}", addr, 8082))
+                    .await
+                    .unwrap();
+                let request = tonic::Request::new(iter(posts));
+                return client.handle_stream(request).await;
+            }));
         }
         for handle in handles {
             let post_result = handle.await.unwrap();
@@ -753,17 +750,6 @@ pub async fn forward_read_stream(
                     read_size: total_size,
                 })
             }
-            let mut client = SfsHandleClient::connect(format!(
-                "http://{}:{}",
-                StaticContext::get_instance()
-                    .get_hosts()
-                    .get(target.clone() as usize)
-                    .unwrap()
-                    .addr,
-                8082
-            ))
-            .await
-            .unwrap();
             let posts = read_datas
                 .iter()
                 .map(|x| Post {
@@ -772,9 +758,21 @@ pub async fn forward_read_stream(
                 })
                 .collect::<Vec<_>>();
             let request = tonic::Request::new(iter(posts));
-            handles.push(tokio::spawn(
-                async move { client.handle_stream(request).await },
-            ));
+
+            handles.push(tokio::spawn(async move {
+                let mut client = SfsHandleClient::connect(format!(
+                    "http://{}:{}",
+                    StaticContext::get_instance()
+                        .get_hosts()
+                        .get(target.clone() as usize)
+                        .unwrap()
+                        .addr,
+                    8082
+                ))
+                .await
+                .unwrap();
+                client.handle_stream(request).await
+            }));
         }
         for handle in handles {
             let post_result = handle.await.unwrap();

@@ -786,7 +786,6 @@ mod tests {
     #[test]
     pub fn test_bigdata() {
         let cnt = 1500;
-        let s = vec!['a' as i8; cnt * CHUNK_SIZE as usize];
 
         let path = "/file1\0".to_string();
         let fd = sfs_open(
@@ -808,10 +807,11 @@ mod tests {
                 .get_length()
         );
 
+        let s = vec!['a' as i8; cnt * CHUNK_SIZE as usize];
         let res = sfs_write(
             fd,
             s.as_ptr() as *mut i8,
-            ((cnt - 1) * CHUNK_SIZE as usize + 10) as i64,
+            (cnt * CHUNK_SIZE as usize) as i64,
         );
         if res <= 0 {
             println!("write error ...");
@@ -830,7 +830,7 @@ mod tests {
         } else {
             println!("{} bytes read", res);
         }
-        */
+         */
     }
     #[test]
     #[allow(unused_must_use)]

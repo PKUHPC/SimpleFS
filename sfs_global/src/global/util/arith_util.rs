@@ -24,7 +24,11 @@ pub fn align_left(offset: i64, chunk_size: u64) -> u64 {
     offset as u64 & !(chunk_size - 1)
 }
 pub fn chunk_lpad(offset: i64, chunk_size: u64) -> u64 {
-    offset as u64 % chunk_size
+   let res = offset as u64 % chunk_size;
+   if res == 0{
+       return chunk_size;
+   }
+   return res;
 }
 pub fn chunk_rpad(offset: i64, chunk_size: u64) -> u64 {
     let res = -offset % chunk_size as i64;
