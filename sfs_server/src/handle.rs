@@ -1,3 +1,6 @@
+#[allow(unused)]
+use std::time::Instant;
+
 use sfs_global::global::{
     network::{
         config::CHUNK_SIZE,
