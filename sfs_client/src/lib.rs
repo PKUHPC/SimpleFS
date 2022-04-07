@@ -238,13 +238,10 @@ mod tests {
         let path1 = "/sfs\0".to_string();
         let path2 = "/sfs/test\0".to_string();
         let path3 = "/sfs/test/create_dir\0".to_string();
-        let res1 = sfs_create(path1.as_ptr() as *const i8, S_IFDIR);
-        let res2 = sfs_create(path2.as_ptr() as *const i8, S_IFDIR);
-        let res3 = sfs_create(path3.as_ptr() as *const i8, S_IFDIR);
-        if res1 != 0 || res2 != 0 || res3 != 0 {
-            println!("create dir error ...");
-            return;
-        }
+        sfs_create(path1.as_ptr() as *const i8, S_IFDIR);
+        sfs_create(path2.as_ptr() as *const i8, S_IFDIR);
+        sfs_create(path3.as_ptr() as *const i8, S_IFDIR);
+
         //let res = sfs_create(path.as_str().as_ptr() as * const c_char, S_IFDIR);
         let fd = sfs_open(
             path.as_str().as_ptr() as *const c_char,
@@ -276,7 +273,6 @@ mod tests {
         } else {
             println!("{} bytes written ...", res);
         }
-
         sfs_lseek(fd, 13, SEEK_SET);
         let mut buf = vec![0 as u8; 100 as usize];
         let res = sfs_read(fd, buf.as_mut_ptr() as *mut i8, 100 as i64);
@@ -823,7 +819,7 @@ mod tests {
         /*
         sfs_lseek(fd, 13, SEEK_SET);
         let mut buf = vec![0 as u8; cnt * CHUNK_SIZE as usize];
-        let res = sfs_read(fd, buf.as_mut_ptr() as *mut i8, (cnt - 1) as i64 * CHUNK_SIZE as i64);
+        let res = sfs_read(fd, buf.as_mut_ptr() as *mut i8, cnt as i64 * CHUNK_SIZE as i64);
         if res <= 0 {
             println!("read error ...");
             return;

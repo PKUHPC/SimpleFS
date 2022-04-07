@@ -11,11 +11,11 @@ use sfs_global::global::{
 use sfs_lib_server::server::storage::data::chunk_storage::ChunkStorage;
 use sfs_rpc::sfs_server::PostResult;
 
-pub fn handle_write(input: &WriteData) -> PostResult {
+pub fn handle_write(input: &WriteData, data: &[u8]) -> PostResult {
     let write_tot = if let Ok(nwrite) = ChunkStorage::write_chunk(
         &input.path.to_string(),
         input.chunk_id,
-        input.buffers.as_bytes(),
+        data,
         input.write_size,
         input.offset as u64,
     )
@@ -27,6 +27,7 @@ pub fn handle_write(input: &WriteData) -> PostResult {
     let post_res = PostResult {
         err: 0,
         data: write_tot.to_string().as_bytes().to_vec(),
+        extra: vec![0; 0]
     };
     return post_res;
 }
@@ -40,13 +41,13 @@ pub fn handle_read(input: &ReadData) -> PostResult {
         data: serialize(&ReadResult {
             nreads: read_res.1,
             chunk_id: read_res.0,
-            data: read_res.2.as_str(),
         }),
+        extra: read_res.2
     };
     return post_res;
 }
 
-fn read_file(args: &ReadData<'_>) -> (u64, u64, String) {
+fn read_file(args: &ReadData<'_>) -> (u64, u64, Vec<u8>) {
     //println!("{:?}", args);
     //println!("reading...");
     let mut buf = vec![0; CHUNK_SIZE as usize];
@@ -62,10 +63,10 @@ fn read_file(args: &ReadData<'_>) -> (u64, u64, String) {
         (
             args.chunk_id,
             nreads,
-            String::from_utf8(buf[0..(nreads as usize)].to_vec()).unwrap(),
+            buf[0..(nreads as usize)].to_vec(),
         )
     } else {
-        (args.chunk_id, 0, "".to_string())
+        (args.chunk_id, 0, vec![0; 1])
     }
 }
 
@@ -82,6 +83,7 @@ pub fn handle_trunc(input: TruncData<'_>) -> PostResult {
     let post_res = PostResult {
         err: 0,
         data: vec![0; 1],
+        extra: vec![0; 0]
     };
     return post_res;
 }

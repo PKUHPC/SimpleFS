@@ -1,0 +1,1 @@
+pub static ENABLE_OUTPUT: bool = false;

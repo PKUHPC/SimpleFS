@@ -6,7 +6,6 @@ pub struct WriteData<'a> {
     pub offset: i64,
     pub chunk_id: u64,
     pub write_size: u64,
-    pub buffers: &'a str,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -17,10 +16,9 @@ pub struct ReadData<'a> {
     pub read_size: u64,
 }
 #[derive(Serialize, Deserialize, Debug)]
-pub struct ReadResult<'a> {
+pub struct ReadResult {
     pub nreads: u64,
     pub chunk_id: u64,
-    pub data: &'a str
 }
 
 #[derive(Serialize, Deserialize, Debug)]

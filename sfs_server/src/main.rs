@@ -1,11 +1,12 @@
 pub mod handle;
+pub mod config;
 use libc::{getgid, getuid, EINVAL, ENOENT, S_IFDIR, S_IRWXG, S_IRWXO, S_IRWXU};
 use sfs_global::global::network::post::i2option;
 use sfs_global::global::util::serde_util::{deserialize, serialize};
 use sfs_global::{
     global::network::post::PostOption::*,
     global::{
-        fsconfig::{SFSConfig, ENABLE_OUTPUT},
+        fsconfig::{SFSConfig},
         metadata::Metadata,
         network::{
             config::CHUNK_SIZE,
@@ -33,6 +34,7 @@ use tokio::sync::mpsc;
 use tonic::{transport::Server, Request, Response, Status};
 
 use crate::handle::{handle_read, handle_trunc, handle_write};
+use crate::config::ENABLE_OUTPUT;
 use sfs_rpc::sfs_server::sfs_handle_server::{SfsHandle, SfsHandleServer};
 use sfs_rpc::sfs_server::{Post, PostResult};
 use tokio_stream::wrappers::ReceiverStream;
@@ -51,11 +53,13 @@ fn handle_request(post: &Post) -> PostResult {
             }
             let md_res = MetadataDB::get_instance().get(&path.to_string());
             if let Some(md) = md_res {
-                return PostResult { err: 0, data: md.as_bytes().to_vec() };
+                return PostResult { err: 0, data: md.as_bytes().to_vec(),
+                    extra: vec![0; 0] };
             } else {
                 return PostResult {
                     err: ENOENT,
                     data: ENOENT.to_string().as_bytes().to_vec(),
+                    extra: vec![0; 0]
                 };
             }
         }
@@ -75,6 +79,7 @@ fn handle_request(post: &Post) -> PostResult {
             return PostResult {
                 err: create_res,
                 data: create_res.to_string().as_bytes().to_vec(),
+                extra: vec![0; 0]
             };
         }
         Remove => {
@@ -87,6 +92,7 @@ fn handle_request(post: &Post) -> PostResult {
             return PostResult {
                 err: 0,
                 data: "0".to_string().as_bytes().to_vec(),
+                extra: vec![0; 0]
             };
         }
         RemoveMeta => {
@@ -100,12 +106,14 @@ fn handle_request(post: &Post) -> PostResult {
                 return PostResult {
                     err: ENOENT,
                     data: ENOENT.to_string().as_bytes().to_vec(),
+                    extra: vec![0; 0]
                 };
             } else {
                 MetadataDB::get_instance().remove(&path.to_string());
                 return PostResult {
                     err: 0,
                     data: "0".to_string().as_bytes().to_vec(),
+                    extra: vec![0; 0]
                 };
             }
         }
@@ -116,6 +124,7 @@ fn handle_request(post: &Post) -> PostResult {
             return PostResult {
                 err: 0,
                 data: "0".to_string().as_bytes().to_vec(),
+                extra: vec![0; 0]
             };
         }
         FsConfig => {
@@ -135,6 +144,7 @@ fn handle_request(post: &Post) -> PostResult {
             return PostResult {
                 err: 0,
                 data: serialize(&fs_config),
+                extra: vec![0; 0]
             };
         }
         UpdateMetadentry => {
@@ -150,6 +160,7 @@ fn handle_request(post: &Post) -> PostResult {
             return PostResult {
                 err: 0,
                 data: (update_data.size as usize + update_data.offset as usize).to_string().as_bytes().to_vec(),
+                extra: vec![0; 0]
             };
         }
         GetMetadentry => {
@@ -164,6 +175,7 @@ fn handle_request(post: &Post) -> PostResult {
                     return PostResult {
                         err: ENOENT,
                         data: ENOENT.to_string().as_bytes().to_vec(),
+                        extra: vec![0; 0]
                     };
                 }
                 Some(str) => {
@@ -171,6 +183,7 @@ fn handle_request(post: &Post) -> PostResult {
                     return PostResult {
                         err: 0,
                         data: md.get_size().to_string().as_bytes().to_vec(),
+                        extra: vec![0; 0]
                     };
                 }
             }
@@ -183,6 +196,7 @@ fn handle_request(post: &Post) -> PostResult {
             let post_result = PostResult {
                 err: 0,
                 data: serialize(&chunk_stat),
+                extra: vec![0; 0]
             };
             return post_result;
         }
@@ -196,6 +210,7 @@ fn handle_request(post: &Post) -> PostResult {
             return PostResult {
                 err: 0,
                 data: "0".to_string().as_bytes().to_vec(),
+                extra: vec![0; 0]
             };
         }
         Trunc => {
@@ -216,33 +231,22 @@ fn handle_request(post: &Post) -> PostResult {
                 return PostResult {
                     err: 0,
                     data: serialize(&(Vec::new() as Vec<(String, bool)>)),
+                    extra: vec![0; 0]
                 };
             } else {
                 return PostResult {
                     err: 0,
                     data: serialize(&entries),
+                    extra: vec![0; 0]
                 };
             }
-        }
-        Read => {
-            let read_data: ReadData = deserialize(&post.data);
-            if ENABLE_OUTPUT {
-                println!("handling read of '{}'....", read_data.path);
-            }
-            return handle_read(&deserialize(&post.data));
-        }
-        Write => {
-            let write_data: WriteData = deserialize(&post.data);
-            if ENABLE_OUTPUT {
-                println!("handling write of '{}'....", write_data.path);
-            }
-            return handle_write(&write_data);
         }
         _ => {
             println!("invalid option on 'handle': {:?}", option);
             return PostResult {
                 err: EINVAL,
                 data: EINVAL.to_string().as_bytes().to_vec(),
+                extra: vec![0; 0]
             };
         }
     }
@@ -268,33 +272,32 @@ impl SfsHandle for ServerHandler {
         let (tx, rx) = mpsc::channel(2 * CHUNK_SIZE as usize);
         tokio::spawn(async move {
             while let Some(post) = streamer.message().await.unwrap() {
-                let handle_result: PostResult;
                 let option = i2option(post.option);
                 match option {
                     Read => {
-                        let read_data: ReadData = deserialize::<ReadData>(&post.data);
+                        let read_args: ReadData = deserialize::<ReadData>(&post.data);
                         if ENABLE_OUTPUT {
-                            println!("handling read of '{}'....", read_data.path);
+                            println!("handling read of '{}'....", read_args.path);
                         }
-                        handle_result =
-                            handle_read(&read_data);
+                        tx.send(Ok(handle_read(&read_args))).await.unwrap();
                     }
                     Write => {
-                        let write_data: WriteData = deserialize::<WriteData>(&post.data);
+                        let write_args: WriteData = deserialize::<WriteData>(&post.data);
                         if ENABLE_OUTPUT {
-                            println!("handling write of '{}'....", write_data.path);
+                            println!("handling write of '{}'....", write_args.path);
                         }
-                        handle_result = handle_write(&write_data);
+                        let data = post.extra;
+                        tx.send(Ok(handle_write(&write_args, &data))).await.unwrap();
                     }
                     _ => {
                         println!("invalid option on 'handle_stream': {:?}", option);
-                        handle_result = PostResult {
+                        tx.send(Ok(PostResult {
                             err: EINVAL,
                             data: EINVAL.to_string().as_bytes().to_vec(),
-                        };
+                            extra: vec![0; 0]
+                        })).await.unwrap();
                     }
                 }
-                tx.send(Ok(handle_result)).await.unwrap();
             }
         });
         Ok(Response::new(ReceiverStream::new(rx)))
@@ -304,26 +307,6 @@ async fn init_server(addr: &String) -> Result<(), Error> {
     NetworkContext::get_instance().set_self_addr(addr.clone());
     let server_addr: (Ipv4Addr, u16) = (addr.parse().unwrap(), 8082);
     println!("listening on {:?}", server_addr);
-    /*
-    let mut listener = tarpc::serde_transport::tcp::listen(&server_addr, Json::default).await?;
-    listener.config_mut().max_frame_length(usize::MAX);
-    listener
-        // Ignore accept errors.
-        .filter_map(|r| future::ready(r.ok()))
-        .map(server::BaseChannel::with_defaults)
-        // Limit channels to 3 per IP.
-        .max_channels_per_key(3, |t| t.transport().peer_addr().unwrap().ip())
-        // serve is generated by the service attribute. It takes as input any type implementing
-        // the generated World trait.
-        .map(|channel| {
-            let server = ServerHandler(channel.transport().peer_addr().unwrap());
-            channel.execute(server.serve())
-        })
-        // Max 10 channels.
-        .buffer_unordered(10)
-        .for_each(|_| async {})
-        .await;
-    */
     let handler = ServerHandler::default();
     Server::builder()
         .add_service(SfsHandleServer::new(handler))
@@ -376,31 +359,8 @@ async fn init_environment() -> Result<(), Error> {
 //fn destroy_environment() {}
 #[tokio::main]
 pub async fn main() -> Result<(), Error> {
-    //let RPC_PROTOCOL: String = String::from("tcp");
-
     StorageContext::get_instance();
 
     init_environment().await?;
-    /*
-    let chunk_storage_path = "/home/dev/Desktop/storage/data/chunks".to_string();
-    fs::remove_dir_all(Path::new(&chunk_storage_path));
-    fs::create_dir_all(Path::new(&chunk_storage_path)).expect("fail to create chunk storage directory");
-    StorageContext::set_storage(ChunkStorage::new(&chunk_storage_path, CHUNK_SIZE).expect("fail to create chunk storage"));
-
-    let metadata_path = "/home/dev/Desktop/metadata/rocksdb".to_string();
-    StorageContext::get_instance().set_metadir(metadata_path.clone());
-    fs::remove_dir_all(Path::new(&metadata_path));
-    fs::create_dir_all(Path::new(&metadata_path)).expect("fail to create metadata directory");
-    StorageContext::set_mdb(MetadataDB::new(&metadata_path).expect("fail to create metadata data base"));
-
-    let mut root_md = Metadata::new();
-    root_md.set_mode(S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO);
-
-    MetadataDB::get_instance().put(&"/".to_string(), &root_md.serialize(), IGNORE_IF_EXISTS);
-
-    //MetadataDB::get_instance().put(&"/sfs/test/async_write/a".to_string(), &"c|32768|0|0|0|0|1|0".to_string());
-    //println!("?");
-    init_server(&"192.168.230.137".to_string()).await?;
-    */
     Ok(())
 }

@@ -17,6 +17,8 @@ pub enum PostOption {
     Trunc,
     GetDirents,
     Unknown,
+    WriteData,
+    ReadData
 }
 impl Clone for PostOption {
     fn clone(&self) -> Self {
@@ -36,6 +38,8 @@ impl Clone for PostOption {
             Self::Trunc => Self::Trunc,
             Self::GetDirents => Self::GetDirents,
             Self::Unknown => Self::Unknown,
+            Self::WriteData => Self::WriteData,
+            Self::ReadData => Self::ReadData,
         }
     }
 }
@@ -56,6 +60,8 @@ pub fn i2option(n: i32) -> PostOption {
         11 => PostOption::DecrSize,
         12 => PostOption::Trunc,
         13 => PostOption::GetDirents,
+        14 => PostOption::WriteData,
+        15 => PostOption::ReadData,
         _ => PostOption::Unknown,
     }
 }
@@ -75,6 +81,8 @@ pub fn option2i(option: &PostOption) -> i32 {
         PostOption::DecrSize => 11,
         PostOption::Trunc => 12,
         PostOption::GetDirents => 13,
+        PostOption::WriteData => 14,
+        PostOption::ReadData => 15,
         PostOption::Unknown => -1,
     }
 }

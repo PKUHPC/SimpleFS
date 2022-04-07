@@ -24,6 +24,7 @@ impl NetworkService {
         let post = Post {
             option: option2i(&opt),
             data: serialized_data,
+            extra: vec![0; 0]
         };
         let mut client = SfsHandleClient::connect(format!("http://{}:{}", endp.addr, 8082))
             .await
@@ -70,6 +71,7 @@ impl NetworkService {
             .map(|x| Post {
                 option: option2i(&opt),
                 data: serialize(&x),
+                extra: vec![0; 0]
             })
             .collect::<Vec<_>>();
         let request = tonic::Request::new(iter(posts));

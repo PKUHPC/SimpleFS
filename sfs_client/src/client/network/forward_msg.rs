@@ -1,16 +1,15 @@
 use std::collections::HashMap;
-use std::ffi::CStr;
 use std::io::Error;
+use std::slice;
 use std::sync::{Arc, Mutex};
 #[allow(unused)]
 use std::time::Instant;
 
 use futures::stream::iter;
-use libc::{c_char, strncpy, EBUSY};
+use libc::{c_char, c_void, memcpy, EBUSY};
 use sfs_global::global::util::serde_util::{deserialize, serialize};
 use sfs_rpc::sfs_server::sfs_handle_client::SfsHandleClient;
 
-use crate::client::config::SEND_MSG_EACH_CHUNK;
 use crate::client::endpoint::SFSEndpoint;
 use crate::client::openfile::{FileType, OpenFile, O_RDONLY};
 use crate::client::{context::StaticContext, network::network_service::NetworkService};
@@ -114,6 +113,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
             Post {
                 option: option2i(&PostOption::Remove),
                 data: serialize(&SerdeString { str: path.as_str() }),
+                extra: vec![0; 0]
             },
         ));
 
@@ -133,6 +133,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
                 Post {
                     option: option2i(&PostOption::Remove),
                     data: serialize(&SerdeString { str: path.as_str() }),
+                    extra: vec![0; 0]
                 },
             ));
         }
@@ -143,6 +144,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
                 Post {
                     option: option2i(&PostOption::Remove),
                     data: serialize(&SerdeString { str: path.as_str() }),
+                    extra: vec![0; 0]
                 },
             ));
         }
@@ -168,6 +170,7 @@ pub fn forward_get_chunk_stat() -> (i32, ChunkStat) {
             Post {
                 option: option2i(&PostOption::ChunkStat),
                 data: "0".as_bytes().to_vec(),
+                extra: vec![0; 0]
             },
         ));
     }
@@ -277,6 +280,7 @@ pub fn forward_truncate(path: &String, old_size: i64, new_size: i64) -> i32 {
         let post = Post {
             option: option2i(&PostOption::Trunc),
             data: serialize(&trunc_data),
+            extra: vec![0; 0]
         };
         posts.push((
             StaticContext::get_instance()
@@ -338,7 +342,7 @@ pub fn forward_update_metadentry_size(
     }
 }
 #[tokio::main]
-pub async fn forward_write_stream(
+pub async fn forward_write(
     path: &String,
     buf: *const c_char,
     append_flag: bool,
@@ -373,75 +377,72 @@ pub async fn forward_write_stream(
     }
     let mut tot_write = 0;
     //let buf = unsafe { CStr::from_ptr(buf).to_string_lossy().into_owned() };
-    let buf = unsafe { std::str::from_utf8(CStr::from_ptr(buf).to_bytes()).unwrap() };
-    if SEND_MSG_EACH_CHUNK {
-        let mut handles = Vec::new();
-        for target in targets.iter() {
-            let client = SfsHandleClient::connect(format!(
-                "http://{}:{}",
-                StaticContext::get_instance()
-                    .get_hosts()
-                    .get(target.clone() as usize)
-                    .unwrap()
-                    .addr,
-                8082
-            ))
-            .await
-            .unwrap();
-            for chunk in target_chunks.get(&target).unwrap() {
-                let total_size = if *chunk == chunk_start {
-                    if *chunk == chunk_end {
-                        write_size as u64
-                    } else {
-                        chunk_rpad(offset, CHUNK_SIZE)
-                    }
-                } else if *chunk == chunk_end {
-                    chunk_lpad(offset + write_size, CHUNK_SIZE)
-                } else {
-                    CHUNK_SIZE
-                };
-
-                let offset_start = if *chunk == chunk_start {
-                    0
-                } else {
-                    (*chunk - chunk_start) * CHUNK_SIZE - offset as u64 % CHUNK_SIZE
-                } as usize;
-
-                let offset_end = if *chunk == chunk_end {
+    let buf = unsafe { slice::from_raw_parts(buf as *const u8, write_size as usize) };
+    let mut handles = Vec::new();
+    for target in targets.iter() {
+        let mut posts = Vec::new();
+        for chunk in target_chunks.get(&target).unwrap() {
+            let total_size = if *chunk == chunk_start {
+                if *chunk == chunk_end {
                     write_size as u64
-                } else if *chunk == chunk_start {
-                    chunk_rpad(offset, CHUNK_SIZE)
                 } else {
-                    (*chunk - chunk_start + 1) * CHUNK_SIZE - offset as u64 % CHUNK_SIZE
-                } as usize;
-                let data = WriteData {
-                    path: path.as_str(),
-                    offset: if *chunk == chunk_start {
-                        chunk_lpad(offset, CHUNK_SIZE) as i64
-                    } else {
-                        0
-                    },
-                    chunk_id: *chunk,
-                    write_size: total_size,
-                    buffers: &buf[offset_start..offset_end],
-                };
-                let post = Post {
-                    option: option2i(&PostOption::Write),
-                    data: serialize(&data),
-                };
-                let request = tonic::Request::new(post);
-                let mut move_client = client.clone();
-                handles.push(tokio::spawn(
-                    async move { move_client.handle(request).await },
-                ));
-            }
+                    chunk_rpad(offset, CHUNK_SIZE)
+                }
+            } else if *chunk == chunk_end {
+                chunk_lpad(offset + write_size, CHUNK_SIZE)
+            } else {
+                CHUNK_SIZE
+            };
+
+            let offset_start = if *chunk == chunk_start {
+                0
+            } else {
+                (*chunk - chunk_start) * CHUNK_SIZE - offset as u64 % CHUNK_SIZE
+            } as usize;
+
+            let offset_end = if *chunk == chunk_end {
+                write_size as u64
+            } else if *chunk == chunk_start {
+                chunk_rpad(offset, CHUNK_SIZE)
+            } else {
+                (*chunk - chunk_start + 1) * CHUNK_SIZE - offset as u64 % CHUNK_SIZE
+            } as usize;
+            let data = WriteData {
+                path: path.as_str(),
+                offset: if *chunk == chunk_start {
+                    chunk_lpad(offset, CHUNK_SIZE) as i64
+                } else {
+                    0
+                },
+                chunk_id: *chunk,
+                write_size: total_size
+            };
+            posts.push(Post {
+                option: option2i(&PostOption::Write),
+                data: serialize(&data),
+                extra: buf[offset_start..offset_end].to_vec()
+            });
         }
-        for handle in handles {
-            let post_result = handle.await.unwrap();
-            if let Err(_e) = post_result {
-                return (EBUSY, tot_write);
-            }
-            let res = post_result.unwrap().into_inner();
+        let addr = &StaticContext::get_instance()
+            .get_hosts()
+            .get(target.clone() as usize)
+            .unwrap()
+            .addr;
+        handles.push(tokio::spawn(async move {
+            let mut client = SfsHandleClient::connect(format!("http://{}:{}", addr, 8082))
+                .await
+                .unwrap();
+            let request = tonic::Request::new(iter(posts));
+            return client.handle_stream(request).await;
+        }));
+    }
+    for handle in handles {
+        let post_result = handle.await.unwrap();
+        if let Err(_e) = post_result {
+            return (EBUSY, tot_write);
+        }
+        let mut response = post_result.unwrap().into_inner();
+        while let Some(res) = response.message().await.unwrap() {
             if res.err != 0 {
                 return (res.err, tot_write);
             }
@@ -451,177 +452,11 @@ pub async fn forward_write_stream(
                 .parse::<i64>()
                 .expect("response should be 'i64'");
         }
-    } else {
-        let mut handles = Vec::new();
-        for target in targets.iter() {
-            let mut write_datas: Vec<WriteData> = Vec::new();
-            for chunk in target_chunks.get(&target).unwrap() {
-                let total_size = if *chunk == chunk_start {
-                    if *chunk == chunk_end {
-                        write_size as u64
-                    } else {
-                        chunk_rpad(offset, CHUNK_SIZE)
-                    }
-                } else if *chunk == chunk_end {
-                    chunk_lpad(offset + write_size, CHUNK_SIZE)
-                } else {
-                    CHUNK_SIZE
-                };
-
-                let offset_start = if *chunk == chunk_start {
-                    0
-                } else {
-                    (*chunk - chunk_start) * CHUNK_SIZE - offset as u64 % CHUNK_SIZE
-                } as usize;
-
-                let offset_end = if *chunk == chunk_end {
-                    write_size as u64
-                } else if *chunk == chunk_start {
-                    chunk_rpad(offset, CHUNK_SIZE)
-                } else {
-                    (*chunk - chunk_start + 1) * CHUNK_SIZE - offset as u64 % CHUNK_SIZE
-                } as usize;
-                write_datas.push(WriteData {
-                    path: path.as_str(),
-                    offset: if *chunk == chunk_start {
-                        chunk_lpad(offset, CHUNK_SIZE) as i64
-                    } else {
-                        0
-                    },
-                    chunk_id: *chunk,
-                    write_size: total_size,
-                    buffers: &buf[offset_start..offset_end],
-                });
-            }
-            let posts = write_datas
-                .iter()
-                .map(|x| Post {
-                    option: option2i(&PostOption::Write),
-                    data: serialize(&x),
-                })
-                .collect::<Vec<_>>();
-            let addr = &StaticContext::get_instance()
-                .get_hosts()
-                .get(target.clone() as usize)
-                .unwrap()
-                .addr;
-            handles.push(tokio::spawn(async move {
-                let mut client = SfsHandleClient::connect(format!("http://{}:{}", addr, 8082))
-                    .await
-                    .unwrap();
-                let request = tonic::Request::new(iter(posts));
-                return client.handle_stream(request).await;
-            }));
-        }
-        for handle in handles {
-            let post_result = handle.await.unwrap();
-            if let Err(_e) = post_result {
-                return (EBUSY, tot_write);
-            }
-            let mut response = post_result.unwrap().into_inner();
-            while let Some(res) = response.message().await.unwrap() {
-                if res.err != 0 {
-                    return (res.err, tot_write);
-                }
-                tot_write += String::from_utf8(res.data)
-                    .unwrap()
-                    .as_str()
-                    .parse::<i64>()
-                    .expect("response should be 'i64'");
-            }
-        }
     }
     return (0, tot_write);
-}
-#[allow(unused_variables)]
-pub fn forward_write(
-    path: &String,
-    buf: *const c_char,
-    append_flag: bool,
-    in_offset: i64,
-    write_size: i64,
-    updated_metadentry_size: i64,
-) -> (i32, i64) {
-    /*
-    if write_size < 0 {
-        return (-1, 0);
-    }
-    let offset = if append_flag {
-        in_offset
-    } else {
-        updated_metadentry_size - write_size
-    };
-    let chunk_start = offset_to_chunk_id(offset.clone(), CHUNK_SIZE);
-    let chunk_end = offset_to_chunk_id(offset + write_size - 1, CHUNK_SIZE);
-    let mut target_chunks: HashMap<u64, Vec<u64>> = HashMap::new();
-    let mut targets: Vec<u64> = Vec::new();
-
-    let mut chunk_start_target = 0;
-    let mut chunk_end_target = 0;
-    for chunk_id in chunk_start..(chunk_end + 1) {
-        let target = StaticContext::get_instance()
-            .get_distributor()
-            .locate_data(path, chunk_id);
-        if !target_chunks.contains_key(&target) {
-            target_chunks.insert(target, Vec::new());
-            target_chunks.get_mut(&target).unwrap().push(chunk_id);
-            targets.push(target);
-        } else {
-            target_chunks.get_mut(&target).unwrap().push(chunk_id);
-        }
-        if chunk_id == chunk_start {
-            chunk_start_target = target;
-        }
-        if chunk_id == chunk_end {
-            chunk_end_target = target;
-        }
-    }
-    let mut tot_write = 0;
-    for target in targets {
-        let mut tot_chunk_size = target_chunks.get(&target).unwrap().len() as u64 * CHUNK_SIZE;
-        if target == chunk_start_target {
-            tot_chunk_size -= chunk_lpad(offset, CHUNK_SIZE);
-        }
-        if target == chunk_end_target {
-            tot_chunk_size -= chunk_rpad(offset + write_size, CHUNK_SIZE);
-        }
-        let input = WriteData {
-            path: path.as_str(),
-            offset: chunk_lpad(offset, CHUNK_SIZE) as i64,
-            host_id: target,
-            host_size: StaticContext::get_instance().get_hosts().len() as u64,
-            chunk_n: target_chunks.get(&target).unwrap().len() as u64,
-            chunk_start: chunk_start,
-            chunk_end: chunk_end,
-            total_chunk_size: tot_chunk_size,
-            buffers: unsafe { CStr::from_ptr(buf).to_string_lossy().into_owned() },
-        };
-        if let Ok(p) = NetworkService::post::<WriteData>(
-            StaticContext::get_instance()
-                .get_hosts()
-                .get(target as usize)
-                .unwrap(),
-            input,
-            PostOption::Write,
-        ) {
-            if p.err != 0 {
-                return (p.err, 0);
-            }
-            tot_write += p
-                .data
-                .as_str()
-                .parse::<i64>()
-                .expect("response should be 'i64'");
-        } else {
-            return (EBUSY, 0);
-        }
-    }
-    return (0, tot_write);
-    */
-    return (EBUSY, 0);
 }
 #[tokio::main]
-pub async fn forward_read_stream(
+pub async fn forward_read(
     path: &String,
     buf: *mut c_char,
     offset: i64,
@@ -644,12 +479,45 @@ pub async fn forward_read_stream(
             target_chunks.get_mut(&target).unwrap().push(chunk_id);
         }
     }
-
     let mut tot_read = 0;
-    if SEND_MSG_EACH_CHUNK {
-        let mut handles = Vec::new();
-        for target in targets {
-            let client = SfsHandleClient::connect(format!(
+    let mut handles = Vec::new();
+    for target in targets {
+        let mut read_datas: Vec<ReadData> = Vec::new();
+        for chunk in target_chunks.get(&target).unwrap() {
+            let total_size = if *chunk == chunk_start {
+                if *chunk == chunk_end {
+                    read_size as u64
+                } else {
+                    chunk_rpad(offset, CHUNK_SIZE)
+                }
+            } else if *chunk == chunk_end {
+                chunk_lpad(offset + read_size, CHUNK_SIZE)
+            } else {
+                CHUNK_SIZE
+            };
+            read_datas.push(ReadData {
+                path: path.as_str(),
+                offset: if *chunk == chunk_start {
+                    chunk_lpad(offset, CHUNK_SIZE) as i64
+                } else {
+                    0
+                },
+                chunk_id: *chunk,
+                read_size: total_size,
+            })
+        }
+        let posts = read_datas
+            .iter()
+            .map(|x| Post {
+                option: option2i(&PostOption::Read),
+                data: serialize(&x),
+                extra: vec![0; 0]
+            })
+            .collect::<Vec<_>>();
+        let request = tonic::Request::new(iter(posts));
+
+        handles.push(tokio::spawn(async move {
+            let mut client = SfsHandleClient::connect(format!(
                 "http://{}:{}",
                 StaticContext::get_instance()
                     .get_hosts()
@@ -660,243 +528,37 @@ pub async fn forward_read_stream(
             ))
             .await
             .unwrap();
-            for chunk in target_chunks.get(&target).unwrap() {
-                let total_size = if *chunk == chunk_start {
-                    if *chunk == chunk_end {
-                        read_size as u64
-                    } else {
-                        chunk_rpad(offset, CHUNK_SIZE)
-                    }
-                } else if *chunk == chunk_end {
-                    chunk_lpad(offset + read_size, CHUNK_SIZE)
-                } else {
-                    CHUNK_SIZE
-                };
-                let data = ReadData {
-                    path: path.as_str(),
-                    offset: if *chunk == chunk_start {
-                        chunk_lpad(offset, CHUNK_SIZE) as i64
-                    } else {
-                        0
-                    },
-                    chunk_id: *chunk,
-                    read_size: total_size,
-                };
-                let post = Post {
-                    option: option2i(&PostOption::Read),
-                    data: serialize(&data),
-                };
-                let request = tonic::Request::new(post);
-                let mut move_client = client.clone();
-                handles.push(tokio::spawn(
-                    async move { move_client.handle(request).await },
-                ));
-            }
+            client.handle_stream(request).await
+        }));
+    }
+    for handle in handles {
+        let post_result = handle.await.unwrap();
+        if let Err(_e) = post_result {
+            return (EBUSY, tot_read);
         }
-        for handle in handles {
-            let post_result = handle.await.unwrap();
-            if let Err(_e) = post_result {
-                return (EBUSY, tot_read);
-            }
-            let res = post_result.unwrap().into_inner();
+        let mut response = post_result.unwrap().into_inner();
+        while let Some(res) = response.message().await.unwrap() {
             if res.err != 0 {
                 return (res.err, tot_read);
             }
             let read_res: ReadResult = deserialize::<ReadResult>(&res.data);
             tot_read += read_res.nreads;
-            let data = read_res.data.to_string();
+            let data = res.extra;
             let local_offset = if read_res.chunk_id == chunk_start {
                 0
             } else {
                 (read_res.chunk_id - chunk_start) * CHUNK_SIZE - (offset as u64 % CHUNK_SIZE)
             };
-            let data = if read_res.chunk_id == chunk_end {
-                data.to_string() + "\0"
-            } else {
-                data
-            };
             unsafe {
-                strncpy(
-                    buf.offset(local_offset as isize),
-                    data.as_ptr() as *const i8,
+                memcpy(
+                    buf.offset(local_offset as isize) as *mut c_void,
+                    data.as_ptr() as *const c_void,
                     data.len(),
                 );
             }
         }
-    } else {
-        let mut handles = Vec::new();
-        for target in targets {
-            let mut read_datas: Vec<ReadData> = Vec::new();
-            for chunk in target_chunks.get(&target).unwrap() {
-                let total_size = if *chunk == chunk_start {
-                    if *chunk == chunk_end {
-                        read_size as u64
-                    } else {
-                        chunk_rpad(offset, CHUNK_SIZE)
-                    }
-                } else if *chunk == chunk_end {
-                    chunk_lpad(offset + read_size, CHUNK_SIZE)
-                } else {
-                    CHUNK_SIZE
-                };
-                read_datas.push(ReadData {
-                    path: path.as_str(),
-                    offset: if *chunk == chunk_start {
-                        chunk_lpad(offset, CHUNK_SIZE) as i64
-                    } else {
-                        0
-                    },
-                    chunk_id: *chunk,
-                    read_size: total_size,
-                })
-            }
-            let posts = read_datas
-                .iter()
-                .map(|x| Post {
-                    option: option2i(&PostOption::Read),
-                    data: serialize(&x),
-                })
-                .collect::<Vec<_>>();
-            let request = tonic::Request::new(iter(posts));
-
-            handles.push(tokio::spawn(async move {
-                let mut client = SfsHandleClient::connect(format!(
-                    "http://{}:{}",
-                    StaticContext::get_instance()
-                        .get_hosts()
-                        .get(target.clone() as usize)
-                        .unwrap()
-                        .addr,
-                    8082
-                ))
-                .await
-                .unwrap();
-                client.handle_stream(request).await
-            }));
-        }
-        for handle in handles {
-            let post_result = handle.await.unwrap();
-            if let Err(_e) = post_result {
-                return (EBUSY, tot_read);
-            }
-            let mut response = post_result.unwrap().into_inner();
-            while let Some(res) = response.message().await.unwrap() {
-                if res.err != 0 {
-                    return (res.err, tot_read);
-                }
-                let read_res: ReadResult = deserialize::<ReadResult>(&res.data);
-                tot_read += read_res.nreads;
-                let data = read_res.data.to_string();
-                let local_offset = if read_res.chunk_id == chunk_start {
-                    0
-                } else {
-                    (read_res.chunk_id - chunk_start) * CHUNK_SIZE - (offset as u64 % CHUNK_SIZE)
-                };
-                let data = if read_res.chunk_id == chunk_end {
-                    data + "\0"
-                } else {
-                    data
-                };
-                unsafe {
-                    strncpy(
-                        buf.offset(local_offset as isize),
-                        data.as_ptr() as *const i8,
-                        data.len(),
-                    );
-                }
-            }
-        }
     }
     return (0, tot_read);
-}
-#[allow(unused_variables)]
-pub fn forward_read(path: &String, buf: *mut c_char, offset: i64, read_size: i64) -> (i32, u64) {
-    /*
-    let chunk_start = offset_to_chunk_id(offset, CHUNK_SIZE);
-    let chunk_end = offset_to_chunk_id(offset + read_size - 1, CHUNK_SIZE);
-    let mut target_chunks: HashMap<u64, Vec<u64>> = HashMap::new();
-    let mut targets: Vec<u64> = Vec::new();
-
-    let mut chunk_start_target = 0;
-    let mut chunk_end_target = 0;
-    for chunk_id in chunk_start..(chunk_end + 1) {
-        let target = StaticContext::get_instance()
-            .get_distributor()
-            .locate_data(path, chunk_id);
-        if !target_chunks.contains_key(&target) {
-            target_chunks.insert(target, Vec::new());
-            target_chunks.get_mut(&target).unwrap().push(chunk_id);
-            targets.push(target);
-        } else {
-            target_chunks.get_mut(&target).unwrap().push(chunk_id);
-        }
-        if chunk_id == chunk_start {
-            chunk_start_target = target;
-        }
-        if chunk_id == chunk_end {
-            chunk_end_target = target;
-        }
-    }
-
-    let mut tot_read = 0;
-    for target in targets {
-        let mut tot_chunk_size = target_chunks.get(&target).unwrap().len() as u64 * CHUNK_SIZE;
-        if target == chunk_start_target {
-            tot_chunk_size -= chunk_lpad(offset, CHUNK_SIZE);
-        }
-        if target == chunk_end_target {
-            tot_chunk_size -= chunk_rpad(offset + read_size, CHUNK_SIZE);
-        }
-        let input = ReadData {
-            path: path.as_str(),
-            offset: chunk_lpad(offset, CHUNK_SIZE) as i64,
-            host_id: target,
-            host_size: StaticContext::get_instance().get_hosts().len() as u64,
-            chunk_n: target_chunks.get(&target).unwrap().len() as u64,
-            chunk_start: chunk_start,
-            chunk_end: chunk_end,
-            total_chunk_size: tot_chunk_size,
-        };
-        if let Ok(p) = NetworkService::post::<ReadData>(
-            StaticContext::get_instance()
-                .get_hosts()
-                .get(target as usize)
-                .unwrap(),
-            input,
-            PostOption::Read,
-        ) {
-            if p.err != 0 {
-                return (p.err, 0);
-            }
-            let read_res: ReadResult = serde_json::from_str(p.data.as_str()).unwrap();
-            tot_read += read_res.nreads;
-            let data = read_res.data;
-            for chnk in data {
-                let local_offset = if chnk.0 == chunk_start {
-                    0
-                } else {
-                    (chnk.0 - chunk_start) * CHUNK_SIZE - (offset as u64 % CHUNK_SIZE)
-                };
-                let data = if chnk.0 == chunk_end {
-                    chnk.1 + "\0"
-                } else {
-                    chnk.1
-                };
-                unsafe {
-                    strncpy(
-                        buf.offset(local_offset as isize),
-                        data.as_ptr() as *const i8,
-                        data.len(),
-                    );
-                }
-            }
-        } else {
-            return (EBUSY, 0);
-        }
-    }
-    return (0, tot_read);
-    */
-    return (EBUSY, 0);
 }
 pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>) {
     let targets = StaticContext::get_instance()
@@ -917,6 +579,7 @@ pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>) {
                 data: serialize(&DirentData {
                     path: path.as_str(),
                 }),
+                extra: vec![0; 0]
             },
         ));
     }

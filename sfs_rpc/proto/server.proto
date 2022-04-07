@@ -9,8 +9,10 @@ service SFSHandle{
 message Post{
     int32 option = 1;
     bytes data = 2;
+    bytes extra = 3;
 }
 message PostResult{
     int32 err = 1; 
     bytes data = 2;
+    bytes extra = 3;
 }
