@@ -83,8 +83,6 @@ pub struct OpenFile {
     flags_: Arc<Mutex<BitVec>>,
     pos_: Arc<Mutex<i64>>,
     pub entries_: Vec<Arc<SFSDirEntry>>, // for directory
-                                         //pos_mutex_: Mutex<i32>,
-                                         //flag_mutex_: Mutex<i32>
 }
 impl OpenFile {
     pub fn new(_path: &String, _flags: i32, _type: FileType) -> OpenFile {

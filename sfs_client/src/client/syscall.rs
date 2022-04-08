@@ -20,13 +20,13 @@ use sfs_global::global::fsconfig::ZERO_BUF_BEFORE_READ;
 use sfs_global::global::metadata::{S_ISDIR, S_ISREG};
 use sfs_global::global::util::path_util::dirname;
 
-use super::config::{CHECK_PARENT_DIR};
+use super::config::CHECK_PARENT_DIR;
 #[allow(unused_imports)]
 use super::context::{interception_enabled, DynamicContext};
 use super::network::forward_msg::{
     forward_create, forward_decr_size, forward_get_chunk_stat, forward_get_dirents,
-    forward_get_metadentry_size, forward_read, forward_remove,
-    forward_truncate, forward_update_metadentry_size, forward_write,
+    forward_get_metadentry_size, forward_read, forward_remove, forward_truncate,
+    forward_update_metadentry_size, forward_write,
 };
 use super::openfile::{FileType, OpenFile};
 use super::util::{get_metadata, metadata_to_stat};

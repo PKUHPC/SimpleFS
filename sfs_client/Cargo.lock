@@ -1074,6 +1074,7 @@ dependencies = [
  "sha2",
  "syscalls",
  "tokio",
+ "tokio-stream",
  "tonic",
 ]
 

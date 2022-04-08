@@ -860,4 +860,26 @@ mod tests {
             handle.join();
         }
     }
+    #[test]
+    #[allow(unused_must_use)]
+    pub fn test_continue() {
+        let path = "/file1\0".to_string();
+        let fd = sfs_open(
+            path.as_str().as_ptr() as *const c_char,
+            S_IFREG,
+            O_CREAT | O_RDWR,
+        );
+        for i in 0..1600 {
+            //println!("file {} opened on thread {} ...", fd, i);
+            let cnt = 1;
+            let data = vec!['a' as i8; cnt * CHUNK_SIZE as usize];
+            let res = sfs_write(fd, data.as_ptr() as *mut i8, data.len() as i64);
+            if res <= 0 {
+                println!("write error on thread {} ...", i);
+                return;
+            } else {
+                //println!("{} bytes written on thread {} ...", res, i);
+            }
+        }
+    }
 }

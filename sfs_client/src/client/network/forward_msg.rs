@@ -113,7 +113,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
             Post {
                 option: option2i(&PostOption::Remove),
                 data: serialize(&SerdeString { str: path.as_str() }),
-                extra: vec![0; 0]
+                extra: vec![0; 0],
             },
         ));
 
@@ -133,7 +133,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
                 Post {
                     option: option2i(&PostOption::Remove),
                     data: serialize(&SerdeString { str: path.as_str() }),
-                    extra: vec![0; 0]
+                    extra: vec![0; 0],
                 },
             ));
         }
@@ -144,7 +144,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
                 Post {
                     option: option2i(&PostOption::Remove),
                     data: serialize(&SerdeString { str: path.as_str() }),
-                    extra: vec![0; 0]
+                    extra: vec![0; 0],
                 },
             ));
         }
@@ -170,7 +170,7 @@ pub fn forward_get_chunk_stat() -> (i32, ChunkStat) {
             Post {
                 option: option2i(&PostOption::ChunkStat),
                 data: "0".as_bytes().to_vec(),
-                extra: vec![0; 0]
+                extra: vec![0; 0],
             },
         ));
     }
@@ -280,7 +280,7 @@ pub fn forward_truncate(path: &String, old_size: i64, new_size: i64) -> i32 {
         let post = Post {
             option: option2i(&PostOption::Trunc),
             data: serialize(&trunc_data),
-            extra: vec![0; 0]
+            extra: vec![0; 0],
         };
         posts.push((
             StaticContext::get_instance()
@@ -389,7 +389,8 @@ pub async fn forward_write(
                     chunk_rpad(offset, CHUNK_SIZE)
                 }
             } else if *chunk == chunk_end {
-                chunk_lpad(offset + write_size, CHUNK_SIZE)
+                let pad = chunk_lpad(offset + write_size, CHUNK_SIZE);
+                if pad == 0 {CHUNK_SIZE} else {0}
             } else {
                 CHUNK_SIZE
             };
@@ -415,12 +416,12 @@ pub async fn forward_write(
                     0
                 },
                 chunk_id: *chunk,
-                write_size: total_size
+                write_size: total_size,
             };
             posts.push(Post {
                 option: option2i(&PostOption::Write),
                 data: serialize(&data),
-                extra: buf[offset_start..offset_end].to_vec()
+                extra: buf[offset_start..offset_end].to_vec(),
             });
         }
         let addr = &StaticContext::get_instance()
@@ -491,7 +492,8 @@ pub async fn forward_read(
                     chunk_rpad(offset, CHUNK_SIZE)
                 }
             } else if *chunk == chunk_end {
-                chunk_lpad(offset + read_size, CHUNK_SIZE)
+                let pad = chunk_lpad(offset + read_size, CHUNK_SIZE);
+                if pad == 0 {CHUNK_SIZE} else {0}
             } else {
                 CHUNK_SIZE
             };
@@ -511,7 +513,7 @@ pub async fn forward_read(
             .map(|x| Post {
                 option: option2i(&PostOption::Read),
                 data: serialize(&x),
-                extra: vec![0; 0]
+                extra: vec![0; 0],
             })
             .collect::<Vec<_>>();
         let request = tonic::Request::new(iter(posts));
@@ -579,7 +581,7 @@ pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>) {
                 data: serialize(&DirentData {
                     path: path.as_str(),
                 }),
-                extra: vec![0; 0]
+                extra: vec![0; 0],
             },
         ));
     }
