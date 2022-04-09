@@ -424,7 +424,7 @@ pub extern "C" fn sfs_statvfs(buf: *mut statvfs) -> i32 {
     return 0;
 }
 #[no_mangle]
-pub fn sfs_lseek(fd: i32, offset: i64, whence: i32) -> i64 {
+pub extern "C" fn sfs_lseek(fd: i32, offset: i64, whence: i32) -> i64 {
     let f_res = DynamicContext::get_instance()
         .get_ofm()
         .lock()
@@ -567,7 +567,7 @@ fn internal_pwrite(f: Arc<Mutex<OpenFile>>, buf: *const c_char, count: i64, offs
     return write_res.1;
 }
 #[no_mangle]
-pub fn sfs_pwrite(fd: i32, buf: *const c_char, count: i64, offset: i64) -> i64 {
+pub extern "C" fn sfs_pwrite(fd: i32, buf: *const c_char, count: i64, offset: i64) -> i64 {
     let f = DynamicContext::get_instance()
         .get_ofm()
         .lock()

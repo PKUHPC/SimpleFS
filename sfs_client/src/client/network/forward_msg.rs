@@ -390,7 +390,7 @@ pub async fn forward_write(
                 }
             } else if *chunk == chunk_end {
                 let pad = chunk_lpad(offset + write_size, CHUNK_SIZE);
-                if pad == 0 {CHUNK_SIZE} else {0}
+                if pad == 0 {CHUNK_SIZE} else {pad}
             } else {
                 CHUNK_SIZE
             };
@@ -493,7 +493,7 @@ pub async fn forward_read(
                 }
             } else if *chunk == chunk_end {
                 let pad = chunk_lpad(offset + read_size, CHUNK_SIZE);
-                if pad == 0 {CHUNK_SIZE} else {0}
+                if pad == 0 {CHUNK_SIZE} else {pad}
             } else {
                 CHUNK_SIZE
             };
