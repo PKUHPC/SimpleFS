@@ -71,3 +71,11 @@ pub struct SerdeString<'a> {
     pub str: &'a str,
     // RDMA buffer?
 }
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct PreCreateData<'a> {
+    pub path: &'a str,
+    pub chunk_start: u64,
+    pub chunk_end: u64
+    // RDMA buffer?
+}

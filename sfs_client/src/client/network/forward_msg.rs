@@ -7,12 +7,12 @@ use std::time::Instant;
 
 use futures::stream::iter;
 use libc::{c_char, c_void, memcpy, EBUSY};
+use sfs_global::global::endpoint::SFSEndpoint;
 use sfs_global::global::util::serde_util::{deserialize, serialize};
 use sfs_rpc::sfs_server::sfs_handle_client::SfsHandleClient;
 
-use crate::client::endpoint::SFSEndpoint;
 use crate::client::openfile::{FileType, OpenFile, O_RDONLY};
-use crate::client::{context::StaticContext, network::network_service::NetworkService};
+use crate::client::{context::StaticContext};
 use sfs_global::global::distributor::Distributor;
 use sfs_global::global::error_msg::error_msg;
 use sfs_global::global::fsconfig::SFSConfig;
@@ -27,7 +27,9 @@ use sfs_global::global::util::arith_util::{
 };
 use sfs_rpc::sfs_server::{Post, PostResult};
 
-pub fn forward_stat(path: &String) -> Result<String, i32> {
+use super::network_service::NetworkService;
+
+pub fn forward_stat(path: &String) -> Result<Vec<u8>, i32> {
     let endp_id = StaticContext::get_instance()
         .get_distributor()
         .locate_file_metadata(path);
@@ -50,7 +52,7 @@ pub fn forward_stat(path: &String) -> Result<String, i32> {
     if result.err != 0 {
         return Err(result.err);
     }
-    return Ok(String::from_utf8(result.data).unwrap());
+    return Ok(result.data);
 }
 pub fn forward_create(path: &String, mode: u32) -> Result<i32, Error> {
     let endp_id = StaticContext::get_instance()

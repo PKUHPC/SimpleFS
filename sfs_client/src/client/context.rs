@@ -1,10 +1,10 @@
 use lazy_static::*;
+use sfs_global::global::endpoint::SFSEndpoint;
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use bit_vec::*;
 
-use crate::client::endpoint::SFSEndpoint;
 use crate::client::init::init_environment;
 use crate::client::openfile::OpenFileMap;
 use sfs_global::global::distributor::SimpleHashDistributor;

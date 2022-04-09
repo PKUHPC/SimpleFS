@@ -1,18 +1,14 @@
 use futures::stream::iter;
-use lazy_static::*;
 use serde::Serialize;
+use sfs_global::global::endpoint::SFSEndpoint;
 use sfs_global::global::util::serde_util::serialize;
 use std::io::Error;
 
-use crate::client::endpoint::SFSEndpoint;
 use sfs_global::global::network::post::{option2i, PostOption};
 use sfs_rpc::sfs_server::sfs_handle_client::SfsHandleClient;
 use sfs_rpc::sfs_server::{Post, PostResult};
 
 pub struct NetworkService {}
-lazy_static! {
-    static ref NTS: NetworkService = NetworkService {};
-}
 impl NetworkService {
     #[tokio::main]
     pub async fn post<T: Serialize>(

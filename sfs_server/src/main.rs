@@ -1,6 +1,9 @@
 pub mod handle;
 pub mod config;
+pub mod server;
+use handle::handle_precreate;
 use libc::{getgid, getuid, EINVAL, ENOENT, S_IFDIR, S_IRWXG, S_IRWXO, S_IRWXU};
+use sfs_global::global::network::forward_data::PreCreateData;
 use sfs_global::global::network::post::i2option;
 use sfs_global::global::util::serde_util::{deserialize, serialize};
 use sfs_global::{
@@ -18,8 +21,8 @@ use sfs_global::{
         util::net_util::get_my_hostname,
     },
 };
-use sfs_lib_server::server::{config::IGNORE_IF_EXISTS, network::network_context::NetworkContext};
-use sfs_lib_server::server::{
+use crate::server::{config::IGNORE_IF_EXISTS, network::network_context::NetworkContext};
+use crate::server::{
     filesystem::storage_context::StorageContext, storage::data::chunk_storage::*,
     storage::metadata::db::MetadataDB,
 };
@@ -53,7 +56,7 @@ fn handle_request(post: &Post) -> PostResult {
             }
             let md_res = MetadataDB::get_instance().get(&path.to_string());
             if let Some(md) = md_res {
-                return PostResult { err: 0, data: md.as_bytes().to_vec(),
+                return PostResult { err: 0, data: md,
                     extra: vec![0; 0] };
             } else {
                 return PostResult {
@@ -73,7 +76,7 @@ fn handle_request(post: &Post) -> PostResult {
             md.set_mode(mode);
             let create_res = MetadataDB::get_instance().put(
                 &create_data.path.to_string(),
-                &md.serialize(),
+                md.serialize(),
                 IGNORE_IF_EXISTS,
             );
             return PostResult {
@@ -240,6 +243,15 @@ fn handle_request(post: &Post) -> PostResult {
                     extra: vec![0; 0]
                 };
             }
+        },
+        PreCreate => {
+            let data: PreCreateData = deserialize::<PreCreateData>(&post.data);
+            handle_precreate(&data);
+            return PostResult {
+                err: 0,
+                data: vec![0; 0],
+                extra: vec![0; 0]
+            };
         }
         _ => {
             println!("invalid option on 'handle': {:?}", option);
@@ -304,7 +316,6 @@ impl SfsHandle for ServerHandler {
     }
 }
 async fn init_server(addr: &String) -> Result<(), Error> {
-    NetworkContext::get_instance().set_self_addr(addr.clone());
     let server_addr: (Ipv4Addr, u16) = (addr.parse().unwrap(), 8082);
     println!("listening on {:?}", server_addr);
     let handler = ServerHandler::default();
@@ -343,11 +354,12 @@ fn populates_host_file() -> Option<Error> {
 async fn init_environment() -> Result<(), Error> {
     ChunkStorage::get_instance();
     MetadataDB::get_instance();
+    NetworkContext::get_instance();
 
     let mut root_md = Metadata::new();
     root_md.set_mode(S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO);
 
-    MetadataDB::get_instance().put(&"/".to_string(), &root_md.serialize(), IGNORE_IF_EXISTS);
+    MetadataDB::get_instance().put(&"/".to_string(), root_md.serialize(), IGNORE_IF_EXISTS);
 
     if !StorageContext::get_instance().get_hosts_file().len() == 0 {
         populates_host_file();

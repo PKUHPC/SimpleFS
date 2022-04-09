@@ -832,7 +832,7 @@ mod tests {
     #[allow(unused_must_use)]
     pub fn test_parallel() {
         let mut handles = Vec::new();
-        for i in 0..160 {
+        for i in 0..1600 {
             handles.push(thread::spawn(move || {
                 let path = "/file".to_string() + (i as i32).to_string().as_str() + "\0";
                 let fd = sfs_open(
@@ -845,7 +845,7 @@ mod tests {
                     return;
                 }
                 //println!("file {} opened on thread {} ...", fd, i);
-                let cnt = 10;
+                let cnt = 1;
                 let data = vec!['a' as i8; cnt * CHUNK_SIZE as usize];
                 let res = sfs_write(fd, data.as_ptr() as *mut i8, data.len() as i64);
                 if res <= 0 {

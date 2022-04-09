@@ -1044,23 +1044,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "sfs_lib_server"
-version = "0.1.0"
-dependencies = [
- "futures",
- "lazy_static",
- "libc",
- "nix",
- "rand",
- "rocksdb",
- "serde",
- "serde_json",
- "sfs_global",
- "sha2",
- "tokio",
-]
-
-[[package]]
 name = "sfs_rpc"
 version = "0.1.0"
 dependencies = [
@@ -1077,12 +1060,16 @@ dependencies = [
  "futures",
  "lazy_static",
  "libc",
+ "nix",
  "prost",
+ "rand",
+ "regex",
+ "rocksdb",
  "serde",
  "serde_json",
  "sfs_global",
- "sfs_lib_server",
  "sfs_rpc",
+ "sha2",
  "tokio",
  "tokio-stream",
  "tonic",

@@ -2,6 +2,9 @@ use std::fmt;
 use std::time::{self, SystemTime, UNIX_EPOCH};
 
 use libc::{S_IFDIR, S_IFREG};
+use serde::{Serialize, Deserialize};
+
+use super::util::serde_util::{serialize, deserialize};
 
 #[allow(non_snake_case)]
 pub fn S_ISREG(mode: u32) -> bool {
@@ -11,7 +14,7 @@ pub fn S_ISREG(mode: u32) -> bool {
 pub fn S_ISDIR(mode: u32) -> bool {
     mode & S_IFDIR != 0
 }
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Metadata {
     access_time_: i64,
     modify_time_: i64,
@@ -48,33 +51,11 @@ impl Metadata {
             blocks_: 0,
         }
     }
-    pub fn deserialize(binary_str: &String) -> Result<Metadata, i32> {
-        let s = binary_str.split('|');
-        let vec = s.collect::<Vec<&str>>();
-        if vec.len() != 8 {
-            print!("error::global::metadata::init_acm_time - invalid serialized metadata detected: {}\n", binary_str);
-            Err(0)
-        } else {
-            let access_time = vec[3].parse::<i64>().unwrap();
-            let modify_time = vec[4].parse::<i64>().unwrap();
-            let change_time = vec[5].parse::<i64>().unwrap();
-            let mode = vec[1].parse::<u32>().unwrap();
-            let link_count = vec[6].parse::<u64>().unwrap();
-            let size = vec[2].parse::<i64>().unwrap();
-            let blocks = vec[7].parse::<i64>().unwrap();
-            Ok(Metadata {
-                access_time_: access_time,
-                modify_time_: modify_time,
-                change_time_: change_time,
-                mode_: mode,
-                link_count_: link_count,
-                size_: size,
-                blocks_: blocks,
-            })
-        }
+    pub fn deserialize(binary_str: &Vec<u8>) -> Result<Metadata, i32> {
+        Ok(deserialize::<Metadata>(binary_str))
     }
-    pub fn serialize(&self) -> String {
-        self.to_string()
+    pub fn serialize(&self) -> Vec<u8> {
+        serialize(self)
     }
     pub fn init_acm_time(&mut self) {
         if let Ok(n) = SystemTime::now().duration_since(UNIX_EPOCH) {

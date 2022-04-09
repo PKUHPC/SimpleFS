@@ -7,17 +7,20 @@ edition = "2021"
 
 [dependencies]
 libc = '*'
-#downcast-rs = '*'
 lazy_static = '*'
 serde = { version = "1.0.104", features = ["derive"] }
 serde_json = "*"
 tokio = { version = "1.17", features = ["full"] }
-# tarpc = { version = "0.27", features = ["full"] }
 prost = "0.9.0"
 tonic = { version = "0.6.2", features = ["tls"]}
 futures = '*'
-sfs_lib_server = { path = "sfs_lib_server" }
 sfs_global = {path = "../sfs_global"}
 sfs_rpc = {path = "../sfs_rpc"}
 tokio-stream = "0.1.8"
 flexbuffers = "2.0.0"
+
+rocksdb = '*'
+rand = '0.8.5'
+sha2 = '0.10.2'
+nix = '0.23.0'
+regex = '*'

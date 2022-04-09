@@ -4,10 +4,12 @@ use libc::{EEXIST, EINVAL};
 use rocksdb::{DB, Options, WriteOptions};
 
 use crate::{server::{storage::metadata::merge, filesystem::storage_context::StorageContext, config::TRUNCATE_DIRECTORY}};
-use sfs_global::global::{util::path_util::{is_absolute, has_trailing_slash}, error_msg::error_msg, metadata::{Metadata, S_ISDIR}};
+use sfs_global::global::{util::{path_util::{is_absolute, has_trailing_slash}, serde_util::serialize}, error_msg::error_msg, metadata::{Metadata, S_ISDIR}};
 static USE_WRITE_AHEAD_LOG: bool = false;
 
 use lazy_static::*;
+
+use super::merge::Operand;
 
 #[allow(unused_must_use)]
 pub fn init_mdb() -> MetadataDB{
@@ -19,6 +21,7 @@ pub fn init_mdb() -> MetadataDB{
     }
     return MetadataDB::new(&metadata_path).unwrap();
 }
+#[allow(dead_code)]
 pub struct MetadataDB{
     pub db: DB,
     options: Options,
@@ -58,16 +61,16 @@ impl MetadataDB{
             None
         }
     }
-    pub fn get(&self, key: &String) -> Option<String>{
+    pub fn get(&self, key: &String) -> Option<Vec<u8>>{
         //println!("getting key: {}", key);
         if let Ok(Some(val)) = self.db.get(key){
-            Some(String::from_utf8(val).unwrap())
+            Some(val)
         }
         else{
             None
         }
     }
-    pub fn put(&self, key: &String, val: &String, ignore_if_exists: bool) -> i32{
+    pub fn put(&self, key: &String, val: Vec<u8>, ignore_if_exists: bool) -> i32{
         //println!("putting key: {} value: {}", key, val);
         if ignore_if_exists && self.exists(key){
             return EEXIST;
@@ -80,7 +83,9 @@ impl MetadataDB{
             error_msg("server::storage::metadata::db::put".to_string(), "key mustn't have trailing slash".to_string());
             return EINVAL;
         }
-        if let Err(_e) = self.db.merge_opt(key, val, &self.write_opts){
+        let op = Operand::Create { md: val };
+        let v = serialize(op);
+        if let Err(_e) = self.db.merge_opt(key, v, &self.write_opts){
             error_msg("server::storage::metadata::db::put".to_string(), "fail to merge value".to_string());
             return EINVAL;
         }
@@ -110,14 +115,18 @@ impl MetadataDB{
         }
     }
     pub fn increase_size(&self, key: &String, size: usize, append: bool){
-        let op_s = format!("i|{}|{}", size, append);
-        if let Err(_e) = self.db.merge_opt(key, op_s, &self.write_opts){
+        //let op_s = format!("i|{}|{}", size, append);
+        let op_s = Operand::IncreaseSize { size, append };
+        let v = serialize(&op_s);
+        if let Err(_e) = self.db.merge_opt(key, v, &self.write_opts){
             error_msg("server::storage::metadata::db::increase_size".to_string(), "fail to merge operands".to_string()); 
         }
     }
     pub fn decrease_size(&self, key: &String, size: usize){
-        let op_s = format!("d|{}", size);
-        if let Err(_e) = self.db.merge_opt(key, op_s, &self.write_opts){
+        //let op_s = format!("d|{}", size);
+        let op_s = Operand::DecreaseSize { size };
+        let v = serialize(&op_s);
+        if let Err(_e) = self.db.merge_opt(key, v, &self.write_opts){
             error_msg("server::storage::metadata::db::decrease_size".to_string(), "fail to merge operands".to_string()); 
         }
     }
@@ -144,7 +153,7 @@ impl MetadataDB{
             if name.len() == 0{
                 continue;
             }
-            if let Ok(md) = Metadata::deserialize(&String::from_utf8(v.to_vec()).unwrap()){
+            if let Ok(md) = Metadata::deserialize(&v.to_vec()){
                 entries.push((name, S_ISDIR(md.get_mode())));
             }
             else {continue;}

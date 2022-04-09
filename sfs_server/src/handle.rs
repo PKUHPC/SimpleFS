@@ -4,11 +4,11 @@ use std::time::Instant;
 use sfs_global::global::{
     network::{
         config::CHUNK_SIZE,
-        forward_data::{ReadData, ReadResult, TruncData, WriteData},
+        forward_data::{ReadData, ReadResult, TruncData, WriteData, PreCreateData},
     },
-    util::{arith_util::{block_index, block_overrun}, serde_util::serialize},
+    util::{arith_util::{block_index, block_overrun}, serde_util::serialize}, distributor::Distributor,
 };
-use sfs_lib_server::server::storage::data::chunk_storage::ChunkStorage;
+use crate::server::{storage::data::chunk_storage::ChunkStorage, network::network_context::NetworkContext};
 use sfs_rpc::sfs_server::PostResult;
 
 pub fn handle_write(input: &WriteData, data: &[u8]) -> PostResult {
@@ -86,4 +86,15 @@ pub fn handle_trunc(input: TruncData<'_>) -> PostResult {
         extra: vec![0; 0]
     };
     return post_res;
+}
+pub fn handle_precreate(input: &PreCreateData){
+    let path = input.path.to_string();
+    let chunk_start = input.chunk_start;
+    let chunk_end = input.chunk_end;
+    for chunk_id in chunk_start..(chunk_end + 1){
+        if NetworkContext::get_instance().get_local_host_id() == NetworkContext::get_instance().get_distributor().locate_data(&path, chunk_id){
+            let chunk_path = ChunkStorage::absolute(&ChunkStorage::get_chunks_path(&path, chunk_id));
+            std::fs::OpenOptions::new().create(true).open(chunk_path).unwrap();
+        }
+    }
 }

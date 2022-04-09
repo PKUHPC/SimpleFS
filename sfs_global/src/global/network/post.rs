@@ -18,7 +18,8 @@ pub enum PostOption {
     GetDirents,
     Unknown,
     WriteData,
-    ReadData
+    ReadData,
+    PreCreate
 }
 impl Clone for PostOption {
     fn clone(&self) -> Self {
@@ -40,6 +41,7 @@ impl Clone for PostOption {
             Self::Unknown => Self::Unknown,
             Self::WriteData => Self::WriteData,
             Self::ReadData => Self::ReadData,
+            Self::PreCreate => Self::PreCreate,
         }
     }
 }
@@ -62,6 +64,7 @@ pub fn i2option(n: i32) -> PostOption {
         13 => PostOption::GetDirents,
         14 => PostOption::WriteData,
         15 => PostOption::ReadData,
+        16 => PostOption::PreCreate,
         _ => PostOption::Unknown,
     }
 }
@@ -83,6 +86,7 @@ pub fn option2i(option: &PostOption) -> i32 {
         PostOption::GetDirents => 13,
         PostOption::WriteData => 14,
         PostOption::ReadData => 15,
+        PostOption::PreCreate => 16,
         PostOption::Unknown => -1,
     }
 }
@@ -90,12 +94,12 @@ pub fn option2i(option: &PostOption) -> i32 {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Post{
     pub option: PostOption,
-    pub data: String
+    pub data: Vec<u8>
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PostResult{
-    pub err: bool,
-    pub data: String
+    pub err: i32,
+    pub data: Vec<u8>
 }
 */
