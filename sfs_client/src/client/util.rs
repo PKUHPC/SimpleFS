@@ -4,7 +4,7 @@ use std::{
 };
 
 use errno::{set_errno, Errno};
-use libc::{makedev};
+use libc::makedev;
 
 use crate::client::context::StaticContext;
 #[allow(unused_imports)]
@@ -18,7 +18,7 @@ pub fn get_metadata(path: &String, _follow_link: bool) -> Result<Metadata, i32> 
         set_errno(Errno(e));
         return Err(e);
     }
-    return Ok(Metadata::deserialize(&md_res.unwrap()).unwrap());
+    return Ok(Metadata::deserialize(&md_res.unwrap()));
 }
 pub fn metadata_to_stat(path: &String, md: Metadata, attr: *mut stat) -> i32 {
     unsafe { (*attr).st_dev = makedev(0, 0) };

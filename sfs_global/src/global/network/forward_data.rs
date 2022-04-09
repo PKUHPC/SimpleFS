@@ -27,7 +27,7 @@ pub struct CreateData<'a> {
     pub mode: u32,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UpdateMetadentryData<'a> {
     pub path: &'a str,
     pub size: u64,
@@ -75,7 +75,6 @@ pub struct SerdeString<'a> {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PreCreateData<'a> {
     pub path: &'a str,
-    pub chunk_start: u64,
-    pub chunk_end: u64
+    pub chunks: Vec<u64>
     // RDMA buffer?
 }

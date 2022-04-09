@@ -1,14 +1,25 @@
 use core::time;
-use std::{thread, io::{Error, BufReader, BufRead}, fs::OpenOptions, path::Path, sync::Arc};
+use std::{
+    fs::OpenOptions,
+    io::{BufRead, BufReader, Error},
+    path::Path,
+    sync::Arc,
+    thread,
+};
 
 use lazy_static::*;
 use regex::Regex;
-use sfs_global::global::{endpoint::SFSEndpoint, distributor::SimpleHashDistributor, error_msg::error_msg, fsconfig::{HOSTFILE_PATH, ENABLE_OUTPUT}, util::env_util::{get_var, get_hostname}};
+use sfs_global::global::{
+    distributor::SimpleHashDistributor,
+    endpoint::SFSEndpoint,
+    error_msg::error_msg,
+    fsconfig::{ENABLE_OUTPUT, HOSTFILE_PATH},
+    util::env_util::{get_hostname, get_var},
+};
 
 use crate::server::filesystem::storage_context::StorageContext;
 
 use super::network_service::NetworkService;
-
 
 fn load_host_file(path: &String) -> Result<Vec<(String, String)>, Error> {
     let mut hosts: Vec<(String, String)> = Vec::new();
@@ -39,14 +50,20 @@ fn load_host_file(path: &String) -> Result<Vec<(String, String)>, Error> {
     return Ok(hosts);
 }
 #[allow(unused)]
-async fn lookup_endpoint(uri: &String, max_retries: i32, host_id: u64) -> Result<SFSEndpoint, Error> {
+async fn lookup_endpoint(
+    uri: &String,
+    max_retries: i32,
+    host_id: u64,
+) -> Result<SFSEndpoint, Error> {
     let endp = SFSEndpoint { addr: uri.clone() };
     for i in 0..max_retries {
         if let Ok(_post_res) = NetworkService::post::<u64>(
             &endp,
             host_id,
             sfs_global::global::network::post::PostOption::Lookup,
-        ).await {
+        )
+        .await
+        {
             if ENABLE_OUTPUT {
                 println!("connected: '{}'", uri);
             }
@@ -111,16 +128,17 @@ fn read_host_file() -> Vec<(String, String)> {
     let hosts = load_res.unwrap();
     return hosts;
 }
-pub struct NetworkContext{
+pub struct NetworkContext {
     self_addr: String,
     hosts_: Vec<SFSEndpoint>,
     distributor_: Arc<SimpleHashDistributor>,
     local_host_id: u64,
 }
-lazy_static!{
+lazy_static! {
     static ref NTC: NetworkContext = init_network();
 }
-fn init_network() -> NetworkContext{let mut hosts = read_host_file();
+fn init_network() -> NetworkContext {
+    let mut hosts = read_host_file();
 
     let mut context = NetworkContext::new();
     if ENABLE_OUTPUT {
@@ -137,24 +155,23 @@ fn init_network() -> NetworkContext{let mut hosts = read_host_file();
     context.set_self_addr(StorageContext::get_instance().get_bind_addr().clone());
 
     return context;
-
 }
-impl NetworkContext{
-    pub fn get_instance() -> &'static NetworkContext{
+impl NetworkContext {
+    pub fn get_instance() -> &'static NetworkContext {
         &NTC
     }
-    pub fn new() -> NetworkContext{
-        NetworkContext{
+    pub fn new() -> NetworkContext {
+        NetworkContext {
             self_addr: "".to_string(),
             hosts_: Vec::new(),
             distributor_: Arc::new(SimpleHashDistributor::init()),
             local_host_id: 0,
         }
     }
-    pub fn get_self_addr(&self) -> &String{
+    pub fn get_self_addr(&self) -> &String {
         &self.self_addr
     }
-    pub fn set_self_addr(&mut self, addr: String){
+    pub fn set_self_addr(&mut self, addr: String) {
         self.self_addr = addr;
     }
     pub fn set_distributor(&mut self, d: SimpleHashDistributor) {

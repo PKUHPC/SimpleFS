@@ -10,14 +10,15 @@ use regex::Regex;
 
 use sfs_global::global::{
     distributor::SimpleHashDistributor,
+    endpoint::SFSEndpoint,
     error_msg::error_msg,
     fsconfig::{ENABLE_OUTPUT, HOSTFILE_PATH},
-    util::env_util::{get_var, get_hostname}, endpoint::SFSEndpoint,
+    util::env_util::{get_hostname, get_var},
 };
 
 use super::{
     context::StaticContext,
-    network::{forward_msg::forward_get_fs_config, network_service::NetworkService}
+    network::{forward_msg::forward_get_fs_config, network_service::NetworkService},
 };
 
 fn extract_protocol(_uri: &String) {}

@@ -11,8 +11,8 @@ use sfs_global::global::endpoint::SFSEndpoint;
 use sfs_global::global::util::serde_util::{deserialize, serialize};
 use sfs_rpc::sfs_server::sfs_handle_client::SfsHandleClient;
 
+use crate::client::context::StaticContext;
 use crate::client::openfile::{FileType, OpenFile, O_RDONLY};
-use crate::client::{context::StaticContext};
 use sfs_global::global::distributor::Distributor;
 use sfs_global::global::error_msg::error_msg;
 use sfs_global::global::fsconfig::SFSConfig;
@@ -392,7 +392,11 @@ pub async fn forward_write(
                 }
             } else if *chunk == chunk_end {
                 let pad = chunk_lpad(offset + write_size, CHUNK_SIZE);
-                if pad == 0 {CHUNK_SIZE} else {pad}
+                if pad == 0 {
+                    CHUNK_SIZE
+                } else {
+                    pad
+                }
             } else {
                 CHUNK_SIZE
             };
@@ -495,7 +499,11 @@ pub async fn forward_read(
                 }
             } else if *chunk == chunk_end {
                 let pad = chunk_lpad(offset + read_size, CHUNK_SIZE);
-                if pad == 0 {CHUNK_SIZE} else {pad}
+                if pad == 0 {
+                    CHUNK_SIZE
+                } else {
+                    pad
+                }
             } else {
                 CHUNK_SIZE
             };

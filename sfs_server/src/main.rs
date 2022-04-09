@@ -1,15 +1,23 @@
-pub mod handle;
 pub mod config;
+pub mod handle;
 pub mod server;
+use crate::server::{config::IGNORE_IF_EXISTS, network::network_context::NetworkContext};
+use crate::server::{
+    filesystem::storage_context::StorageContext, storage::data::chunk_storage::*,
+    storage::metadata::db::MetadataDB,
+};
+use config::ENABLE_PRECREATE;
 use handle::handle_precreate;
 use libc::{getgid, getuid, EINVAL, ENOENT, S_IFDIR, S_IRWXG, S_IRWXO, S_IRWXU};
+use server::network::network_service::NetworkService;
+use sfs_global::global::distributor::Distributor;
 use sfs_global::global::network::forward_data::PreCreateData;
 use sfs_global::global::network::post::i2option;
 use sfs_global::global::util::serde_util::{deserialize, serialize};
 use sfs_global::{
     global::network::post::PostOption::*,
     global::{
-        fsconfig::{SFSConfig},
+        fsconfig::SFSConfig,
         metadata::Metadata,
         network::{
             config::CHUNK_SIZE,
@@ -21,11 +29,7 @@ use sfs_global::{
         util::net_util::get_my_hostname,
     },
 };
-use crate::server::{config::IGNORE_IF_EXISTS, network::network_context::NetworkContext};
-use crate::server::{
-    filesystem::storage_context::StorageContext, storage::data::chunk_storage::*,
-    storage::metadata::db::MetadataDB,
-};
+use std::collections::HashMap;
 use std::net::SocketAddrV4;
 use std::{
     fs::OpenOptions,
@@ -36,8 +40,8 @@ use std::{
 use tokio::sync::mpsc;
 use tonic::{transport::Server, Request, Response, Status};
 
-use crate::handle::{handle_read, handle_trunc, handle_write};
 use crate::config::ENABLE_OUTPUT;
+use crate::handle::{handle_read, handle_trunc, handle_write};
 use sfs_rpc::sfs_server::sfs_handle_server::{SfsHandle, SfsHandleServer};
 use sfs_rpc::sfs_server::{Post, PostResult};
 use tokio_stream::wrappers::ReceiverStream;
@@ -45,7 +49,7 @@ use tokio_stream::wrappers::ReceiverStream;
 #[allow(unused)]
 use std::time::Instant;
 
-fn handle_request(post: &Post) -> PostResult {
+async fn handle_request(post: &Post) -> PostResult {
     let option = i2option(post.option);
     match option {
         Stat => {
@@ -56,13 +60,16 @@ fn handle_request(post: &Post) -> PostResult {
             }
             let md_res = MetadataDB::get_instance().get(&path.to_string());
             if let Some(md) = md_res {
-                return PostResult { err: 0, data: md,
-                    extra: vec![0; 0] };
+                return PostResult {
+                    err: 0,
+                    data: md,
+                    extra: vec![0; 0],
+                };
             } else {
                 return PostResult {
                     err: ENOENT,
                     data: ENOENT.to_string().as_bytes().to_vec(),
-                    extra: vec![0; 0]
+                    extra: vec![0; 0],
                 };
             }
         }
@@ -82,7 +89,7 @@ fn handle_request(post: &Post) -> PostResult {
             return PostResult {
                 err: create_res,
                 data: create_res.to_string().as_bytes().to_vec(),
-                extra: vec![0; 0]
+                extra: vec![0; 0],
             };
         }
         Remove => {
@@ -95,7 +102,7 @@ fn handle_request(post: &Post) -> PostResult {
             return PostResult {
                 err: 0,
                 data: "0".to_string().as_bytes().to_vec(),
-                extra: vec![0; 0]
+                extra: vec![0; 0],
             };
         }
         RemoveMeta => {
@@ -109,14 +116,14 @@ fn handle_request(post: &Post) -> PostResult {
                 return PostResult {
                     err: ENOENT,
                     data: ENOENT.to_string().as_bytes().to_vec(),
-                    extra: vec![0; 0]
+                    extra: vec![0; 0],
                 };
             } else {
                 MetadataDB::get_instance().remove(&path.to_string());
                 return PostResult {
                     err: 0,
                     data: "0".to_string().as_bytes().to_vec(),
-                    extra: vec![0; 0]
+                    extra: vec![0; 0],
                 };
             }
         }
@@ -127,7 +134,7 @@ fn handle_request(post: &Post) -> PostResult {
             return PostResult {
                 err: 0,
                 data: "0".to_string().as_bytes().to_vec(),
-                extra: vec![0; 0]
+                extra: vec![0; 0],
             };
         }
         FsConfig => {
@@ -147,7 +154,7 @@ fn handle_request(post: &Post) -> PostResult {
             return PostResult {
                 err: 0,
                 data: serialize(&fs_config),
-                extra: vec![0; 0]
+                extra: vec![0; 0],
             };
         }
         UpdateMetadentry => {
@@ -155,15 +162,52 @@ fn handle_request(post: &Post) -> PostResult {
             if ENABLE_OUTPUT {
                 println!("handling update metadentry of '{}'....", update_data.path);
             }
+            let path = update_data.path.to_string();
             MetadataDB::get_instance().increase_size(
-                &update_data.path.to_string(),
+                &path,
                 update_data.size as usize + update_data.offset as usize,
                 update_data.append,
             );
+            if ENABLE_PRECREATE {
+                let chunk_start =
+                    Metadata::deserialize(&MetadataDB::get_instance().get(&path).unwrap())
+                        .get_size() as u64
+                        / CHUNK_SIZE;
+                let chunk_end = (update_data.size + update_data.offset as u64) / CHUNK_SIZE;
+                let path = update_data.path.clone().to_string();
+                tokio::spawn(async move {
+                    let mut hosts = HashMap::new();
+                    let distributor = NetworkContext::get_instance().get_distributor();
+                    for chunk_id in chunk_start..(chunk_end + 1) {
+                        let host = distributor.locate_data(&path, chunk_id);
+                        if !hosts.contains_key(&chunk_id) {
+                            hosts.insert(host, Vec::new());
+                        } else {
+                            hosts.get_mut(&host).unwrap().push(chunk_id);
+                        }
+                    }
+                    for (host, chunks) in hosts {
+                        let endp = NetworkContext::get_instance()
+                            .get_hosts()
+                            .get(host as usize)
+                            .unwrap();
+                        let pre_create = PreCreateData {
+                            path: path.as_str(),
+                            chunks,
+                        };
+                        NetworkService::post::<PreCreateData>(endp, pre_create, PreCreate)
+                            .await
+                            .unwrap();
+                    }
+                });
+            }
             return PostResult {
                 err: 0,
-                data: (update_data.size as usize + update_data.offset as usize).to_string().as_bytes().to_vec(),
-                extra: vec![0; 0]
+                data: (update_data.size as usize + update_data.offset as usize)
+                    .to_string()
+                    .as_bytes()
+                    .to_vec(),
+                extra: vec![0; 0],
             };
         }
         GetMetadentry => {
@@ -178,15 +222,15 @@ fn handle_request(post: &Post) -> PostResult {
                     return PostResult {
                         err: ENOENT,
                         data: ENOENT.to_string().as_bytes().to_vec(),
-                        extra: vec![0; 0]
+                        extra: vec![0; 0],
                     };
                 }
                 Some(str) => {
-                    let md = Metadata::deserialize(&str).unwrap();
+                    let md = Metadata::deserialize(&str);
                     return PostResult {
                         err: 0,
                         data: md.get_size().to_string().as_bytes().to_vec(),
-                        extra: vec![0; 0]
+                        extra: vec![0; 0],
                     };
                 }
             }
@@ -199,7 +243,7 @@ fn handle_request(post: &Post) -> PostResult {
             let post_result = PostResult {
                 err: 0,
                 data: serialize(&chunk_stat),
-                extra: vec![0; 0]
+                extra: vec![0; 0],
             };
             return post_result;
         }
@@ -213,7 +257,7 @@ fn handle_request(post: &Post) -> PostResult {
             return PostResult {
                 err: 0,
                 data: "0".to_string().as_bytes().to_vec(),
-                extra: vec![0; 0]
+                extra: vec![0; 0],
             };
         }
         Trunc => {
@@ -234,23 +278,26 @@ fn handle_request(post: &Post) -> PostResult {
                 return PostResult {
                     err: 0,
                     data: serialize(&(Vec::new() as Vec<(String, bool)>)),
-                    extra: vec![0; 0]
+                    extra: vec![0; 0],
                 };
             } else {
                 return PostResult {
                     err: 0,
                     data: serialize(&entries),
-                    extra: vec![0; 0]
+                    extra: vec![0; 0],
                 };
             }
-        },
+        }
         PreCreate => {
             let data: PreCreateData = deserialize::<PreCreateData>(&post.data);
+            if ENABLE_OUTPUT {
+                println!("handling precreate of '{}'....", data.path);
+            }
             handle_precreate(&data);
             return PostResult {
                 err: 0,
                 data: vec![0; 0],
-                extra: vec![0; 0]
+                extra: vec![0; 0],
             };
         }
         _ => {
@@ -258,7 +305,7 @@ fn handle_request(post: &Post) -> PostResult {
             return PostResult {
                 err: EINVAL,
                 data: EINVAL.to_string().as_bytes().to_vec(),
-                extra: vec![0; 0]
+                extra: vec![0; 0],
             };
         }
     }
@@ -273,7 +320,9 @@ impl SfsHandle for ServerHandler {
         request: tonic::Request<Post>,
     ) -> Result<tonic::Response<PostResult>, tonic::Status> {
         let post = request.into_inner();
-        let handle_result = tokio::spawn(async move {handle_request(&post)}).await.unwrap();
+        let handle_result = tokio::spawn(async move { handle_request(&post).await })
+            .await
+            .unwrap();
         return Ok(Response::new(handle_result));
     }
     async fn handle_stream(
@@ -306,8 +355,10 @@ impl SfsHandle for ServerHandler {
                         tx.send(Ok(PostResult {
                             err: EINVAL,
                             data: EINVAL.to_string().as_bytes().to_vec(),
-                            extra: vec![0; 0]
-                        })).await.unwrap();
+                            extra: vec![0; 0],
+                        }))
+                        .await
+                        .unwrap();
                     }
                 }
             }

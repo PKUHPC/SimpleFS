@@ -1,14 +1,20 @@
 #[allow(unused)]
 use std::time::Instant;
 
+use crate::server::{
+    network::network_context::NetworkContext, storage::data::chunk_storage::ChunkStorage,
+};
 use sfs_global::global::{
+    distributor::Distributor,
     network::{
         config::CHUNK_SIZE,
-        forward_data::{ReadData, ReadResult, TruncData, WriteData, PreCreateData},
+        forward_data::{PreCreateData, ReadData, ReadResult, TruncData, WriteData},
     },
-    util::{arith_util::{block_index, block_overrun}, serde_util::serialize}, distributor::Distributor,
+    util::{
+        arith_util::{block_index, block_overrun},
+        serde_util::serialize,
+    },
 };
-use crate::server::{storage::data::chunk_storage::ChunkStorage, network::network_context::NetworkContext};
 use sfs_rpc::sfs_server::PostResult;
 
 pub fn handle_write(input: &WriteData, data: &[u8]) -> PostResult {
@@ -18,8 +24,7 @@ pub fn handle_write(input: &WriteData, data: &[u8]) -> PostResult {
         data,
         input.write_size,
         input.offset as u64,
-    )
-    {
+    ) {
         nwrite
     } else {
         0
@@ -27,7 +32,7 @@ pub fn handle_write(input: &WriteData, data: &[u8]) -> PostResult {
     let post_res = PostResult {
         err: 0,
         data: write_tot.to_string().as_bytes().to_vec(),
-        extra: vec![0; 0]
+        extra: vec![0; 0],
     };
     return post_res;
 }
@@ -42,7 +47,7 @@ pub fn handle_read(input: &ReadData) -> PostResult {
             nreads: read_res.1,
             chunk_id: read_res.0,
         }),
-        extra: read_res.2
+        extra: read_res.2,
     };
     return post_res;
 }
@@ -57,14 +62,8 @@ fn read_file(args: &ReadData<'_>) -> (u64, u64, Vec<u8>) {
         &mut buf,
         args.read_size,
         args.offset as u64,
-    )
-    
-    {
-        (
-            args.chunk_id,
-            nreads,
-            buf[0..(nreads as usize)].to_vec(),
-        )
+    ) {
+        (args.chunk_id, nreads, buf[0..(nreads as usize)].to_vec())
     } else {
         (args.chunk_id, 0, vec![0; 1])
     }
@@ -83,18 +82,26 @@ pub fn handle_trunc(input: TruncData<'_>) -> PostResult {
     let post_res = PostResult {
         err: 0,
         data: vec![0; 1],
-        extra: vec![0; 0]
+        extra: vec![0; 0],
     };
     return post_res;
 }
-pub fn handle_precreate(input: &PreCreateData){
+pub fn handle_precreate(input: &PreCreateData) {
     let path = input.path.to_string();
-    let chunk_start = input.chunk_start;
-    let chunk_end = input.chunk_end;
-    for chunk_id in chunk_start..(chunk_end + 1){
-        if NetworkContext::get_instance().get_local_host_id() == NetworkContext::get_instance().get_distributor().locate_data(&path, chunk_id){
-            let chunk_path = ChunkStorage::absolute(&ChunkStorage::get_chunks_path(&path, chunk_id));
-            std::fs::OpenOptions::new().create(true).open(chunk_path).unwrap();
+    ChunkStorage::init_chunk_space(&path);
+    for chunk_id in input.chunks.iter() {
+        if NetworkContext::get_instance().get_local_host_id()
+            == NetworkContext::get_instance()
+                .get_distributor()
+                .locate_data(&path, *chunk_id)
+        {
+            let chunk_path =
+                ChunkStorage::absolute(&ChunkStorage::get_chunks_path(&path, *chunk_id));
+            std::fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .open(&chunk_path)
+                .unwrap();
         }
     }
 }

@@ -51,8 +51,8 @@ impl Metadata {
             blocks_: 0,
         }
     }
-    pub fn deserialize(binary_str: &Vec<u8>) -> Result<Metadata, i32> {
-        Ok(deserialize::<Metadata>(binary_str))
+    pub fn deserialize(binary_str: &Vec<u8>) -> Metadata {
+        deserialize::<Metadata>(binary_str)
     }
     pub fn serialize(&self) -> Vec<u8> {
         serialize(self)

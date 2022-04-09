@@ -185,11 +185,10 @@ pub extern "C" fn enable_interception() {
 }
 #[cfg(test)]
 mod tests {
-    use std::{thread, time::Instant};
+    use std::thread;
 
     #[allow(unused_imports)]
     use libc::{c_char, dirent, stat as Stat, O_CREAT, O_RDWR, SEEK_SET, S_IFDIR, S_IFREG};
-    use serde::{Deserialize, Serialize};
 
     use crate::client::syscall::timespec;
     #[allow(unused_imports)]
@@ -205,30 +204,19 @@ mod tests {
     use sfs_global::global::network::config::CHUNK_SIZE;
 
     #[test]
-    pub fn test0() {
-        #[derive(Debug, Serialize, Deserialize)]
-        struct Data<'a> {
-            pub s: &'a str,
-        }
-
-        let str = String::from_utf8(vec!['c' as u8; 524288]).unwrap();
-        let data = Data { s: str.as_str() };
-
-        let start = Instant::now();
-        let mut s = flexbuffers::FlexbufferSerializer::new();
-        data.serialize(&mut s).unwrap();
-        let duration = start.elapsed();
-        println!("serialize cost: {:?}", duration);
-
-        let bytes = s.view().to_vec();
-
-        let start = Instant::now();
-        let reader = flexbuffers::Reader::get_root(&bytes as &[u8]).unwrap();
-        let data = Data::deserialize(reader).unwrap();
-        let duration = start.elapsed();
-        println!("deserialize cost: {:?}", duration);
-
-        println!("{}", &data.s[0..20]);
+    fn test0() {
+        test0_body();
+    }
+    #[tokio::main]
+    pub async fn test0_body() {
+        test0_task().await;
+    }
+    async fn test0_task() {
+        println!("hello");
+        tokio::spawn(async move { test0_child_task().await });
+    }
+    async fn test0_child_task() {
+        println!("fuck you");
     }
     #[test]
     pub fn test1() {
