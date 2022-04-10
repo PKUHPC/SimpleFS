@@ -820,18 +820,18 @@ mod tests {
     #[allow(unused_must_use)]
     pub fn test_parallel() {
         let mut handles = Vec::new();
+        let path = "/file".to_string() + (1 as i32).to_string().as_str() + "\0";
+        let fd = sfs_open(
+            path.as_str().as_ptr() as *const c_char,
+            S_IFREG,
+            O_CREAT | O_RDWR,
+        );
+        if fd <= 0 {
+            println!("open error on thread {} ...", 1);
+            return;
+        }
         for i in 0..1600 {
             handles.push(thread::spawn(move || {
-                let path = "/file".to_string() + (i as i32).to_string().as_str() + "\0";
-                let fd = sfs_open(
-                    path.as_str().as_ptr() as *const c_char,
-                    S_IFREG,
-                    O_CREAT | O_RDWR,
-                );
-                if fd <= 0 {
-                    println!("open error on thread {} ...", i);
-                    return;
-                }
                 //println!("file {} opened on thread {} ...", fd, i);
                 let cnt = 1;
                 let data = vec!['a' as i8; cnt * CHUNK_SIZE as usize];

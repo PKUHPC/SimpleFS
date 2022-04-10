@@ -163,16 +163,13 @@ async fn handle_request(post: &Post) -> PostResult {
                 println!("handling update metadentry of '{}'....", update_data.path);
             }
             let path = update_data.path.to_string();
-            MetadataDB::get_instance().increase_size(
-                &path,
-                update_data.size as usize + update_data.offset as usize,
-                update_data.append,
-            );
+            
             if ENABLE_PRECREATE {
                 let chunk_start =
-                    Metadata::deserialize(&MetadataDB::get_instance().get(&path).unwrap())
-                        .get_size() as u64
-                        / CHUNK_SIZE;
+                    if let Some(md) = MetadataDB::get_instance().get(&path){
+                        Metadata::deserialize(&md).get_size() as u64 / CHUNK_SIZE + 1
+                    }
+                    else {0};
                 let chunk_end = (update_data.size + update_data.offset as u64) / CHUNK_SIZE;
                 let path = update_data.path.clone().to_string();
                 tokio::spawn(async move {
@@ -201,6 +198,11 @@ async fn handle_request(post: &Post) -> PostResult {
                     }
                 });
             }
+            MetadataDB::get_instance().increase_size(
+                &path,
+                update_data.size as usize + update_data.offset as usize,
+                update_data.append,
+            );
             return PostResult {
                 err: 0,
                 data: (update_data.size as usize + update_data.offset as usize)
@@ -371,6 +373,8 @@ async fn init_server(addr: &String) -> Result<(), Error> {
     println!("listening on {:?}", server_addr);
     let handler = ServerHandler::default();
     Server::builder()
+        .concurrency_limit_per_connection(32)
+        .max_concurrent_streams(12)
         .add_service(SfsHandleServer::new(handler))
         .serve(SocketAddr::V4(SocketAddrV4::new(
             server_addr.0,

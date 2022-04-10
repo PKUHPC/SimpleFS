@@ -12,7 +12,7 @@ serde = { version = "1.0.104", features = ["derive"] }
 serde_json = "*"
 tokio = { version = "1.17", features = ["full"] }
 prost = "0.9.0"
-tonic = { version = "0.6.2", features = ["tls"]}
+tonic = { version = "0.6.2", features = ["tls", "transport"]}
 futures = '*'
 sfs_global = {path = "../sfs_global"}
 sfs_rpc = {path = "../sfs_rpc"}

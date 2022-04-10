@@ -3,10 +3,10 @@ use std::path::Path;
 use libc::{EEXIST, EINVAL};
 use rocksdb::{Options, WriteOptions, DB};
 
-use crate::server::{
+use crate::{server::{
     config::TRUNCATE_DIRECTORY, filesystem::storage_context::StorageContext,
     storage::metadata::merge,
-};
+}, config::USE_WRITE_AHEAD_LOG};
 use sfs_global::global::{
     error_msg::error_msg,
     metadata::{Metadata, S_ISDIR},
@@ -15,7 +15,6 @@ use sfs_global::global::{
         serde_util::serialize,
     },
 };
-static USE_WRITE_AHEAD_LOG: bool = false;
 
 use lazy_static::*;
 
@@ -61,7 +60,7 @@ impl MetadataDB {
         );
         MetadataDB::optimize_rocksdb_options(&mut options);
         let mut write_options = WriteOptions::default();
-        write_options.disable_wal(USE_WRITE_AHEAD_LOG);
+        write_options.disable_wal(!USE_WRITE_AHEAD_LOG);
         if let Ok(rdb) = DB::open(&options, Path::new(path)) {
             Some(MetadataDB {
                 db: rdb,
