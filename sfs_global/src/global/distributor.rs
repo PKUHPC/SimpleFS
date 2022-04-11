@@ -1,4 +1,4 @@
-use sha2::{Digest, Sha256};
+use xxhash_rust::xxh3::xxh3_64;
 use std::{collections::HashMap, sync::Arc};
 
 pub trait Distributor {
@@ -23,15 +23,11 @@ impl Distributor for SimpleHashDistributor {
 
     fn locate_data(&self, path: &String, chunk_id: u64) -> u64 {
         let s = path.clone() + &chunk_id.to_string();
-        let mut hasher = Sha256::new();
-        hasher.update(s);
-        hasher.finalize()[0] as u64 % self.hosts_size_
+        xxh3_64(s.as_bytes()) % self.hosts_size_
     }
 
     fn locate_file_metadata(&self, path: &String) -> u64 {
-        let mut hasher = Sha256::new();
-        hasher.update(path);
-        hasher.finalize()[0] as u64 % self.hosts_size_
+        xxh3_64(path.as_bytes()) % self.hosts_size_
     }
 
     fn locate_dir_metadata(&self, path: &String) -> Arc<Vec<u64>> {

@@ -332,7 +332,7 @@ impl SfsHandle for ServerHandler {
         request: Request<tonic::Streaming<Post>>,
     ) -> Result<Response<Self::handle_streamStream>, Status> {
         let mut streamer = request.into_inner();
-        let (tx, rx) = mpsc::channel(2 * CHUNK_SIZE as usize);
+        let (tx, rx) = mpsc::channel(200);
         tokio::spawn(async move {
             while let Some(post) = streamer.message().await.unwrap() {
                 let option = i2option(post.option);
@@ -348,6 +348,7 @@ impl SfsHandle for ServerHandler {
                         let write_args: WriteData = deserialize::<WriteData>(&post.data);
                         if ENABLE_OUTPUT {
                             println!("handling write of '{}'....", write_args.path);
+                            println!("  - {:?}", write_args);
                         }
                         let data = post.extra;
                         tx.send(Ok(handle_write(&write_args, &data))).await.unwrap();

@@ -6,7 +6,8 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-sha2 = '0.10.2'
+#sha2 = '0.10.2'
+xxhash-rust = { version = '0.8.4', features = ["xxh3"] }
 libc = '*'
 serde = { version = "1.0.104", features = ["derive"] }
 serde_json = "*"

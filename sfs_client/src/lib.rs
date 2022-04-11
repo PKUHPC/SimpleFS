@@ -205,18 +205,8 @@ mod tests {
 
     #[test]
     fn test0() {
-        test0_body();
-    }
-    #[tokio::main]
-    pub async fn test0_body() {
-        test0_task().await;
-    }
-    async fn test0_task() {
-        println!("hello");
-        tokio::spawn(async move { test0_child_task().await });
-    }
-    async fn test0_child_task() {
-        println!("fuck you");
+        let v = vec![1; 8];
+        println!("{:?}", &v[0..7]);
     }
     #[test]
     pub fn test1() {
