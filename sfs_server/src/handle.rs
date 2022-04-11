@@ -1,21 +1,21 @@
 #[allow(unused)]
 use std::time::Instant;
 
-use crate::server::{
+use crate::{server::{
     network::network_context::NetworkContext, storage::data::chunk_storage::ChunkStorage,
-};
+}};
 use sfs_global::global::{
     distributor::Distributor,
     network::{
         config::CHUNK_SIZE,
-        forward_data::{PreCreateData, ReadData, ReadResult, TruncData, WriteData},
+        forward_data::{PreCreateData, ReadData, ReadResult, TruncData, WriteData}, post::post_result,
     },
     util::{
         arith_util::{block_index, block_overrun},
         serde_util::serialize,
     },
 };
-use sfs_rpc::sfs_server::PostResult;
+use sfs_rpc::proto::server::PostResult;
 
 pub fn handle_write(input: &WriteData, data: &[u8]) -> PostResult {
     let write_tot = if let Ok(nwrite) = ChunkStorage::write_chunk(
@@ -29,11 +29,11 @@ pub fn handle_write(input: &WriteData, data: &[u8]) -> PostResult {
     } else {
         0
     };
-    let post_res = PostResult {
-        err: 0,
-        data: write_tot.to_string().as_bytes().to_vec(),
-        extra: vec![0; 0],
-    };
+    let post_res = post_result(
+        0,
+        write_tot.to_string().as_bytes().to_vec(),
+        vec![0; 0],
+    );
     return post_res;
 }
 
@@ -41,14 +41,14 @@ pub fn handle_write(input: &WriteData, data: &[u8]) -> PostResult {
 #[allow(unused_assignments)]
 pub fn handle_read(input: &ReadData) -> PostResult {
     let read_res = read_file(&input);
-    let post_res = PostResult {
-        err: 0,
-        data: serialize(&ReadResult {
+    let post_res = post_result(
+        0,
+        serialize(&ReadResult {
             nreads: read_res.1,
             chunk_id: read_res.0,
         }),
-        extra: read_res.2,
-    };
+        read_res.2,
+    );
     return post_res;
 }
 
@@ -79,11 +79,11 @@ pub fn handle_trunc(input: TruncData<'_>) -> PostResult {
         chunk_id_start += 1;
     }
     ChunkStorage::trim_chunk_space(&path.to_string(), chunk_id_start);
-    let post_res = PostResult {
-        err: 0,
-        data: vec![0; 1],
-        extra: vec![0; 0],
-    };
+    let post_res = post_result(
+        0,
+        vec![0; 1],
+        vec![0; 0],
+    );
     return post_res;
 }
 pub fn handle_precreate(input: &PreCreateData) {

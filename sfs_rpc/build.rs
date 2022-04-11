@@ -1,5 +1,12 @@
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // compiling protos using path on build time
-    tonic_build::compile_protos("proto/server.proto")?;
-    Ok(())
+extern crate protoc_grpcio;
+
+fn main() {
+    let proto_root = "src/proto";
+    println!("cargo:rerun-if-changed={}", proto_root);
+    protoc_grpcio::compile_grpc_protos(
+        &["server.proto"],
+        &[proto_root],
+        &proto_root,
+        None
+    ).expect("Failed to compile gRPC definitions!");
 }

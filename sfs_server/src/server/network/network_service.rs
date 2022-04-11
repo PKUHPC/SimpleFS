@@ -1,11 +1,11 @@
+use grpcio::{ChannelBuilder, Environment};
 use serde::Serialize;
-use sfs_global::global::endpoint::SFSEndpoint;
+use sfs_global::global::{endpoint::SFSEndpoint, network::post::post};
 use sfs_global::global::util::serde_util::serialize;
-use std::io::Error;
+use sfs_rpc::proto::{server::{PostResult}, server_grpc::SfsHandleClient};
+use std::{io::Error, sync::Arc};
 
 use sfs_global::global::network::post::{option2i, PostOption};
-use sfs_rpc::sfs_server::sfs_handle_client::SfsHandleClient;
-use sfs_rpc::sfs_server::{Post, PostResult};
 
 pub struct NetworkService {}
 impl NetworkService {
@@ -15,20 +15,20 @@ impl NetworkService {
         opt: PostOption,
     ) -> Result<PostResult, Error> {
         let serialized_data = serialize(&data);
-        let post = Post {
-            option: option2i(&opt),
-            data: serialized_data,
-            extra: vec![0; 0],
-        };
-        let mut client = SfsHandleClient::connect(format!("http://{}:{}", endp.addr, 8082))
-            .await
-            .unwrap();
-        let request = tonic::Request::new(post);
-        let post_result = client.handle(request).await;
+        let post = post(
+            option2i(&opt),
+            serialized_data,
+            vec![0; 0],
+        );
+        let env = Arc::new(Environment::new(12));
+        let channel = ChannelBuilder::new(env).connect(&format!("{}:{}", endp.addr, 8082));
+        let client = SfsHandleClient::new(channel);
+        
+        let post_result = client.handle(&post);
         if let Err(e) = post_result {
             return Err(Error::new(std::io::ErrorKind::NotConnected, e.to_string()));
         }
-        let response = post_result.unwrap().into_inner();
+        let response = post_result.unwrap();
         return Ok(response);
     }
 }

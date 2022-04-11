@@ -2,12 +2,14 @@
 name = "sfs_rpc"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-prost = "0.9.0"
-tonic = { version = "0.6.2", features = ["tls"]}
+futures = "*"
+grpcio = "0.10.1"
+protobuf = "~2"
 
 [build-dependencies]
-tonic-build = "0.6.2"
+protoc-grpcio = "3.0.0"

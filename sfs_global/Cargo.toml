@@ -13,3 +13,4 @@ serde = { version = "1.0.104", features = ["derive"] }
 serde_json = "*"
 flexbuffers = "2.0.0"
 
+sfs_rpc = { path = "../sfs_rpc" }

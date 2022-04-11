@@ -1,10 +1,8 @@
-use core::time;
 use std::{
     fs::OpenOptions,
     io::{BufRead, BufReader, Error},
     path::Path,
-    sync::Arc,
-    thread,
+    sync::Arc
 };
 
 use lazy_static::*;
@@ -19,7 +17,6 @@ use sfs_global::global::{
 
 use crate::server::filesystem::storage_context::StorageContext;
 
-use super::network_service::NetworkService;
 
 fn load_host_file(path: &String) -> Result<Vec<(String, String)>, Error> {
     let mut hosts: Vec<(String, String)> = Vec::new();
@@ -48,43 +45,6 @@ fn load_host_file(path: &String) -> Result<Vec<(String, String)>, Error> {
         return Err(Error::new(std::io::ErrorKind::NotFound, "no valid host"));
     }
     return Ok(hosts);
-}
-#[allow(unused)]
-async fn lookup_endpoint(
-    uri: &String,
-    max_retries: i32,
-    host_id: u64,
-) -> Result<SFSEndpoint, Error> {
-    let endp = SFSEndpoint { addr: uri.clone() };
-    for i in 0..max_retries {
-        if let Ok(_post_res) = NetworkService::post::<u64>(
-            &endp,
-            host_id,
-            sfs_global::global::network::post::PostOption::Lookup,
-        )
-        .await
-        {
-            if ENABLE_OUTPUT {
-                println!("connected: '{}'", uri);
-            }
-            return Ok(endp);
-        } else {
-            error_msg(
-                "client::init::lookup_endpoint".to_string(),
-                format!(
-                    "fail to connect '{}', trying {}/{}",
-                    uri,
-                    i + 1,
-                    max_retries
-                ),
-            );
-            thread::sleep(time::Duration::from_millis(5));
-        }
-    }
-    Err(Error::new(
-        std::io::ErrorKind::ConnectionAborted,
-        "fail to connect to target host",
-    ))
 }
 // no connect actually
 fn connect_hosts(hosts: &mut Vec<(String, String)>, context: &mut NetworkContext) -> bool {
