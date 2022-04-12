@@ -204,10 +204,7 @@ mod tests {
     use sfs_global::global::network::config::CHUNK_SIZE;
 
     #[test]
-    fn test0() {
-        let v = vec![1; 8];
-        println!("{:?}", &v[0..7]);
-    }
+    fn test0() {}
     #[test]
     pub fn test1() {
         let s = "hello, here is the test data of sfs small-data local-host open/read/write test";
@@ -594,7 +591,8 @@ mod tests {
     }
     #[test]
     pub fn test7() {
-        let data = "hello, here is the test data of sfs small-data local-host pwrite/pread test";
+        let data1 = "hello, there is the test data of sfs small-data local-host pwrite/pread test";
+        let data2 = "hello, here is the test data of sfs small-data local-host pwrite/pread test";
 
         let dpath_sfs = "/sfs\0".to_string();
         let _cres = sfs_create(dpath_sfs.as_ptr() as *const i8, S_IFDIR);
@@ -606,12 +604,10 @@ mod tests {
             O_CREAT | O_RDWR,
         );
 
-        let _wres = sfs_write(fd, data.as_ptr() as *mut i8, data.len() as i64);
-        sfs_lseek(fd, 0, SEEK_SET);
-        let _wres = sfs_pwrite(fd, data.as_ptr() as *mut i8, data.len() as i64, 9);
-        sfs_lseek(fd, 0, SEEK_SET);
+        let _wres = sfs_write(fd, data1.as_ptr() as *mut i8, data1.len() as i64);
+        let _wres = sfs_pwrite(fd, data2.as_ptr() as *mut i8, data2.len() as i64, 9);
         let buf = vec![0 as u8; 100];
-        let res = sfs_pread(fd, buf.as_ptr() as *mut i8, 200, 7);
+        let res = sfs_pread(fd, buf.as_ptr() as *mut i8, 200, 3);
         if res <= 0 {
             println!("read error ...");
             return;

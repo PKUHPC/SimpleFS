@@ -6,9 +6,8 @@ use std::time::Instant;
 
 use grpcio::Error;
 use libc::{c_char, c_void, memcpy, EBUSY};
-use sfs_global::global::endpoint::SFSEndpoint;
 use sfs_global::global::util::serde_util::{deserialize, serialize};
-use sfs_rpc::proto::server::{Post, PostResult};
+use sfs_rpc::proto::server::PostResult;
 
 use crate::client::context::StaticContext;
 use crate::client::openfile::{FileType, OpenFile, O_RDONLY};
@@ -33,7 +32,7 @@ pub fn forward_stat(path: &String) -> Result<Vec<u8>, i32> {
         .locate_file_metadata(path);
     let post_res = NetworkService::post::<SerdeString>(
         StaticContext::get_instance()
-            .get_hosts()
+            .get_clients()
             .get(endp_id as usize)
             .unwrap(),
         SerdeString { str: path.as_str() },
@@ -58,7 +57,7 @@ pub fn forward_create(path: &String, mode: u32) -> Result<i32, Error> {
         .locate_file_metadata(path);
     let post_res = NetworkService::post::<CreateData>(
         StaticContext::get_instance()
-            .get_hosts()
+            .get_clients()
             .get(endp_id as usize)
             .unwrap(),
         CreateData {
@@ -87,7 +86,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
         .locate_file_metadata(&path);
     let _post_res = NetworkService::post::<SerdeString>(
         StaticContext::get_instance()
-            .get_hosts()
+            .get_clients()
             .get(endp_id as usize)
             .unwrap(),
         SerdeString { str: path.as_str() },
@@ -96,7 +95,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
     if remove_metadentry_only {
         return Ok(0);
     }
-    let mut posts: Vec<(SFSEndpoint, Post)> = Vec::new();
+    let mut posts = Vec::new();
     if (size / CHUNK_SIZE as i64) < StaticContext::get_instance().get_hosts().len() as i64 {
         let meta_host_id = StaticContext::get_instance()
             .get_distributor()
@@ -106,10 +105,9 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
         let chunk_end = size as u64 / CHUNK_SIZE;
         posts.push((
             StaticContext::get_instance()
-                .get_hosts()
+                .get_clients()
                 .get(meta_host_id as usize)
-                .unwrap()
-                .clone(),
+                .unwrap(),
             post(
                 option2i(&PostOption::Remove),
                 serialize(&SerdeString { str: path.as_str() }),
@@ -126,10 +124,9 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
             }
             posts.push((
                 StaticContext::get_instance()
-                    .get_hosts()
+                    .get_clients()
                     .get(chunk_host_id as usize)
-                    .unwrap()
-                    .clone(),
+                    .unwrap(),
                 post(
                     option2i(&PostOption::Remove),
                     serialize(&SerdeString { str: path.as_str() }),
@@ -138,9 +135,9 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
             ));
         }
     } else {
-        for endp in StaticContext::get_instance().get_hosts().iter() {
+        for client in StaticContext::get_instance().get_clients().iter() {
             posts.push((
-                endp.clone(),
+                client,
                 post(
                     option2i(&PostOption::Remove),
                     serialize(&SerdeString { str: path.as_str() }),
@@ -163,10 +160,10 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
     Ok(0)
 }
 pub fn forward_get_chunk_stat() -> (i32, ChunkStat) {
-    let mut posts: Vec<(SFSEndpoint, Post)> = Vec::new();
-    for endp in StaticContext::get_instance().get_hosts().iter() {
+    let mut posts = Vec::new();
+    for client in StaticContext::get_instance().get_clients().iter() {
         posts.push((
-            endp.clone(),
+            client,
             post(
                 option2i(&PostOption::ChunkStat),
                 "0".as_bytes().to_vec(),
@@ -204,7 +201,7 @@ pub fn forward_get_chunk_stat() -> (i32, ChunkStat) {
 pub fn forward_get_metadentry_size(path: &String) -> (i32, i64) {
     let post_result = NetworkService::post::<SerdeString>(
         StaticContext::get_instance()
-            .get_hosts()
+            .get_clients()
             .get(
                 StaticContext::get_instance()
                     .get_distributor()
@@ -234,11 +231,11 @@ pub fn forward_get_metadentry_size(path: &String) -> (i32, i64) {
 pub fn forward_decr_size(path: &String, new_size: i64) -> i32 {
     let host_id = StaticContext::get_instance()
         .get_distributor()
-        .locate_file_metadata(&path) as usize;
+        .locate_file_metadata(&path);
     let post_result = NetworkService::post::<DecrData>(
         StaticContext::get_instance()
-            .get_hosts()
-            .get(host_id)
+            .get_clients()
+            .get(host_id as usize)
             .unwrap(),
         DecrData {
             path: path.as_str(),
@@ -271,7 +268,7 @@ pub fn forward_truncate(path: &String, old_size: i64, new_size: i64) -> i32 {
             hosts.push(host_id);
         }
     }
-    let mut posts: Vec<(SFSEndpoint, Post)> = Vec::new();
+    let mut posts = Vec::new();
     for host in hosts {
         let trunc_data = TruncData {
             path: path.as_str(),
@@ -284,10 +281,9 @@ pub fn forward_truncate(path: &String, old_size: i64, new_size: i64) -> i32 {
         );
         posts.push((
             StaticContext::get_instance()
-                .get_hosts()
+                .get_clients()
                 .get(host as usize)
-                .unwrap()
-                .clone(),
+                .unwrap(),
             post,
         ));
     }
@@ -318,11 +314,11 @@ pub fn forward_update_metadentry_size(
     };
     let host_id = StaticContext::get_instance()
         .get_distributor()
-        .locate_file_metadata(&path) as usize;
+        .locate_file_metadata(&path);
     let post_result = NetworkService::post::<UpdateMetadentryData>(
         StaticContext::get_instance()
-            .get_hosts()
-            .get(host_id)
+            .get_clients()
+            .get(host_id as usize)
             .unwrap(),
         update_data,
         PostOption::UpdateMetadentry,
@@ -379,7 +375,7 @@ pub async fn forward_write(
     //let buf = unsafe { CStr::from_ptr(buf).to_string_lossy().into_owned() };
     let buf = unsafe { slice::from_raw_parts(buf as *const u8, write_size as usize) };
     let mut handles = Vec::new();
-    for target in targets.iter() {
+    for target in targets {
         let mut posts = Vec::new();
         for chunk in target_chunks.get(&target).unwrap() {
             let total_size = if *chunk == chunk_start {
@@ -428,12 +424,15 @@ pub async fn forward_write(
                 buf[offset_start..offset_end].to_vec(),
             ));
         }
-        let endp = StaticContext::get_instance()
-            .get_hosts()
-            .get(target.clone() as usize)
-            .unwrap();
         handles.push(tokio::spawn(async move {
-            NetworkService::post_stream(endp, posts).await
+            NetworkService::post_stream(
+                StaticContext::get_instance()
+                    .get_clients()
+                    .get(target as usize)
+                    .unwrap(),
+                posts,
+            )
+            .await
         }));
     }
     for handle in handles {
@@ -515,12 +514,15 @@ pub async fn forward_read(
             .iter()
             .map(|x| post(option2i(&PostOption::Read), serialize(&x), vec![0; 0]))
             .collect::<Vec<_>>();
-        let endp = StaticContext::get_instance()
-            .get_hosts()
-            .get(target.clone() as usize)
-            .unwrap();
         handles.push(tokio::spawn(async move {
-            NetworkService::post_stream(endp, posts).await
+            NetworkService::post_stream(
+                StaticContext::get_instance()
+                    .get_clients()
+                    .get(target as usize)
+                    .unwrap(),
+                posts,
+            )
+            .await
         }));
     }
     for handle in handles {
@@ -558,14 +560,13 @@ pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>) {
         .locate_dir_metadata(path);
     //let buf: Box<[u8; DIRENT_BUF_SIZE as usize]> = Box::new([0; DIRENT_BUF_SIZE as usize]);
     //let buf_size_per_host = DIRENT_BUF_SIZE / targets.len() as u64;
-    let mut posts: Vec<(SFSEndpoint, Post)> = Vec::new();
+    let mut posts = Vec::new();
     for target in targets.iter() {
         posts.push((
             StaticContext::get_instance()
-                .get_hosts()
+                .get_clients()
                 .get(*target as usize)
-                .unwrap()
-                .clone(),
+                .unwrap(),
             post(
                 option2i(&PostOption::GetDirents),
                 serialize(&DirentData {
@@ -609,12 +610,10 @@ pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>) {
     (0, Arc::new(Mutex::new(open_dir)))
 }
 pub fn forward_get_fs_config(context: &mut StaticContext) -> bool {
-    let host_id = context.get_local_host_id() as usize;
-    let fsconf_res = NetworkService::post(
-        context.get_hosts().get(host_id).unwrap(),
-        (),
-        PostOption::FsConfig,
-    );
+    let host_id = context.get_local_host_id();
+    let post = post(option2i(&PostOption::FsConfig), vec![0; 0], vec![0; 0]);
+    let client = context.get_clients().get(host_id as usize).unwrap();
+    let fsconf_res = client.handle(&post);
     if let Err(_e) = fsconf_res {
         return false;
     }

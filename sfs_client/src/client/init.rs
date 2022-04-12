@@ -3,9 +3,11 @@ use std::{
     fs::OpenOptions,
     io::{BufRead, BufReader, Error},
     path::Path,
+    sync::Arc,
     thread,
 };
 
+use grpcio::{ChannelBuilder, Environment};
 use regex::Regex;
 
 use sfs_global::global::{
@@ -13,13 +15,15 @@ use sfs_global::global::{
     endpoint::SFSEndpoint,
     error_msg::error_msg,
     fsconfig::{ENABLE_OUTPUT, HOSTFILE_PATH},
-    util::env_util::{get_hostname, get_var},
+    network::post::{option2i, post, PostOption},
+    util::{
+        env_util::{get_hostname, get_var},
+        serde_util::serialize,
+    },
 };
+use sfs_rpc::proto::server_grpc::SfsHandleClient;
 
-use super::{
-    context::StaticContext,
-    network::{forward_msg::forward_get_fs_config, network_service::NetworkService},
-};
+use super::{context::StaticContext, network::forward_msg::forward_get_fs_config};
 
 fn extract_protocol(_uri: &String) {}
 fn load_host_file(path: &String) -> Result<Vec<(String, String)>, Error> {
@@ -51,18 +55,23 @@ fn load_host_file(path: &String) -> Result<Vec<(String, String)>, Error> {
     extract_protocol(&hosts[0].1);
     return Ok(hosts);
 }
-fn lookup_endpoint(uri: &String, max_retries: i32, host_id: u64) -> Result<SFSEndpoint, Error> {
+fn lookup_endpoint(
+    uri: &String,
+    max_retries: i32,
+    host_id: u64,
+) -> Result<(SFSEndpoint, SfsHandleClient), Error> {
     let endp = SFSEndpoint { addr: uri.clone() };
     for i in 0..max_retries {
-        if let Ok(_post_res) = NetworkService::post::<u64>(
-            &endp,
-            host_id,
-            sfs_global::global::network::post::PostOption::Lookup,
-        ) {
+        let serialized_data = serialize(&host_id);
+        let post = post(option2i(&PostOption::Lookup), serialized_data, vec![0; 0]);
+        let env = Arc::new(Environment::new(12));
+        let channel = ChannelBuilder::new(env).connect(&format!("{}:{}", endp.addr, 8082));
+        let client = SfsHandleClient::new(channel);
+        if let Ok(_post_res) = client.handle(&post) {
             if ENABLE_OUTPUT {
                 println!("connected: '{}'", uri);
             }
-            return Ok(endp);
+            return Ok((endp, client));
         } else {
             error_msg(
                 "client::init::lookup_endpoint".to_string(),
@@ -87,7 +96,8 @@ fn connect_hosts(hosts: &mut Vec<(String, String)>, context: &mut StaticContext)
         println!("localhost name: {}", local_hostname);
     }
     let mut local_host_found = false;
-    let mut addrs = vec![SFSEndpoint::new(); hosts.len()];
+    let mut addrs = Vec::new();
+    let mut clients = Vec::new();
     let host_id: Vec<u64> = (0..(hosts.len() as u64)).collect();
 
     for id in host_id {
@@ -102,8 +112,9 @@ fn connect_hosts(hosts: &mut Vec<(String, String)>, context: &mut StaticContext)
             );
             return false;
         } else {
-            let endp = lookup.unwrap();
-            addrs[id as usize] = endp;
+            let res = lookup.unwrap();
+            addrs.push(res.0);
+            clients.push(res.1);
         }
         if !local_host_found && hostname.eq(&local_hostname) {
             context.set_local_host_id(id);
@@ -116,6 +127,7 @@ fn connect_hosts(hosts: &mut Vec<(String, String)>, context: &mut StaticContext)
     }
 
     context.set_hosts(addrs);
+    context.set_clients(clients);
     return true;
 }
 fn read_host_file() -> Vec<(String, String)> {
@@ -141,7 +153,6 @@ pub fn init_environment() -> StaticContext {
     if !connect_hosts(&mut hosts, &mut context) {
         return context;
     }
-
     let host_id = context.get_local_host_id();
     let host_len = context.get_hosts().len() as u64;
     let distributor = SimpleHashDistributor::new(host_id, host_len);

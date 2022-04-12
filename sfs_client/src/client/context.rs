@@ -1,5 +1,6 @@
 use lazy_static::*;
 use sfs_global::global::endpoint::SFSEndpoint;
+use sfs_rpc::proto::server_grpc::SfsHandleClient;
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -273,6 +274,7 @@ pub struct StaticContext {
     mountdir_: String,
 
     hosts_: Vec<SFSEndpoint>,
+    clients_: Vec<SfsHandleClient>,
     local_host_id: u64,
     fwd_host_id: u64,
     rpc_protocol_: String,
@@ -297,6 +299,7 @@ impl StaticContext {
             mountdir_components_: Arc::new(Vec::new()),
             mountdir_: "".to_string(),
             hosts_: Vec::new(),
+            clients_: Vec::new(),
             local_host_id: 0,
             fwd_host_id: 0,
             rpc_protocol_: "tcp".to_string(),
@@ -329,6 +332,12 @@ impl StaticContext {
     }
     pub fn set_hosts(&mut self, hosts: Vec<SFSEndpoint>) {
         self.hosts_ = hosts;
+    }
+    pub fn get_clients(&self) -> &Vec<SfsHandleClient> {
+        &self.clients_
+    }
+    pub fn set_clients(&mut self, clients: Vec<SfsHandleClient>) {
+        self.clients_ = clients;
     }
     pub fn clear_hosts(&mut self) {
         self.hosts_ = Vec::new();
