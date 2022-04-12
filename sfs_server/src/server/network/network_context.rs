@@ -2,7 +2,7 @@ use std::{
     fs::OpenOptions,
     io::{BufRead, BufReader, Error},
     path::Path,
-    sync::Arc
+    sync::Arc,
 };
 
 use lazy_static::*;
@@ -16,7 +16,6 @@ use sfs_global::global::{
 };
 
 use crate::server::filesystem::storage_context::StorageContext;
-
 
 fn load_host_file(path: &String) -> Result<Vec<(String, String)>, Error> {
     let mut hosts: Vec<(String, String)> = Vec::new();

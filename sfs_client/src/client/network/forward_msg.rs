@@ -1,15 +1,14 @@
 use std::collections::HashMap;
-use std::io::Error;
 use std::slice;
 use std::sync::{Arc, Mutex};
 #[allow(unused)]
 use std::time::Instant;
 
-use futures::stream::iter;
+use grpcio::Error;
 use libc::{c_char, c_void, memcpy, EBUSY};
 use sfs_global::global::endpoint::SFSEndpoint;
 use sfs_global::global::util::serde_util::{deserialize, serialize};
-use sfs_rpc::sfs_server::sfs_handle_client::SfsHandleClient;
+use sfs_rpc::proto::server::{Post, PostResult};
 
 use crate::client::context::StaticContext;
 use crate::client::openfile::{FileType, OpenFile, O_RDONLY};
@@ -21,11 +20,10 @@ use sfs_global::global::network::forward_data::{
     ChunkStat, CreateData, DecrData, DirentData, ReadData, ReadResult, SerdeString, TruncData,
     UpdateMetadentryData, WriteData,
 };
-use sfs_global::global::network::post::{option2i, PostOption};
+use sfs_global::global::network::post::{option2i, post, PostOption};
 use sfs_global::global::util::arith_util::{
     block_index, chunk_lpad, chunk_rpad, offset_to_chunk_id,
 };
-use sfs_rpc::sfs_server::{Post, PostResult};
 
 use super::network_service::NetworkService;
 
@@ -112,11 +110,11 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
                 .get(meta_host_id as usize)
                 .unwrap()
                 .clone(),
-            Post {
-                option: option2i(&PostOption::Remove),
-                data: serialize(&SerdeString { str: path.as_str() }),
-                extra: vec![0; 0],
-            },
+            post(
+                option2i(&PostOption::Remove),
+                serialize(&SerdeString { str: path.as_str() }),
+                vec![0; 0],
+            ),
         ));
 
         for chunk_id in chunk_start..(chunk_end + 1) {
@@ -132,22 +130,22 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
                     .get(chunk_host_id as usize)
                     .unwrap()
                     .clone(),
-                Post {
-                    option: option2i(&PostOption::Remove),
-                    data: serialize(&SerdeString { str: path.as_str() }),
-                    extra: vec![0; 0],
-                },
+                post(
+                    option2i(&PostOption::Remove),
+                    serialize(&SerdeString { str: path.as_str() }),
+                    vec![0; 0],
+                ),
             ));
         }
     } else {
         for endp in StaticContext::get_instance().get_hosts().iter() {
             posts.push((
                 endp.clone(),
-                Post {
-                    option: option2i(&PostOption::Remove),
-                    data: serialize(&SerdeString { str: path.as_str() }),
-                    extra: vec![0; 0],
-                },
+                post(
+                    option2i(&PostOption::Remove),
+                    serialize(&SerdeString { str: path.as_str() }),
+                    vec![0; 0],
+                ),
             ));
         }
     }
@@ -169,11 +167,11 @@ pub fn forward_get_chunk_stat() -> (i32, ChunkStat) {
     for endp in StaticContext::get_instance().get_hosts().iter() {
         posts.push((
             endp.clone(),
-            Post {
-                option: option2i(&PostOption::ChunkStat),
-                data: "0".as_bytes().to_vec(),
-                extra: vec![0; 0],
-            },
+            post(
+                option2i(&PostOption::ChunkStat),
+                "0".as_bytes().to_vec(),
+                vec![0; 0],
+            ),
         ));
     }
     let chunk_size = CHUNK_SIZE;
@@ -279,11 +277,11 @@ pub fn forward_truncate(path: &String, old_size: i64, new_size: i64) -> i32 {
             path: path.as_str(),
             new_size,
         };
-        let post = Post {
-            option: option2i(&PostOption::Trunc),
-            data: serialize(&trunc_data),
-            extra: vec![0; 0],
-        };
+        let post = post(
+            option2i(&PostOption::Trunc),
+            serialize(&trunc_data),
+            vec![0; 0],
+        );
         posts.push((
             StaticContext::get_instance()
                 .get_hosts()
@@ -424,23 +422,18 @@ pub async fn forward_write(
                 chunk_id: *chunk,
                 write_size: total_size,
             };
-            posts.push(Post {
-                option: option2i(&PostOption::Write),
-                data: serialize(&data),
-                extra: buf[offset_start..offset_end].to_vec(),
-            });
+            posts.push(post(
+                option2i(&PostOption::Write),
+                serialize(&data),
+                buf[offset_start..offset_end].to_vec(),
+            ));
         }
-        let addr = &StaticContext::get_instance()
+        let endp = StaticContext::get_instance()
             .get_hosts()
             .get(target.clone() as usize)
-            .unwrap()
-            .addr;
+            .unwrap();
         handles.push(tokio::spawn(async move {
-            let mut client = SfsHandleClient::connect(format!("http://{}:{}", addr, 8082))
-                .await
-                .unwrap();
-            let request = tonic::Request::new(iter(posts));
-            return client.handle_stream(request).await;
+            NetworkService::post_stream(endp, posts).await
         }));
     }
     for handle in handles {
@@ -448,8 +441,8 @@ pub async fn forward_write(
         if let Err(_e) = post_result {
             return (EBUSY, tot_write);
         }
-        let mut response = post_result.unwrap().into_inner();
-        while let Some(res) = response.message().await.unwrap() {
+        let response = post_result.unwrap();
+        for res in response {
             if res.err != 0 {
                 return (res.err, tot_write);
             }
@@ -520,27 +513,14 @@ pub async fn forward_read(
         }
         let posts = read_datas
             .iter()
-            .map(|x| Post {
-                option: option2i(&PostOption::Read),
-                data: serialize(&x),
-                extra: vec![0; 0],
-            })
+            .map(|x| post(option2i(&PostOption::Read), serialize(&x), vec![0; 0]))
             .collect::<Vec<_>>();
-        let request = tonic::Request::new(iter(posts));
-
-        handles.push(tokio::spawn(async move {
-            let mut client = SfsHandleClient::connect(format!(
-                "http://{}:{}",
-                StaticContext::get_instance()
-                    .get_hosts()
-                    .get(target.clone() as usize)
-                    .unwrap()
-                    .addr,
-                8082
-            ))
-            .await
+        let endp = StaticContext::get_instance()
+            .get_hosts()
+            .get(target.clone() as usize)
             .unwrap();
-            client.handle_stream(request).await
+        handles.push(tokio::spawn(async move {
+            NetworkService::post_stream(endp, posts).await
         }));
     }
     for handle in handles {
@@ -548,8 +528,8 @@ pub async fn forward_read(
         if let Err(_e) = post_result {
             return (EBUSY, tot_read);
         }
-        let mut response = post_result.unwrap().into_inner();
-        while let Some(res) = response.message().await.unwrap() {
+        let response = post_result.unwrap();
+        for res in response {
             if res.err != 0 {
                 return (res.err, tot_read);
             }
@@ -586,13 +566,13 @@ pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>) {
                 .get(*target as usize)
                 .unwrap()
                 .clone(),
-            Post {
-                option: option2i(&PostOption::GetDirents),
-                data: serialize(&DirentData {
+            post(
+                option2i(&PostOption::GetDirents),
+                serialize(&DirentData {
                     path: path.as_str(),
                 }),
-                extra: vec![0; 0],
-            },
+                vec![0; 0],
+            ),
         ));
     }
     let post_results = NetworkService::group_post(posts);

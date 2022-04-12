@@ -7,8 +7,10 @@ use crate::server::{
     storage::metadata::db::MetadataDB,
 };
 use config::ENABLE_PRECREATE;
-use futures::{TryStreamExt, TryFutureExt, SinkExt, FutureExt};
-use grpcio::{ServerBuilder, Environment, WriteFlags};
+use futures::channel::oneshot;
+use futures::executor::block_on;
+use futures::{FutureExt, SinkExt, TryFutureExt, TryStreamExt};
+use grpcio::{Environment, ServerBuilder, WriteFlags};
 use handle::handle_precreate;
 use libc::{getgid, getuid, EINVAL, ENOENT, S_IFDIR, S_IRWXG, S_IRWXO, S_IRWXU};
 use server::network::network_service::NetworkService;
@@ -33,9 +35,11 @@ use sfs_global::{
     },
 };
 use sfs_rpc::proto::server::{Post, PostResult};
-use sfs_rpc::proto::server_grpc::{SfsHandle, create_sfs_handle};
+use sfs_rpc::proto::server_grpc::{create_sfs_handle, SfsHandle};
 use std::collections::HashMap;
+use std::io::Read;
 use std::sync::Arc;
+use std::thread;
 use std::{
     fs::OpenOptions,
     io::{BufWriter, Error, Write},
@@ -60,17 +64,9 @@ async fn handle_request(post: &Post) -> PostResult {
             }
             let md_res = MetadataDB::get_instance().get(&path.to_string());
             if let Some(md) = md_res {
-                return post_result(
-                    0,
-                    md,
-                    vec![0; 0],
-                );
+                return post_result(0, md, vec![0; 0]);
             } else {
-                return post_result(
-                    ENOENT,
-                    ENOENT.to_string().as_bytes().to_vec(),
-                    vec![0; 0],
-                );
+                return post_result(ENOENT, ENOENT.to_string().as_bytes().to_vec(), vec![0; 0]);
             }
         }
         Create => {
@@ -99,11 +95,7 @@ async fn handle_request(post: &Post) -> PostResult {
                 println!("handling remove of '{}'....", path);
             }
             ChunkStorage::destroy_chunk_space(&path.to_string());
-            return post_result(
-                0,
-                "0".to_string().as_bytes().to_vec(),
-                vec![0; 0],
-            );
+            return post_result(0, "0".to_string().as_bytes().to_vec(), vec![0; 0]);
         }
         RemoveMeta => {
             let serde_string: SerdeString = deserialize::<SerdeString>(&post.data);
@@ -113,29 +105,17 @@ async fn handle_request(post: &Post) -> PostResult {
             }
             let md_res = MetadataDB::get_instance().get(&path.to_string());
             if let None = md_res {
-                return post_result(
-                    ENOENT,
-                    ENOENT.to_string().as_bytes().to_vec(),
-                    vec![0; 0],
-                );
+                return post_result(ENOENT, ENOENT.to_string().as_bytes().to_vec(), vec![0; 0]);
             } else {
                 MetadataDB::get_instance().remove(&path.to_string());
-                return post_result(
-                    0,
-                    "0".to_string().as_bytes().to_vec(),
-                    vec![0; 0],
-                );
+                return post_result(0, "0".to_string().as_bytes().to_vec(), vec![0; 0]);
             }
         }
         Lookup => {
             if ENABLE_OUTPUT {
                 println!("handling look up....");
             }
-            return post_result(
-                0,
-                "0".to_string().as_bytes().to_vec(),
-                vec![0; 0],
-            );
+            return post_result(0, "0".to_string().as_bytes().to_vec(), vec![0; 0]);
         }
         FsConfig => {
             if ENABLE_OUTPUT {
@@ -151,11 +131,7 @@ async fn handle_request(post: &Post) -> PostResult {
             fs_config.blocks_state = StorageContext::get_instance().get_blocks_state();
             fs_config.uid = unsafe { getuid() };
             fs_config.gid = unsafe { getgid() };
-            return post_result(
-                0,
-                serialize(&fs_config),
-                vec![0; 0],
-            );
+            return post_result(0, serialize(&fs_config), vec![0; 0]);
         }
         UpdateMetadentry => {
             let update_data: UpdateMetadentryData = deserialize::<UpdateMetadentryData>(&post.data);
@@ -163,13 +139,13 @@ async fn handle_request(post: &Post) -> PostResult {
                 println!("handling update metadentry of '{}'....", update_data.path);
             }
             let path = update_data.path.to_string();
-            
+
             if ENABLE_PRECREATE {
-                let chunk_start =
-                    if let Some(md) = MetadataDB::get_instance().get(&path){
-                        Metadata::deserialize(&md).get_size() as u64 / CHUNK_SIZE + 1
-                    }
-                    else {0};
+                let chunk_start = if let Some(md) = MetadataDB::get_instance().get(&path) {
+                    Metadata::deserialize(&md).get_size() as u64 / CHUNK_SIZE + 1
+                } else {
+                    0
+                };
                 let chunk_end = (update_data.size + update_data.offset as u64) / CHUNK_SIZE;
                 let path = update_data.path.clone().to_string();
                 tokio::spawn(async move {
@@ -221,11 +197,7 @@ async fn handle_request(post: &Post) -> PostResult {
             let md_str = MetadataDB::get_instance().get(&path.to_string());
             match md_str {
                 None => {
-                    return post_result(
-                        ENOENT,
-                        ENOENT.to_string().as_bytes().to_vec(),
-                        vec![0; 0],
-                    );
+                    return post_result(ENOENT, ENOENT.to_string().as_bytes().to_vec(), vec![0; 0]);
                 }
                 Some(str) => {
                     let md = Metadata::deserialize(&str);
@@ -242,11 +214,7 @@ async fn handle_request(post: &Post) -> PostResult {
                 println!("handling chunk stat....");
             }
             let chunk_stat = ChunkStorage::chunk_stat();
-            let post_result = post_result(
-                0,
-                serialize(&chunk_stat),
-                vec![0; 0],
-            );
+            let post_result = post_result(0, serialize(&chunk_stat), vec![0; 0]);
             return post_result;
         }
         DecrSize => {
@@ -256,11 +224,7 @@ async fn handle_request(post: &Post) -> PostResult {
             }
             MetadataDB::get_instance()
                 .decrease_size(&decr_data.path.to_string(), decr_data.new_size as usize);
-            return post_result(
-                0,
-                "0".to_string().as_bytes().to_vec(),
-                vec![0; 0],
-            );
+            return post_result(0, "0".to_string().as_bytes().to_vec(), vec![0; 0]);
         }
         Trunc => {
             let trunc_data: TruncData = deserialize::<TruncData>(&post.data);
@@ -283,11 +247,7 @@ async fn handle_request(post: &Post) -> PostResult {
                     vec![0; 0],
                 );
             } else {
-                return post_result(
-                    0,
-                    serialize(&entries),
-                    vec![0; 0],
-                );
+                return post_result(0, serialize(&entries), vec![0; 0]);
             }
         }
         PreCreate => {
@@ -296,35 +256,37 @@ async fn handle_request(post: &Post) -> PostResult {
                 println!("handling precreate of '{}'....", data.path);
             }
             handle_precreate(&data);
-            return post_result(
-                0,
-                vec![0; 0],
-                vec![0; 0],
-            );
+            return post_result(0, vec![0; 0], vec![0; 0]);
         }
         _ => {
             println!("invalid option on 'handle': {:?}", option);
-            return post_result(
-                EINVAL,
-                EINVAL.to_string().as_bytes().to_vec(),
-                vec![0; 0],
-            );
+            return post_result(EINVAL, EINVAL.to_string().as_bytes().to_vec(), vec![0; 0]);
         }
     }
 }
 #[derive(Clone, Default)]
 struct ServerHandler {}
 impl SfsHandle for ServerHandler {
-    fn handle(&mut self, ctx: grpcio::RpcContext, req: sfs_rpc::proto::server::Post, sink: grpcio::UnarySink<sfs_rpc::proto::server::PostResult>) {
-        let f = async move{
+    fn handle(
+        &mut self,
+        ctx: grpcio::RpcContext,
+        req: sfs_rpc::proto::server::Post,
+        sink: grpcio::UnarySink<sfs_rpc::proto::server::PostResult>,
+    ) {
+        let f = async move {
             let handle_result = handle_request(&req).await;
             sink.success(handle_result);
         };
         ctx.spawn(f);
     }
 
-    fn handle_stream(&mut self, ctx: grpcio::RpcContext, mut stream: grpcio::RequestStream<sfs_rpc::proto::server::Post>, mut sink: grpcio::DuplexSink<sfs_rpc::proto::server::PostResult>) {
-        let f = async move{
+    fn handle_stream(
+        &mut self,
+        ctx: grpcio::RpcContext,
+        mut stream: grpcio::RequestStream<sfs_rpc::proto::server::Post>,
+        mut sink: grpcio::DuplexSink<sfs_rpc::proto::server::PostResult>,
+    ) {
+        let f = async move {
             while let Some(post) = stream.try_next().await? {
                 let option = i2option(post.option);
                 match option {
@@ -333,7 +295,8 @@ impl SfsHandle for ServerHandler {
                         if ENABLE_OUTPUT {
                             println!("handling read of '{}'....", read_args.path);
                         }
-                        sink.send((handle_read(&read_args), WriteFlags::default())).await?;
+                        sink.send((handle_read(&read_args), WriteFlags::default()))
+                            .await?;
                     }
                     Write => {
                         let write_args: WriteData = deserialize::<WriteData>(&post.data);
@@ -342,21 +305,28 @@ impl SfsHandle for ServerHandler {
                             println!("  - {:?}", write_args);
                         }
                         let data = post.extra;
-                        sink.send((handle_write(&write_args, &data), WriteFlags::default())).await?;
+                        sink.send((handle_write(&write_args, &data), WriteFlags::default()))
+                            .await?;
                     }
                     _ => {
                         println!("invalid option on 'handle_stream': {:?}", option);
-                        sink.send((post_result(
-                            EINVAL,
-                            EINVAL.to_string().as_bytes().to_vec(),
-                            vec![0; 0],
-                        ), WriteFlags::default())).await?;
+                        sink.send((
+                            post_result(EINVAL, EINVAL.to_string().as_bytes().to_vec(), vec![0; 0]),
+                            WriteFlags::default(),
+                        ))
+                        .await?;
                     }
                 }
             }
+            sink.close().await?;
             Ok(())
         }
-        .map_err(|e: grpcio::Error| error_msg("server::handle_stream".to_string(), format!("failed to handle stream: {:?}", e)))
+        .map_err(|e: grpcio::Error| {
+            error_msg(
+                "server::handle_stream".to_string(),
+                format!("failed to handle stream: {:?}", e),
+            )
+        })
         .map(|_| ());
         ctx.spawn(f);
     }
@@ -365,10 +335,23 @@ async fn init_server(addr: &String) -> Result<(), Error> {
     let server_addr: (Ipv4Addr, u16) = (addr.parse().unwrap(), 8082);
     println!("listening on {:?}", server_addr);
     let env = Arc::new(Environment::new(12));
-    let instance = ServerHandler{};
+    let instance = ServerHandler {};
     let service = create_sfs_handle(instance);
-    let mut server = ServerBuilder::new(env).register_service(service).bind(addr, 8082).build().unwrap();
+    let mut server = ServerBuilder::new(env)
+        .register_service(service)
+        .bind(addr, 8082)
+        .build()
+        .unwrap();
     server.start();
+    
+    let (tx, rx) = oneshot::channel();
+    thread::spawn(move || {
+        println!("Press ENTER to exit...");
+        let _ = std::io::stdin().read(&mut [0]).unwrap();
+        tx.send(())
+    });
+    block_on(rx).unwrap();
+    block_on(server.shutdown()).unwrap();
     Ok(())
 }
 

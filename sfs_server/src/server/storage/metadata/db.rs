@@ -3,10 +3,13 @@ use std::path::Path;
 use libc::{EEXIST, EINVAL};
 use rocksdb::{Options, WriteOptions, DB};
 
-use crate::{server::{
-    config::TRUNCATE_DIRECTORY, filesystem::storage_context::StorageContext,
-    storage::metadata::merge,
-}, config::USE_WRITE_AHEAD_LOG};
+use crate::{
+    config::USE_WRITE_AHEAD_LOG,
+    server::{
+        config::TRUNCATE_DIRECTORY, filesystem::storage_context::StorageContext,
+        storage::metadata::merge,
+    },
+};
 use sfs_global::global::{
     error_msg::error_msg,
     metadata::{Metadata, S_ISDIR},
