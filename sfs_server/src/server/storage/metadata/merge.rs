@@ -14,12 +14,12 @@ pub fn full_merge(
     operands: &MergeOperands,
 ) -> Option<Vec<u8>> {
     //println!("full merging on key {} ...", String::from_utf8(new_key.to_vec()).unwrap());
-    let mut md = Metadata::new();
+    let mut md;
+    let mut iter = operands.into_iter();
     if let Some(val) = existing_val {
         md = Metadata::deserialize(&val.to_vec());
     }
-    let mut iter = operands.into_iter();
-    if md.get_size() == 0 {
+    else {
         if iter.size_hint().0 == 0 {
             error_msg(
                 "server::merge::full_merge".to_string(),

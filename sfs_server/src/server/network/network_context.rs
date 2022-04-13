@@ -5,6 +5,7 @@ use std::{
     sync::Arc,
 };
 
+use grpcio::{Environment, ChannelBuilder};
 use lazy_static::*;
 use regex::Regex;
 use sfs_global::global::{
@@ -14,6 +15,7 @@ use sfs_global::global::{
     fsconfig::{ENABLE_OUTPUT, HOSTFILE_PATH},
     util::env_util::{get_hostname, get_var},
 };
+use sfs_rpc::proto::server_grpc::SfsHandleClient;
 
 use crate::server::filesystem::storage_context::StorageContext;
 
@@ -53,6 +55,7 @@ fn connect_hosts(hosts: &mut Vec<(String, String)>, context: &mut NetworkContext
     }
     let mut local_host_found = false;
     let mut addrs = vec![SFSEndpoint::new(); hosts.len()];
+    let mut clients = Vec::new();
     let host_id: Vec<u64> = (0..(hosts.len() as u64)).collect();
 
     for id in host_id {
@@ -60,7 +63,11 @@ fn connect_hosts(hosts: &mut Vec<(String, String)>, context: &mut NetworkContext
         let uri = &hosts.get(id as usize).unwrap().1;
 
         let endp = SFSEndpoint { addr: uri.clone() };
+        let env = Arc::new(Environment::new(12));
+        let channel = ChannelBuilder::new(env).connect(&format!("{}:{}", endp.addr, 8082));
+        let client = SfsHandleClient::new(channel);
         addrs[id as usize] = endp;
+        clients.push(client);
         if !local_host_found && hostname.eq(&local_hostname) {
             context.set_local_host_id(id);
             local_host_found = true;
@@ -72,6 +79,7 @@ fn connect_hosts(hosts: &mut Vec<(String, String)>, context: &mut NetworkContext
     }
 
     context.set_hosts(addrs);
+    context.set_clients(clients);
     return true;
 }
 fn read_host_file() -> Vec<(String, String)> {
@@ -90,6 +98,7 @@ fn read_host_file() -> Vec<(String, String)> {
 pub struct NetworkContext {
     self_addr: String,
     hosts_: Vec<SFSEndpoint>,
+    clients_: Vec<SfsHandleClient>,
     distributor_: Arc<SimpleHashDistributor>,
     local_host_id: u64,
 }
@@ -123,6 +132,7 @@ impl NetworkContext {
         NetworkContext {
             self_addr: "".to_string(),
             hosts_: Vec::new(),
+            clients_: Vec::new(),
             distributor_: Arc::new(SimpleHashDistributor::init()),
             local_host_id: 0,
         }
@@ -147,6 +157,12 @@ impl NetworkContext {
     }
     pub fn clear_hosts(&mut self) {
         self.hosts_ = Vec::new();
+    }
+    pub fn get_clients(&self) -> &Vec<SfsHandleClient> {
+        &self.clients_
+    }
+    pub fn set_clients(&mut self, clients: Vec<SfsHandleClient>) {
+        self.clients_ = clients;
     }
     pub fn set_local_host_id(&mut self, host_id: u64) {
         self.local_host_id = host_id;

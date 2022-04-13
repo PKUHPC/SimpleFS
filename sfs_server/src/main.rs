@@ -66,7 +66,7 @@ async fn handle_request(post: &Post) -> PostResult {
             if let Some(md) = md_res {
                 return post_result(0, md, vec![0; 0]);
             } else {
-                return post_result(ENOENT, ENOENT.to_string().as_bytes().to_vec(), vec![0; 0]);
+                return post_result(ENOENT, vec![0; 0], vec![0; 0]);
             }
         }
         Create => {
@@ -84,7 +84,7 @@ async fn handle_request(post: &Post) -> PostResult {
             );
             return post_result(
                 create_res,
-                create_res.to_string().as_bytes().to_vec(),
+                vec![0; 0],
                 vec![0; 0],
             );
         }
@@ -95,7 +95,7 @@ async fn handle_request(post: &Post) -> PostResult {
                 println!("handling remove of '{}'....", path);
             }
             ChunkStorage::destroy_chunk_space(&path.to_string());
-            return post_result(0, "0".to_string().as_bytes().to_vec(), vec![0; 0]);
+            return post_result(0, vec![0; 0], vec![0; 0]);
         }
         RemoveMeta => {
             let serde_string: SerdeString = deserialize::<SerdeString>(&post.data);
@@ -105,10 +105,10 @@ async fn handle_request(post: &Post) -> PostResult {
             }
             let md_res = MetadataDB::get_instance().get(&path.to_string());
             if let None = md_res {
-                return post_result(ENOENT, ENOENT.to_string().as_bytes().to_vec(), vec![0; 0]);
+                return post_result(ENOENT, vec![0; 0], vec![0; 0]);
             } else {
                 MetadataDB::get_instance().remove(&path.to_string());
-                return post_result(0, "0".to_string().as_bytes().to_vec(), vec![0; 0]);
+                return post_result(0, vec![0; 0], vec![0; 0]);
             }
         }
         Lookup => {
@@ -160,17 +160,15 @@ async fn handle_request(post: &Post) -> PostResult {
                         }
                     }
                     for (host, chunks) in hosts {
-                        let endp = NetworkContext::get_instance()
-                            .get_hosts()
+                        let client = NetworkContext::get_instance()
+                            .get_clients()
                             .get(host as usize)
                             .unwrap();
                         let pre_create = PreCreateData {
                             path: path.as_str(),
                             chunks,
                         };
-                        NetworkService::post::<PreCreateData>(endp, pre_create, PreCreate)
-                            .await
-                            .unwrap();
+                        NetworkService::post::<PreCreateData>(client, pre_create, PreCreate).unwrap();
                     }
                 });
             }
@@ -197,7 +195,7 @@ async fn handle_request(post: &Post) -> PostResult {
             let md_str = MetadataDB::get_instance().get(&path.to_string());
             match md_str {
                 None => {
-                    return post_result(ENOENT, ENOENT.to_string().as_bytes().to_vec(), vec![0; 0]);
+                    return post_result(ENOENT, vec![0; 0], vec![0; 0]);
                 }
                 Some(str) => {
                     let md = Metadata::deserialize(&str);
@@ -224,7 +222,7 @@ async fn handle_request(post: &Post) -> PostResult {
             }
             MetadataDB::get_instance()
                 .decrease_size(&decr_data.path.to_string(), decr_data.new_size as usize);
-            return post_result(0, "0".to_string().as_bytes().to_vec(), vec![0; 0]);
+            return post_result(0, vec![0; 0], vec![0; 0]);
         }
         Trunc => {
             let trunc_data: TruncData = deserialize::<TruncData>(&post.data);
@@ -260,7 +258,7 @@ async fn handle_request(post: &Post) -> PostResult {
         }
         _ => {
             println!("invalid option on 'handle': {:?}", option);
-            return post_result(EINVAL, EINVAL.to_string().as_bytes().to_vec(), vec![0; 0]);
+            return post_result(EINVAL, vec![0; 0], vec![0; 0]);
         }
     }
 }
@@ -343,6 +341,7 @@ async fn init_server(addr: &String) -> Result<(), Error> {
         .build()
         .unwrap();
     server.start();
+    NetworkContext::get_instance();
     
     let (tx, rx) = oneshot::channel();
     thread::spawn(move || {
@@ -379,7 +378,6 @@ fn populates_host_file() -> Option<Error> {
 async fn init_environment() -> Result<(), Error> {
     ChunkStorage::get_instance();
     MetadataDB::get_instance();
-    NetworkContext::get_instance();
 
     let mut root_md = Metadata::new();
     root_md.set_mode(S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO);

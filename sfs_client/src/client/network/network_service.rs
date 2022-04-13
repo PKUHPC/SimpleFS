@@ -1,4 +1,4 @@
-use futures::{SinkExt, TryStreamExt};
+use futures::{join, SinkExt, TryStreamExt};
 use grpcio::{Error, WriteFlags};
 use serde::Serialize;
 use sfs_global::global::util::serde_util::serialize;
@@ -18,9 +18,6 @@ impl NetworkService {
     ) -> Result<PostResult, Error> {
         let serialized_data = serialize(&data);
         let post = post(option2i(&opt), serialized_data, vec![0; 0]);
-        //let env = Arc::new(Environment::new(12));
-        //let channel = ChannelBuilder::new(env).connect(&format!("{}:{}", endp.addr, 8082));
-        //let client = SfsHandleClient::new(channel);
         let post_result = client.handle(&post)?;
         return Ok(post_result);
     }
@@ -28,9 +25,6 @@ impl NetworkService {
     pub fn group_post(posts: Vec<(&SfsHandleClient, Post)>) -> Result<Vec<PostResult>, Error> {
         let mut post_results: Vec<PostResult> = Vec::new();
         for (client, post) in posts {
-            //let env = Arc::new(Environment::new(12));
-            //let channel = ChannelBuilder::new(env).connect(&format!("{}:{}", endp.addr, 8082));
-            //let client = SfsHandleClient::new(channel);;
             let post_result = client.handle(&post)?;
             post_results.push(post_result);
         }
@@ -41,19 +35,22 @@ impl NetworkService {
         client: &SfsHandleClient,
         posts: Vec<Post>,
     ) -> Result<Vec<PostResult>, Error> {
-        let mut post_results = Vec::new();
-        //let env = Arc::new(Environment::new(12));
-        //let channel = ChannelBuilder::new(env).connect(&format!("{}:{}", endp.addr, 8082));
-        //let client = SfsHandleClient::new(channel);
-
         let (mut sink, mut receiver) = client.handle_stream()?;
-        for post in posts {
-            sink.send((post, WriteFlags::default())).await?;
-        }
-        sink.close().await?;
-        while let Some(res) = receiver.try_next().await? {
-            post_results.push(res);
-        }
-        return Ok(post_results);
+        let send = async move {
+            for post in posts {
+                sink.send((post, WriteFlags::default())).await?;
+            }
+            sink.close().await?;
+            Ok(()) as Result<_, Error>
+        };
+        let receive = async move {
+            let mut post_results = Vec::new();
+            while let Some(res) = receiver.try_next().await? {
+                post_results.push(res);
+            }
+            Ok(post_results) as Result<_, Error>
+        };
+        let (sr, rr) = join!(send, receive);
+        sr.and(rr)
     }
 }
