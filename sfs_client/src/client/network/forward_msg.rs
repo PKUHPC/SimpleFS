@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 #[allow(unused)]
 use std::time::Instant;
 
+use futures::future::join_all;
 use grpcio::Error;
 use libc::{c_char, c_void, memcpy, EBUSY};
 use sfs_global::global::util::serde_util::{deserialize, serialize};
@@ -435,8 +436,9 @@ pub async fn forward_write(
             .await
         }));
     }
-    for handle in handles {
-        let post_result = handle.await.unwrap();
+    let joins = join_all(handles).await;
+    for join in joins {
+        let post_result = join.unwrap();
         if let Err(_e) = post_result {
             return (EBUSY, tot_write);
         }
@@ -445,11 +447,7 @@ pub async fn forward_write(
             if res.err != 0 {
                 return (res.err, tot_write);
             }
-            tot_write += String::from_utf8(res.data)
-                .unwrap()
-                .as_str()
-                .parse::<i64>()
-                .expect("response should be 'i64'");
+            tot_write += deserialize::<u64>(&res.data) as i64;
         }
     }
     return (0, tot_write);
@@ -525,8 +523,9 @@ pub async fn forward_read(
             .await
         }));
     }
-    for handle in handles {
-        let post_result = handle.await.unwrap();
+    let joins = join_all(handles).await;
+    for join in joins {
+        let post_result = join.unwrap();
         if let Err(_e) = post_result {
             return (EBUSY, tot_read);
         }
@@ -547,7 +546,7 @@ pub async fn forward_read(
                 memcpy(
                     buf.offset(local_offset as isize) as *mut c_void,
                     data.as_ptr() as *const c_void,
-                    data.len(),
+                    read_res.nreads as usize,
                 );
             }
         }

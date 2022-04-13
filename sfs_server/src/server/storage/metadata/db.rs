@@ -48,7 +48,7 @@ impl MetadataDB {
         &MDB
     }
     pub fn optimize_rocksdb_options(options: &mut Options) {
-        options.set_max_successive_merges(128);
+        options.set_max_successive_merges(32);
     }
     pub fn new(path: &String) -> Option<MetadataDB> {
         let mut options = Options::default();
@@ -88,7 +88,7 @@ impl MetadataDB {
         }
     }
     pub fn put(&self, key: &String, val: Vec<u8>, ignore_if_exists: bool) -> i32 {
-        //println!("putting key: {} value: {}", key, val);
+        //println!("putting key: {}", key);
         if ignore_if_exists && self.exists(key) {
             return EEXIST;
         }

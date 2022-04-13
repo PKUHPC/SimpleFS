@@ -30,7 +30,7 @@ pub fn handle_write(input: &WriteData, data: &[u8]) -> PostResult {
     } else {
         0
     };
-    let post_res = post_result(0, write_tot.to_string().as_bytes().to_vec(), vec![0; 0]);
+    let post_res = post_result(0, serialize(write_tot), vec![0; 0]);
     return post_res;
 }
 
@@ -76,7 +76,7 @@ pub fn handle_trunc(input: TruncData<'_>) -> PostResult {
         chunk_id_start += 1;
     }
     ChunkStorage::trim_chunk_space(&path.to_string(), chunk_id_start);
-    let post_res = post_result(0, vec![0; 1], vec![0; 0]);
+    let post_res = post_result(0, vec![0; 0], vec![0; 0]);
     return post_res;
 }
 pub fn handle_precreate(input: &PreCreateData) {

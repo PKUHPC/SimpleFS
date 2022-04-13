@@ -190,7 +190,7 @@ mod tests {
     #[allow(unused_imports)]
     use libc::{c_char, dirent, stat as Stat, O_CREAT, O_RDWR, SEEK_SET, S_IFDIR, S_IFREG};
 
-    use crate::client::syscall::timespec;
+    use crate::client::{syscall::timespec, util::get_metadata};
     #[allow(unused_imports)]
     use crate::client::{
         context::{DynamicContext, StaticContext},
@@ -204,7 +204,23 @@ mod tests {
     use sfs_global::global::network::config::CHUNK_SIZE;
 
     #[test]
-    fn test0() {}
+    fn test0() {
+        test0_body();
+    }
+    #[tokio::main]
+    async fn test0_body(){     
+        let path1 = "/sfs\0".to_string();
+        sfs_create(path1.as_ptr() as *const i8, S_IFDIR);
+        let path1 = "/sfs".to_string();
+        let mut handles = Vec::new();
+        for _i in 0..20000{
+            let path1 = path1.clone();
+            handles.push(tokio::spawn(async move{get_metadata(&path1, false).unwrap()}));
+        }
+        for handle in handles{
+            handle.await.unwrap();
+        }
+    }
     #[test]
     pub fn test1() {
         let s = "hello, here is the test data of sfs small-data local-host open/read/write test";
@@ -593,7 +609,6 @@ mod tests {
     pub fn test7() {
         let data1 = "hello, there is the test data of sfs small-data local-host pwrite/pread test";
         let data2 = "hello, here is the test data of sfs small-data local-host pwrite/pread test";
-
         let dpath_sfs = "/sfs\0".to_string();
         let _cres = sfs_create(dpath_sfs.as_ptr() as *const i8, S_IFDIR);
 
