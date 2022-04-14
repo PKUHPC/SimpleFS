@@ -8,8 +8,10 @@ extern "C"{
 }
 #include <optional>
 #include "hook.hpp"
+#include <mutex>
 
 int interception_enabled = 0;
+std::mutex mtx;
 static int
 hook(long syscall_number,
 			long arg0, long arg1,
@@ -18,9 +20,15 @@ hook(long syscall_number,
 			long *result)
 {
     if(interception_enabled == 0){
-        interception_enabled = 1;
-        enable_interception();
-        interception_enabled = 2;
+        if(mtx.try_lock()){
+            interception_enabled = 1;
+            enable_interception();
+            interception_enabled = 2;
+            mtx.unlock();
+        }
+        else{
+            return 1;
+        }
     }
     if(interception_enabled == 1){
         return 1;

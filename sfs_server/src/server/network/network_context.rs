@@ -11,13 +11,12 @@ use regex::Regex;
 use sfs_global::global::{
     distributor::SimpleHashDistributor,
     endpoint::SFSEndpoint,
-    error_msg::error_msg,
     fsconfig::{ENABLE_OUTPUT, HOSTFILE_PATH},
     util::env_util::{get_hostname, get_var},
 };
 use sfs_rpc::proto::server_grpc::SfsHandleClient;
 
-use crate::server::filesystem::storage_context::StorageContext;
+use crate::{server::filesystem::storage_context::StorageContext, error_msg::error_msg};
 
 fn load_host_file(path: &String) -> Result<Vec<(String, String)>, Error> {
     let mut hosts: Vec<(String, String)> = Vec::new();

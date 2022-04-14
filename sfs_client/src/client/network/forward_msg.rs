@@ -440,6 +440,7 @@ pub async fn forward_write(
     for join in joins {
         let post_result = join.unwrap();
         if let Err(_e) = post_result {
+            //println!("{}({} - {}) {:?}", path, chunk_start, chunk_end, _e);
             return (EBUSY, tot_write);
         }
         let response = post_result.unwrap();
@@ -527,6 +528,7 @@ pub async fn forward_read(
     for join in joins {
         let post_result = join.unwrap();
         if let Err(_e) = post_result {
+            //println!("{}({} - {}) {:?}", path, chunk_start, chunk_end, _e);
             return (EBUSY, tot_read);
         }
         let response = post_result.unwrap();
@@ -542,11 +544,12 @@ pub async fn forward_read(
             } else {
                 (read_res.chunk_id - chunk_start) * CHUNK_SIZE - (offset as u64 % CHUNK_SIZE)
             };
+            //println!("{}/{}: {}, {}", tot_read, read_size, data.len(), read_res.nreads);
             unsafe {
                 memcpy(
                     buf.offset(local_offset as isize) as *mut c_void,
                     data.as_ptr() as *const c_void,
-                    read_res.nreads as usize,
+                    data.len() as usize,
                 );
             }
         }

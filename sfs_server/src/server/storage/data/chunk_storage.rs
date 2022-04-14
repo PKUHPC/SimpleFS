@@ -8,10 +8,11 @@ use nix::sys::statfs::statfs;
 
 use sfs_global::global::network::config::CHUNK_SIZE;
 use sfs_global::global::network::forward_data::ChunkStat;
-use sfs_global::global::{error_msg::error_msg, util::path_util::is_absolute};
+use sfs_global::global::{util::path_util::is_absolute};
 
 use lazy_static::*;
 
+use crate::error_msg::error_msg;
 use crate::server::config::TRUNCATE_DIRECTORY;
 use crate::server::filesystem::storage_context::StorageContext;
 
@@ -132,7 +133,6 @@ impl ChunkStorage {
         let f = std::fs::OpenOptions::new()
             .create(true)
             .write(true)
-            .read(true)
             .open(chunk_path)
             .unwrap();
         let mut wrote_tot: u64 = 0;
@@ -168,7 +168,6 @@ impl ChunkStorage {
         let chunk_path =
             ChunkStorage::absolute(&ChunkStorage::get_chunks_path(file_path, chunk_id));
         let open_res = std::fs::OpenOptions::new()
-            .write(true)
             .read(true)
             .open(chunk_path);
         if let Err(_e) = open_res {
@@ -187,7 +186,7 @@ impl ChunkStorage {
                 Ok(0) => break,
                 Ok(n) => {
                     let tmp = buf;
-                    buf = &mut tmp[n..size as usize];
+                    buf = &mut tmp[n..];
                     offset += n as u64;
                     read_tot += n as u64;
                 }

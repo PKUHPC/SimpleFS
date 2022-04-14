@@ -1,6 +1,7 @@
 pub mod config;
 pub mod handle;
 pub mod server;
+pub mod error_msg;
 use crate::server::{config::IGNORE_IF_EXISTS, network::network_context::NetworkContext};
 use crate::server::{
     filesystem::storage_context::StorageContext, storage::data::chunk_storage::*,
@@ -15,7 +16,7 @@ use handle::handle_precreate;
 use libc::{getgid, getuid, EINVAL, ENOENT, S_IFDIR, S_IRWXG, S_IRWXO, S_IRWXU};
 use server::network::network_service::NetworkService;
 use sfs_global::global::distributor::Distributor;
-use sfs_global::global::error_msg::error_msg;
+use error_msg::error_msg;
 use sfs_global::global::network::forward_data::PreCreateData;
 use sfs_global::global::network::post::{i2option, post_result};
 use sfs_global::global::util::serde_util::{deserialize, serialize};

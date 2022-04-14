@@ -632,6 +632,7 @@ fn internal_pread(f: Arc<Mutex<OpenFile>>, buf: *mut c_char, count: i64, offset:
     }
     let path = f.lock().unwrap().get_path().clone();
     let read_res = forward_read(&path, buf, offset, count);
+    //println!("finish: {}", read_res.0);
     if read_res.0 != 0 {
         error_msg(
             "client::sfs_pread".to_string(),

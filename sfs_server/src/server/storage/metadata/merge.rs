@@ -1,6 +1,8 @@
 use rocksdb::MergeOperands;
 use serde::{Deserialize, Serialize};
-use sfs_global::global::{error_msg::error_msg, metadata::Metadata, util::serde_util::deserialize};
+use sfs_global::global::{metadata::Metadata, util::serde_util::deserialize};
+
+use crate::error_msg::error_msg;
 #[derive(Debug, Deserialize, Serialize)]
 pub enum Operand {
     Create { md: Vec<u8> },

@@ -50,7 +50,7 @@ impl NetworkService {
             }
             Ok(post_results) as Result<_, Error>
         };
-        let (sr, rr) = join!(send, receive);
-        sr.and(rr)
+        let (_sr, rr) = join!(send, receive);
+        return rr;
     }
 }
