@@ -5,10 +5,11 @@ use rocksdb::{Options, WriteOptions, DB};
 
 use crate::{
     config::USE_WRITE_AHEAD_LOG,
+    error_msg::error_msg,
     server::{
         config::TRUNCATE_DIRECTORY, filesystem::storage_context::StorageContext,
         storage::metadata::merge,
-    }, error_msg::error_msg,
+    },
 };
 use sfs_global::global::{
     metadata::{Metadata, S_ISDIR},

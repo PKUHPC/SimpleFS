@@ -80,8 +80,8 @@ fn to_index(flag: OpenFileFlags) -> usize {
 pub struct OpenFile {
     type_: FileType,
     path_: String,
-    flags_: Arc<Mutex<BitVec>>,
-    pos_: Arc<Mutex<i64>>,
+    flags_: BitVec,
+    pos_: i64,
     pub entries_: Vec<Arc<SFSDirEntry>>, // for directory
 }
 impl OpenFile {
@@ -109,8 +109,8 @@ impl OpenFile {
         OpenFile {
             type_: _type,
             path_: _path.clone(),
-            flags_: Arc::new(Mutex::new(flag_vec)),
-            pos_: Arc::new(Mutex::new(0)),
+            flags_: flag_vec,
+            pos_: 0,
             entries_: Vec::new(), //pos_mutex_: Mutex::new(0),
                                   //flag_mutex_: Mutex::new(0)
         }
@@ -122,13 +122,13 @@ impl OpenFile {
         self.path_ = new_path;
     }
     pub fn get_pos(&self) -> i64 {
-        *self.pos_.lock().unwrap()
+        self.pos_
     }
     pub fn set_pos(&mut self, new_pos: i64) {
-        *self.pos_.lock().unwrap() = new_pos;
+        self.pos_ = new_pos;
     }
     pub fn get_flag(&self, flag: OpenFileFlags) -> bool {
-        let res = self.flags_.lock().unwrap().get(to_index(flag));
+        let res = self.flags_.get(to_index(flag));
         if let Some(b) = res {
             return b;
         } else {
@@ -137,7 +137,7 @@ impl OpenFile {
         }
     }
     pub fn set_flag(&mut self, flag: OpenFileFlags, new_value: bool) {
-        self.flags_.lock().unwrap().set(to_index(flag), new_value);
+        self.flags_.set(to_index(flag), new_value);
     }
     pub fn get_type(&self) -> FileType {
         self.type_.clone()

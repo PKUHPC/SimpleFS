@@ -189,8 +189,9 @@ mod tests {
 
     #[allow(unused_imports)]
     use libc::{c_char, dirent, stat as Stat, O_CREAT, O_RDWR, SEEK_SET, S_IFDIR, S_IFREG};
+    use serde::{Deserialize, Serialize};
 
-    use crate::client::{syscall::timespec, util::get_metadata};
+    use crate::client::syscall::timespec;
     #[allow(unused_imports)]
     use crate::client::{
         context::{DynamicContext, StaticContext},
@@ -205,21 +206,17 @@ mod tests {
 
     #[test]
     fn test0() {
-        test0_body();
-    }
-    #[tokio::main]
-    async fn test0_body(){     
-        let path1 = "/sfs\0".to_string();
-        sfs_create(path1.as_ptr() as *const i8, S_IFDIR);
-        let path1 = "/sfs".to_string();
-        let mut handles = Vec::new();
-        for _i in 0..20000{
-            let path1 = path1.clone();
-            handles.push(tokio::spawn(async move{get_metadata(&path1, false).unwrap()}));
+        #[derive(Debug, Serialize, Deserialize)]
+        struct Test<'a> {
+            pub data: &'a [u8],
         }
-        for handle in handles{
-            handle.await.unwrap();
-        }
+        let a = (0..10).collect::<Vec<u8>>();
+        let d = Test { data: &a };
+        let mut buf = flexbuffers::FlexbufferSerializer::new();
+        d.serialize(&mut buf).unwrap();
+        let reader = flexbuffers::Reader::get_root(buf.view()).unwrap();
+        let data = Test::deserialize(reader).unwrap();
+        println!("{:?}", data);
     }
     #[test]
     pub fn test1() {

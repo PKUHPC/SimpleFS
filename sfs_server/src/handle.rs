@@ -2,10 +2,9 @@
 use std::time::Instant;
 
 use crate::server::{
-    network::network_context::NetworkContext, storage::data::chunk_storage::ChunkStorage,
+    storage::data::chunk_storage::ChunkStorage,
 };
 use sfs_global::global::{
-    distributor::Distributor,
     network::{
         config::CHUNK_SIZE,
         forward_data::{PreCreateData, ReadData, ReadResult, TruncData, WriteData},
@@ -83,18 +82,12 @@ pub fn handle_precreate(input: &PreCreateData) {
     let path = input.path.to_string();
     ChunkStorage::init_chunk_space(&path);
     for chunk_id in input.chunks.iter() {
-        if NetworkContext::get_instance().get_local_host_id()
-            == NetworkContext::get_instance()
-                .get_distributor()
-                .locate_data(&path, *chunk_id)
-        {
-            let chunk_path =
-                ChunkStorage::absolute(&ChunkStorage::get_chunks_path(&path, *chunk_id));
-            std::fs::OpenOptions::new()
-                .create(true)
-                .write(true)
-                .open(&chunk_path)
-                .unwrap();
-        }
+        let chunk_path =
+            ChunkStorage::absolute(&ChunkStorage::get_chunks_path(&path, *chunk_id));
+        std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(&chunk_path)
+            .unwrap();
     }
 }

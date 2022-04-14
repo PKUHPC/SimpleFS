@@ -92,20 +92,20 @@ pub struct DynamicContext {
     internal_fds_: Mutex<BitVec>,
     protected_fds_: BitVec,
 
-    cwd_: String,
+    cwd_: Mutex<String>,
 }
 lazy_static! {
-    static ref DCTX: Mutex<DynamicContext> = Mutex::new(DynamicContext {
+    static ref DCTX: DynamicContext = DynamicContext {
         open_file_map_: Arc::new(Mutex::new(OpenFileMap::new())),
         internal_fds_: Mutex::new(BitVec::new()),
         protected_fds_: BitVec::from_elem(MAX_INTERNEL_FDS as usize, true),
 
-        cwd_: "".to_string()
-    });
+        cwd_: Mutex::new("".to_string())
+    };
 }
 impl DynamicContext {
-    pub fn get_instance() -> MutexGuard<'static, DynamicContext> {
-        DCTX.lock().unwrap()
+    pub fn get_instance() -> &'static DynamicContext {
+        &DCTX
     }
     pub fn relativize_fd_path(
         &self,
@@ -137,7 +137,7 @@ impl DynamicContext {
         let mut path: String;
         if is_relative(raw_path) {
             if dirfd == AT_FDCWD {
-                path = self.cwd_.clone() + raw_path;
+                path = self.get_cwd().clone() + raw_path;
             } else {
                 if !self.open_file_map_.lock().unwrap().exist(dirfd) {
                     return (RelativizeStatus::FdUnknown, raw_path.to_string());
@@ -183,7 +183,7 @@ impl DynamicContext {
         }
         let path: String;
         if is_relative(&raw_path) {
-            path = self.cwd_.clone() + &raw_path.clone();
+            path = self.get_cwd().clone() + &raw_path.clone();
         } else {
             path = raw_path.clone();
         }
@@ -257,11 +257,11 @@ impl DynamicContext {
         let pos: usize = fd as usize - MIN_INTERNEL_FD as usize;
         return !(*self.internal_fds_.lock().unwrap()).get(pos).unwrap();
     }
-    pub fn set_cwd(&mut self, path: String) {
-        self.cwd_ = path;
+    pub fn set_cwd(&self, path: String) {
+        *self.cwd_.lock().unwrap() = path;
     }
-    pub fn get_cwd(&self) -> &String {
-        &self.cwd_
+    pub fn get_cwd(&self) -> MutexGuard<'_, String> {
+        self.cwd_.lock().unwrap()
     }
 }
 

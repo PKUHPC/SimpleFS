@@ -8,7 +8,7 @@ use nix::sys::statfs::statfs;
 
 use sfs_global::global::network::config::CHUNK_SIZE;
 use sfs_global::global::network::forward_data::ChunkStat;
-use sfs_global::global::{util::path_util::is_absolute};
+use sfs_global::global::util::path_util::is_absolute;
 
 use lazy_static::*;
 
@@ -167,9 +167,7 @@ impl ChunkStorage {
         ChunkStorage::init_chunk_space(file_path);
         let chunk_path =
             ChunkStorage::absolute(&ChunkStorage::get_chunks_path(file_path, chunk_id));
-        let open_res = std::fs::OpenOptions::new()
-            .read(true)
-            .open(chunk_path);
+        let open_res = std::fs::OpenOptions::new().read(true).open(chunk_path);
         if let Err(_e) = open_res {
             error_msg(
                 "server::storage::chunk_storage::read_chunk".to_string(),

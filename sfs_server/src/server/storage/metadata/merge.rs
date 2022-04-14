@@ -20,8 +20,7 @@ pub fn full_merge(
     let mut iter = operands.into_iter();
     if let Some(val) = existing_val {
         md = Metadata::deserialize(&val.to_vec());
-    }
-    else {
+    } else {
         if iter.size_hint().0 == 0 {
             error_msg(
                 "server::merge::full_merge".to_string(),

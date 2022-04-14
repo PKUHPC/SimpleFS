@@ -5,7 +5,7 @@ use std::{
     sync::Arc,
 };
 
-use grpcio::{Environment, ChannelBuilder};
+use grpcio::{ChannelBuilder, Environment};
 use lazy_static::*;
 use regex::Regex;
 use sfs_global::global::{
@@ -16,7 +16,7 @@ use sfs_global::global::{
 };
 use sfs_rpc::proto::server_grpc::SfsHandleClient;
 
-use crate::{server::filesystem::storage_context::StorageContext, error_msg::error_msg};
+use crate::{error_msg::error_msg, server::filesystem::storage_context::StorageContext};
 
 fn load_host_file(path: &String) -> Result<Vec<(String, String)>, Error> {
     let mut hosts: Vec<(String, String)> = Vec::new();

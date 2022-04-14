@@ -1,7 +1,7 @@
 use grpcio::Error;
 use serde::Serialize;
+use sfs_global::global::network::post::post;
 use sfs_global::global::util::serde_util::serialize;
-use sfs_global::global::{network::post::post};
 use sfs_rpc::proto::{server::PostResult, server_grpc::SfsHandleClient};
 
 use sfs_global::global::network::post::{option2i, PostOption};

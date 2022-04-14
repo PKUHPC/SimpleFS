@@ -1,13 +1,14 @@
 pub mod config;
+pub mod error_msg;
 pub mod handle;
 pub mod server;
-pub mod error_msg;
 use crate::server::{config::IGNORE_IF_EXISTS, network::network_context::NetworkContext};
 use crate::server::{
     filesystem::storage_context::StorageContext, storage::data::chunk_storage::*,
     storage::metadata::db::MetadataDB,
 };
 use config::ENABLE_PRECREATE;
+use error_msg::error_msg;
 use futures::channel::oneshot;
 use futures::executor::block_on;
 use futures::{FutureExt, SinkExt, TryFutureExt, TryStreamExt};
@@ -16,9 +17,8 @@ use handle::handle_precreate;
 use libc::{getgid, getuid, EINVAL, ENOENT, S_IFDIR, S_IRWXG, S_IRWXO, S_IRWXU};
 use server::network::network_service::NetworkService;
 use sfs_global::global::distributor::Distributor;
-use error_msg::error_msg;
 use sfs_global::global::network::forward_data::PreCreateData;
-use sfs_global::global::network::post::{i2option, post_result};
+use sfs_global::global::network::post::{i2option, post_result, PostOption};
 use sfs_global::global::util::serde_util::{deserialize, serialize};
 use sfs_global::{
     global::network::post::PostOption::*,
@@ -83,11 +83,7 @@ async fn handle_request(post: &Post) -> PostResult {
                 md.serialize(),
                 IGNORE_IF_EXISTS,
             );
-            return post_result(
-                create_res,
-                vec![0; 0],
-                vec![0; 0],
-            );
+            return post_result(create_res, vec![0; 0], vec![0; 0]);
         }
         Remove => {
             let serde_string: SerdeString = deserialize::<SerdeString>(&post.data);
@@ -141,38 +137,6 @@ async fn handle_request(post: &Post) -> PostResult {
             }
             let path = update_data.path.to_string();
 
-            if ENABLE_PRECREATE {
-                let chunk_start = if let Some(md) = MetadataDB::get_instance().get(&path) {
-                    Metadata::deserialize(&md).get_size() as u64 / CHUNK_SIZE + 1
-                } else {
-                    0
-                };
-                let chunk_end = (update_data.size + update_data.offset as u64) / CHUNK_SIZE;
-                let path = update_data.path.clone().to_string();
-                tokio::spawn(async move {
-                    let mut hosts = HashMap::new();
-                    let distributor = NetworkContext::get_instance().get_distributor();
-                    for chunk_id in chunk_start..(chunk_end + 1) {
-                        let host = distributor.locate_data(&path, chunk_id);
-                        if !hosts.contains_key(&chunk_id) {
-                            hosts.insert(host, Vec::new());
-                        } else {
-                            hosts.get_mut(&host).unwrap().push(chunk_id);
-                        }
-                    }
-                    for (host, chunks) in hosts {
-                        let client = NetworkContext::get_instance()
-                            .get_clients()
-                            .get(host as usize)
-                            .unwrap();
-                        let pre_create = PreCreateData {
-                            path: path.as_str(),
-                            chunks,
-                        };
-                        NetworkService::post::<PreCreateData>(client, pre_create, PreCreate).unwrap();
-                    }
-                });
-            }
             MetadataDB::get_instance().increase_size(
                 &path,
                 update_data.size as usize + update_data.offset as usize,
@@ -272,6 +236,43 @@ impl SfsHandle for ServerHandler {
         req: sfs_rpc::proto::server::Post,
         sink: grpcio::UnarySink<sfs_rpc::proto::server::PostResult>,
     ) {
+        if ENABLE_PRECREATE {
+            if let PostOption::UpdateMetadentry = i2option(req.option) {
+                let update_data: UpdateMetadentryData = deserialize::<UpdateMetadentryData>(&req.data);
+                let chunk_start = if let Some(md) = MetadataDB::get_instance().get(&update_data.path.to_string()) {
+                    Metadata::deserialize(&md).get_size() as u64 / CHUNK_SIZE + 1
+                } else {
+                    0
+                };
+                let chunk_end = (update_data.size + update_data.offset as u64) / CHUNK_SIZE;
+                let path = update_data.path.clone().to_string();
+                let f = async move {
+                    let mut hosts = HashMap::new();
+                    let distributor = NetworkContext::get_instance().get_distributor();
+                    for chunk_id in chunk_start..(chunk_end + 1) {
+                        let host = distributor.locate_data(&path, chunk_id);
+                        if !hosts.contains_key(&chunk_id) {
+                            hosts.insert(host, Vec::new());
+                        } else {
+                            hosts.get_mut(&host).unwrap().push(chunk_id);
+                        }
+                    }
+                    for (host, chunks) in hosts {
+                        let client = NetworkContext::get_instance()
+                            .get_clients()
+                            .get(host as usize)
+                            .unwrap();
+                        let pre_create = PreCreateData {
+                            path: path.as_str(),
+                            chunks,
+                        };
+                        NetworkService::post::<PreCreateData>(client, pre_create, PreCreate)
+                            .unwrap();
+                    }
+                };
+                ctx.spawn(f);
+            }
+        }
         let f = async move {
             let handle_result = handle_request(&req).await;
             sink.success(handle_result);
@@ -343,7 +344,7 @@ async fn init_server(addr: &String) -> Result<(), Error> {
         .unwrap();
     server.start();
     NetworkContext::get_instance();
-    
+
     let (tx, rx) = oneshot::channel();
     thread::spawn(move || {
         println!("Press ENTER to exit...");
