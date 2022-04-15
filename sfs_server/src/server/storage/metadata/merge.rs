@@ -1,6 +1,6 @@
 use rocksdb::MergeOperands;
 use serde::{Deserialize, Serialize};
-use sfs_global::global::{metadata::Metadata, util::serde_util::deserialize};
+use sfs_global::global::{metadata::Metadata, util::serde_util::deserialize, network::config::CHUNK_SIZE};
 
 use crate::error_msg::error_msg;
 #[derive(Debug, Deserialize, Serialize)]
@@ -72,6 +72,9 @@ pub fn full_merge(
                 fsize = size as i64
             }
         }
+    }
+    if fsize as u64 > CHUNK_SIZE{
+        md.unstuff();
     }
     md.set_size(fsize);
     Some(md.serialize())

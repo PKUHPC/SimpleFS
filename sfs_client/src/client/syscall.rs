@@ -2,6 +2,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::ffi::CStr;
 use std::hash::{Hash, Hasher};
 use std::os::raw::c_char;
+use std::slice;
 use std::sync::{Arc, Mutex};
 
 use errno::{set_errno, Errno};
@@ -16,8 +17,9 @@ use libc::{statx, EBADF, EBUSY, EINVAL, EISDIR, ENOENT, ENOTDIR, ENOTEMPTY, ENOT
 
 use sfs_global::global;
 use sfs_global::global::error_msg::error_msg;
-use sfs_global::global::fsconfig::ZERO_BUF_BEFORE_READ;
+use sfs_global::global::fsconfig::{ENABLE_STUFFING, ZERO_BUF_BEFORE_READ};
 use sfs_global::global::metadata::{S_ISDIR, S_ISREG};
+use sfs_global::global::network::config::CHUNK_SIZE;
 use sfs_global::global::util::path_util::dirname;
 
 use super::config::CHECK_PARENT_DIR;
@@ -96,7 +98,7 @@ pub extern "C" fn sfs_open(path: *const c_char, mode: u32, flag: i32) -> i32 {
             return sfs_opendir(path);
         }
         if flag & O_TRUNC != 0 && (flag & O_RDONLY != 0 || flag & O_WRONLY != 0) {
-            if internel_truncate(path, md.get_size(), 0) != 0 {
+            if internal_truncate(path, md.get_size(), 0) != 0 {
                 error_msg(
                     "client::sfs_open".to_string(),
                     "fail to truncate 'O_TRUNC' file".to_string(),
@@ -481,7 +483,7 @@ pub fn internal_lseek(fd: Arc<Mutex<OpenFile>>, offset: i64, whence: i32) -> i64
     return fd.lock().unwrap().get_pos();
 }
 #[no_mangle]
-pub extern "C" fn internel_truncate(path: *const c_char, old_size: i64, new_size: i64) -> i32 {
+pub extern "C" fn internal_truncate(path: *const c_char, old_size: i64, new_size: i64) -> i32 {
     if new_size < 0 || new_size > old_size {
         return -1;
     }
@@ -509,7 +511,7 @@ pub extern "C" fn sfs_truncate(path: *const c_char, length: i64) -> i32 {
         return -1;
     }
     let md = md_res.unwrap();
-    return internel_truncate(path, md.get_size(), length);
+    return internal_truncate(path, md.get_size(), length);
 }
 #[no_mangle]
 pub extern "C" fn sfs_dup(oldfd: i32) -> i32 {
@@ -544,14 +546,28 @@ fn internal_pwrite(f: Arc<Mutex<OpenFile>>, buf: *const c_char, count: i64, offs
         .unwrap()
         .get_flag(super::openfile::OpenFileFlags::Append);
     let path = f.lock().unwrap().get_path().clone();
-    let ret_update_size = forward_update_metadentry_size(&path, count as u64, offset, append_flag);
-    if ret_update_size.0 != 0 {
+    let ret_update_size = if ENABLE_STUFFING && offset + count < CHUNK_SIZE as i64 {
+        forward_update_metadentry_size(
+            &path,
+            count as u64,
+            offset,
+            append_flag,
+            unsafe { slice::from_raw_parts(buf as *const u8, count as usize) }.to_vec(),
+        )
+    } else {
+        forward_update_metadentry_size(&path, count as u64, offset, append_flag, vec![0; 0])
+    };
+    if ret_update_size.0 > 0 {
         error_msg(
             "client::sfs_pwrite".to_string(),
             format!("update metadentry size with error {}", ret_update_size.0),
         );
         set_errno(Errno(ret_update_size.0));
         return -1;
+    }
+    // stuffed file
+    if ret_update_size.0 == -1 {
+        return ret_update_size.1;
     }
     let updated_size = ret_update_size.1;
     let write_res = forward_write(&path, buf, append_flag, offset, count, updated_size);

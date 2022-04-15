@@ -17,6 +17,7 @@ use handle::handle_precreate;
 use libc::{getgid, getuid, EINVAL, ENOENT, S_IFDIR, S_IRWXG, S_IRWXO, S_IRWXU};
 use server::network::network_service::NetworkService;
 use sfs_global::global::distributor::Distributor;
+use sfs_global::global::fsconfig::ENABLE_STUFFING;
 use sfs_global::global::network::forward_data::PreCreateData;
 use sfs_global::global::network::post::{i2option, post_result, PostOption};
 use sfs_global::global::util::serde_util::{deserialize, serialize};
@@ -142,13 +143,21 @@ async fn handle_request(post: &Post) -> PostResult {
                 update_data.size as usize + update_data.offset as usize,
                 update_data.append,
             );
+            let mut extra = vec![0; 0];
+            if ENABLE_STUFFING{
+                let md = Metadata::deserialize(&MetadataDB::get_instance().get(&path).unwrap());
+                if md.is_stuffed(){
+                    let write_tot = ChunkStorage::write_chunk(&path, 0, &post.extra, update_data.size, update_data.offset as u64);
+                    extra = serialize(write_tot);
+                }
+            }
             return post_result(
                 0,
                 (update_data.size as usize + update_data.offset as usize)
                     .to_string()
                     .as_bytes()
                     .to_vec(),
-                vec![0; 0],
+                extra,
             );
         }
         GetMetadentry => {

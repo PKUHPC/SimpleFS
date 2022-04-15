@@ -197,7 +197,7 @@ mod tests {
         context::{DynamicContext, StaticContext},
         path::resolve,
         syscall::{
-            internel_truncate, sfs_create, sfs_dup, sfs_dup2, sfs_getdents, sfs_lseek, sfs_open,
+            internal_truncate, sfs_create, sfs_dup, sfs_dup2, sfs_getdents, sfs_lseek, sfs_open,
             sfs_opendir, sfs_pread, sfs_pwrite, sfs_read, sfs_remove, sfs_rmdir, sfs_stat,
             sfs_write, stat,
         },
@@ -445,7 +445,7 @@ mod tests {
             println!("read: {}", String::from_utf8(buf).unwrap());
         }
 
-        let tres = internel_truncate(fpath_file1.as_str().as_ptr() as *const c_char, len, 13);
+        let tres = internal_truncate(fpath_file1.as_str().as_ptr() as *const c_char, len, 13);
         if tres != 0 {
             println!("truncate error ...");
             return;
@@ -516,7 +516,7 @@ mod tests {
             println!("stat: {:?}", stat);
         }
 
-        let tres = internel_truncate(fpath_file1.as_str().as_ptr() as *const c_char, len, 13);
+        let tres = internal_truncate(fpath_file1.as_str().as_ptr() as *const c_char, len, 13);
         if tres != 0 {
             println!("truncate error ...");
             return;

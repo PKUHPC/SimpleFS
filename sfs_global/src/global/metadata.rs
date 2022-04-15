@@ -23,19 +23,21 @@ pub struct Metadata {
     link_count_: u64,
     size_: i64,
     blocks_: i64,
+    stuffed_: bool
 }
 impl fmt::Display for Metadata {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "c|{0}|{1}|{2}|{3}|{4}|{5}|{6}",
+            "c|{0}|{1}|{2}|{3}|{4}|{5}|{6}|{7}",
             self.get_mode(),
             self.get_size(),
             self.get_access_time(),
             self.get_modify_time(),
             self.get_change_time(),
             self.get_link_count(),
-            self.get_blocks()
+            self.get_blocks(),
+            self.is_stuffed()
         )
     }
 }
@@ -49,6 +51,7 @@ impl Metadata {
             link_count_: 1,
             size_: 0,
             blocks_: 0,
+            stuffed_: true
         }
     }
     pub fn deserialize(binary_str: &Vec<u8>) -> Metadata {
@@ -122,5 +125,11 @@ impl Metadata {
     }
     pub fn set_blocks(&mut self, blocks: i64) {
         self.blocks_ = blocks;
+    }
+    pub fn is_stuffed(&self) -> bool{
+        self.stuffed_
+    }
+    pub fn unstuff(&mut self){
+        self.stuffed_ = false;
     }
 }

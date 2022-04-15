@@ -15,7 +15,7 @@ pub fn post_result(err: i32, data: Vec<u8>, extra: Vec<u8>) -> PostResult{
     res.set_extra(extra);
     res
 }
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum PostOption {
     Lookup,
     Stat,
@@ -36,31 +36,6 @@ pub enum PostOption {
     ReadData,
     PreCreate
 }
-impl Clone for PostOption {
-    fn clone(&self) -> Self {
-        match self {
-            Self::Lookup => Self::Lookup,
-            Self::Stat => Self::Stat,
-            Self::Create => Self::Create,
-            Self::Remove => Self::Remove,
-            Self::RemoveMeta => Self::RemoveMeta,
-            Self::Write => Self::Write,
-            Self::FsConfig => Self::FsConfig,
-            Self::Read => Self::Read,
-            Self::UpdateMetadentry => Self::UpdateMetadentry,
-            Self::GetMetadentry => Self::GetMetadentry,
-            Self::ChunkStat => Self::ChunkStat,
-            Self::DecrSize => Self::DecrSize,
-            Self::Trunc => Self::Trunc,
-            Self::GetDirents => Self::GetDirents,
-            Self::Unknown => Self::Unknown,
-            Self::WriteData => Self::WriteData,
-            Self::ReadData => Self::ReadData,
-            Self::PreCreate => Self::PreCreate,
-        }
-    }
-}
-
 pub fn i2option(n: i32) -> PostOption {
     match n {
         0 => PostOption::Lookup,

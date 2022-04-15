@@ -306,6 +306,7 @@ pub fn forward_update_metadentry_size(
     size: u64,
     offset: i64,
     append_flag: bool,
+    stuff: Vec<u8>,
 ) -> (i32, i64) {
     let update_data = UpdateMetadentryData {
         path: path.as_str(),
@@ -316,18 +317,30 @@ pub fn forward_update_metadentry_size(
     let host_id = StaticContext::get_instance()
         .get_distributor()
         .locate_file_metadata(&path);
-    let post_result = NetworkService::post::<UpdateMetadentryData>(
+    let post_result = NetworkService::post_stuff::<UpdateMetadentryData>(
         StaticContext::get_instance()
             .get_clients()
             .get(host_id as usize)
             .unwrap(),
         update_data,
+        stuff,
         PostOption::UpdateMetadentry,
     );
     if let Err(_e) = post_result {
         return (EBUSY, 0);
     } else {
         let res = post_result.unwrap();
+        // stuffing enabled and the file is stuffed
+        if res.extra.len() != 0 {
+            return (
+                if res.err != 0 { res.err } else { -1 },
+                String::from_utf8(res.extra)
+                    .unwrap()
+                    .as_str()
+                    .parse::<i64>()
+                    .unwrap(),
+            );
+        }
         return (
             if res.err != 0 { res.err } else { 0 },
             String::from_utf8(res.data)

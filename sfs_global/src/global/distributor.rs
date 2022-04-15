@@ -22,6 +22,9 @@ impl Distributor for SimpleHashDistributor {
     }
 
     fn locate_data(&self, path: &String, chunk_id: u64) -> u64 {
+        if chunk_id == 0{
+            return self.locate_file_metadata(path);
+        }
         let s = path.clone() + &chunk_id.to_string();
         xxh3_64(s.as_bytes()) % self.hosts_size_
     }

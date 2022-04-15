@@ -21,6 +21,17 @@ impl NetworkService {
         let post_result = client.handle(&post)?;
         return Ok(post_result);
     }
+    pub fn post_stuff<T: Serialize>(
+        client: &SfsHandleClient,
+        data: T,
+        stuff: Vec<u8>,
+        opt: PostOption,
+    ) -> Result<PostResult, Error> {
+        let serialized_data = serialize(&data);
+        let post = post(option2i(&opt), serialized_data, stuff);
+        let post_result = client.handle(&post)?;
+        return Ok(post_result);
+    }
 
     pub fn group_post(posts: Vec<(&SfsHandleClient, Post)>) -> Result<Vec<PostResult>, Error> {
         let mut post_results: Vec<PostResult> = Vec::new();
