@@ -29,7 +29,7 @@ use sfs_global::{
         network::{
             config::CHUNK_SIZE,
             forward_data::{
-                CreateData, DecrData, DirentData, ReadData, SerdeString, TruncData,
+                CreateData, DecrData, DirentData, ReadData, TruncData,
                 UpdateMetadentryData, WriteData,
             },
         },
@@ -59,8 +59,7 @@ async fn handle_request(post: &Post) -> PostResult {
     let option = i2option(post.option);
     match option {
         Stat => {
-            let serde_string: SerdeString = deserialize::<SerdeString>(&post.data);
-            let path = serde_string.str;
+            let path = deserialize::<&str>(&post.data);
             if ENABLE_OUTPUT {
                 println!("handling metadata of '{}'....", path);
             }
@@ -87,8 +86,7 @@ async fn handle_request(post: &Post) -> PostResult {
             return post_result(create_res, vec![0; 0], vec![0; 0]);
         }
         Remove => {
-            let serde_string: SerdeString = deserialize::<SerdeString>(&post.data);
-            let path = serde_string.str;
+            let path = deserialize::<&str>(&post.data);
             if ENABLE_OUTPUT {
                 println!("handling remove of '{}'....", path);
             }
@@ -96,8 +94,7 @@ async fn handle_request(post: &Post) -> PostResult {
             return post_result(0, vec![0; 0], vec![0; 0]);
         }
         RemoveMeta => {
-            let serde_string: SerdeString = deserialize::<SerdeString>(&post.data);
-            let path = serde_string.str;
+            let path = deserialize::<&str>(&post.data);
             if ENABLE_OUTPUT {
                 println!("handling remove metadata of '{}'....", path);
             }
@@ -164,8 +161,7 @@ async fn handle_request(post: &Post) -> PostResult {
             if ENABLE_OUTPUT {
                 println!("handling get metadentry....");
             }
-            let serde_string: SerdeString = deserialize::<SerdeString>(&post.data);
-            let path = serde_string.str;
+            let path = deserialize::<&str>(&post.data);
             let md_str = MetadataDB::get_instance().get(&path.to_string());
             match md_str {
                 None => {

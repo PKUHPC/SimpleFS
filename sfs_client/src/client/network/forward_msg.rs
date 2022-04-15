@@ -17,7 +17,7 @@ use sfs_global::global::error_msg::error_msg;
 use sfs_global::global::fsconfig::SFSConfig;
 use sfs_global::global::network::config::CHUNK_SIZE;
 use sfs_global::global::network::forward_data::{
-    ChunkStat, CreateData, DecrData, DirentData, ReadData, ReadResult, SerdeString, TruncData,
+    ChunkStat, CreateData, DecrData, DirentData, ReadData, ReadResult, TruncData,
     UpdateMetadentryData, WriteData,
 };
 use sfs_global::global::network::post::{option2i, post, PostOption};
@@ -31,12 +31,12 @@ pub fn forward_stat(path: &String) -> Result<Vec<u8>, i32> {
     let endp_id = StaticContext::get_instance()
         .get_distributor()
         .locate_file_metadata(path);
-    let post_res = NetworkService::post::<SerdeString>(
+    let post_res = NetworkService::post::<&str>(
         StaticContext::get_instance()
             .get_clients()
             .get(endp_id as usize)
             .unwrap(),
-        SerdeString { str: path.as_str() },
+        path.as_str(),
         PostOption::Stat,
     );
     if let Err(e) = post_res {
@@ -85,12 +85,12 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
     let endp_id = StaticContext::get_instance()
         .get_distributor()
         .locate_file_metadata(&path);
-    let _post_res = NetworkService::post::<SerdeString>(
+    let _post_res = NetworkService::post::<&str>(
         StaticContext::get_instance()
             .get_clients()
             .get(endp_id as usize)
             .unwrap(),
-        SerdeString { str: path.as_str() },
+        path.as_str(),
         PostOption::RemoveMeta,
     )?;
     if remove_metadentry_only {
@@ -111,7 +111,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
                 .unwrap(),
             post(
                 option2i(&PostOption::Remove),
-                serialize(&SerdeString { str: path.as_str() }),
+                serialize(path.as_str()),
                 vec![0; 0],
             ),
         ));
@@ -130,7 +130,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
                     .unwrap(),
                 post(
                     option2i(&PostOption::Remove),
-                    serialize(&SerdeString { str: path.as_str() }),
+                    serialize(path.as_str()),
                     vec![0; 0],
                 ),
             ));
@@ -141,7 +141,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
                 client,
                 post(
                     option2i(&PostOption::Remove),
-                    serialize(&SerdeString { str: path.as_str() }),
+                    serialize(path.as_str()),
                     vec![0; 0],
                 ),
             ));
@@ -200,7 +200,7 @@ pub fn forward_get_chunk_stat() -> (i32, ChunkStat) {
     )
 }
 pub fn forward_get_metadentry_size(path: &String) -> (i32, i64) {
-    let post_result = NetworkService::post::<SerdeString>(
+    let post_result = NetworkService::post::<&str>(
         StaticContext::get_instance()
             .get_clients()
             .get(
@@ -209,7 +209,7 @@ pub fn forward_get_metadentry_size(path: &String) -> (i32, i64) {
                     .locate_file_metadata(&path) as usize,
             )
             .unwrap(),
-        SerdeString { str: path.as_str() },
+        path.as_str(),
         PostOption::UpdateMetadentry,
     );
     if let Err(_e) = post_result {

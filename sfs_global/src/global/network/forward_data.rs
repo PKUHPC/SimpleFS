@@ -66,11 +66,6 @@ pub struct DirentData<'a> {
     pub path: &'a str,
     // RDMA buffer?
 }
-#[derive(Serialize, Deserialize, Debug)]
-pub struct SerdeString<'a> {
-    pub str: &'a str,
-    // RDMA buffer?
-}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PreCreateData<'a> {
