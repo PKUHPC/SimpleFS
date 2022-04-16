@@ -235,12 +235,16 @@ impl ChunkStorage {
         }
     }
     pub fn trim_chunk_space(file_path: &String, chunk_start: u64) {
-        let chunk_dir = ChunkStorage::absolute(&ChunkStorage::get_chunks_dir(file_path));
-        let dir_iter = std::fs::read_dir(Path::new(&chunk_dir)).unwrap();
-        let err = false;
         if ENABLE_STUFFING && chunk_start == 0{
             StuffDB::get_instance().remove(file_path);
         }
+        let chunk_dir = ChunkStorage::absolute(&ChunkStorage::get_chunks_dir(file_path));
+        let dir_res = std::fs::read_dir(Path::new(&chunk_dir));
+        if let Err(_e) = dir_res{
+            return;
+        }
+        let dir_iter = dir_res.unwrap();
+        let err = false;
         for entry in dir_iter {
             let entry = entry.unwrap();
             let chunk_path = entry.path();
