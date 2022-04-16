@@ -221,11 +221,7 @@ pub fn forward_get_metadentry_size(path: &String) -> (i32, i64) {
         }
         return (
             0,
-            String::from_utf8(result.data)
-                .unwrap()
-                .as_str()
-                .parse::<i64>()
-                .unwrap(),
+            deserialize::<i64>(&result.data)
         );
     }
 }
@@ -334,20 +330,12 @@ pub fn forward_update_metadentry_size(
         if res.extra.len() != 0 {
             return (
                 if res.err != 0 { res.err } else { -1 },
-                String::from_utf8(res.extra)
-                    .unwrap()
-                    .as_str()
-                    .parse::<i64>()
-                    .unwrap(),
+                deserialize::<u64>(&res.extra) as i64
             );
         }
         return (
             if res.err != 0 { res.err } else { 0 },
-            String::from_utf8(res.data)
-                .unwrap()
-                .as_str()
-                .parse::<i64>()
-                .unwrap(),
+            deserialize::<i64>(&res.data)
         );
     }
 }

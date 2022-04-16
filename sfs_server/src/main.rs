@@ -110,7 +110,7 @@ async fn handle_request(post: &Post) -> PostResult {
             if ENABLE_OUTPUT {
                 println!("handling look up....");
             }
-            return post_result(0, "0".to_string().as_bytes().to_vec(), vec![0; 0]);
+            return post_result(0, vec![0; 0], vec![0; 0]);
         }
         FsConfig => {
             if ENABLE_OUTPUT {
@@ -145,15 +145,14 @@ async fn handle_request(post: &Post) -> PostResult {
                 let md = Metadata::deserialize(&MetadataDB::get_instance().get(&path).unwrap());
                 if md.is_stuffed(){
                     let write_tot = ChunkStorage::write_chunk(&path, 0, &post.extra, update_data.size, update_data.offset as u64);
-                    extra = serialize(write_tot);
+                    if let Ok(len) = write_tot{
+                        extra = serialize(len);
+                    }
                 }
             }
             return post_result(
                 0,
-                (update_data.size as usize + update_data.offset as usize)
-                    .to_string()
-                    .as_bytes()
-                    .to_vec(),
+                serialize(update_data.size + update_data.offset as u64),
                 extra,
             );
         }
@@ -171,7 +170,7 @@ async fn handle_request(post: &Post) -> PostResult {
                     let md = Metadata::deserialize(&str);
                     return post_result(
                         0,
-                        md.get_size().to_string().as_bytes().to_vec(),
+                        serialize(md.get_size()),
                         vec![0; 0],
                     );
                 }

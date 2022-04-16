@@ -617,7 +617,7 @@ mod tests {
         );
 
         let _wres = sfs_write(fd, data1.as_ptr() as *mut i8, data1.len() as i64);
-        let _wres = sfs_pwrite(fd, data2.as_ptr() as *mut i8, data2.len() as i64, 9);
+        let _wres = sfs_pwrite(fd, data2.as_ptr() as *mut i8, 10, 9);
         let buf = vec![0 as u8; 100];
         let res = sfs_pread(fd, buf.as_ptr() as *mut i8, 200, 3);
         if res <= 0 {

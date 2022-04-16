@@ -6,6 +6,7 @@ use std::path::Path;
 use libc::{S_IRUSR, S_IWUSR};
 use nix::sys::statfs::statfs;
 
+use sfs_global::global::fsconfig::ENABLE_STUFFING;
 use sfs_global::global::network::config::CHUNK_SIZE;
 use sfs_global::global::network::forward_data::ChunkStat;
 use sfs_global::global::util::path_util::is_absolute;
@@ -15,6 +16,8 @@ use lazy_static::*;
 use crate::error_msg::error_msg;
 use crate::server::config::TRUNCATE_DIRECTORY;
 use crate::server::filesystem::storage_context::StorageContext;
+
+use super::stuff_db::StuffDB;
 
 #[allow(unused_must_use)]
 pub fn init_chunk() -> ChunkStorage {
@@ -106,6 +109,9 @@ impl ChunkStorage {
         })
     }
     pub fn destroy_chunk_space(file_path: &String) {
+        if ENABLE_STUFFING{
+            StuffDB::get_instance().remove(file_path);
+        }
         let chunk_dir = ChunkStorage::absolute(&ChunkStorage::get_chunks_dir(file_path));
         if let Err(_e) = fs::remove_dir_all(Path::new(&chunk_dir)) {
             error_msg(
@@ -126,6 +132,10 @@ impl ChunkStorage {
                 "server::storage::chunk_storage::write_chunk".to_string(),
                 "beyond chunk storage range".to_string(),
             );
+        }
+        if ENABLE_STUFFING && chunk_id == 0{
+            StuffDB::get_instance().write(file_path, offset, size, buf);
+            return Ok(size);
         }
         ChunkStorage::init_chunk_space(file_path);
         let chunk_path =
@@ -163,6 +173,23 @@ impl ChunkStorage {
                 "server::storage::chunk_storage::read_chunk".to_string(),
                 "beyond chunk storage range".to_string(),
             );
+        }
+        if ENABLE_STUFFING && chunk_id == 0{
+            if let Some(data) = StuffDB::get_instance().get(file_path){
+                if offset as usize > data.len(){
+                    return Err(-1);
+                }
+                let start = offset as usize;
+                let end = std::cmp::min((offset + size) as usize, data.len()); 
+                let mut read = data[start..end].to_vec();
+                let len = read.len() as u64;
+                buf.clear();
+                buf.append(&mut read);
+                return Ok(len);
+            }
+            else{
+                return Err(-1);
+            }
         }
         ChunkStorage::init_chunk_space(file_path);
         let chunk_path =
@@ -211,6 +238,9 @@ impl ChunkStorage {
         let chunk_dir = ChunkStorage::absolute(&ChunkStorage::get_chunks_dir(file_path));
         let dir_iter = std::fs::read_dir(Path::new(&chunk_dir)).unwrap();
         let err = false;
+        if ENABLE_STUFFING && chunk_start == 0{
+            StuffDB::get_instance().remove(file_path);
+        }
         for entry in dir_iter {
             let entry = entry.unwrap();
             let chunk_path = entry.path();
@@ -244,6 +274,10 @@ impl ChunkStorage {
             );
             return;
         }
+        if ENABLE_STUFFING && chunk_id == 0{
+            StuffDB::get_instance().truncate(file_path, length);
+            return;
+        } 
         let chunk_path =
             ChunkStorage::absolute(&ChunkStorage::get_chunks_path(file_path, chunk_id));
         let f_res = fs::OpenOptions::new()
