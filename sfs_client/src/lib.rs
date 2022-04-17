@@ -185,11 +185,10 @@ pub extern "C" fn enable_interception() {
 }
 #[cfg(test)]
 mod tests {
-    use std::thread;
+    use std::{thread, sync::RwLock, collections::HashMap};
 
     #[allow(unused_imports)]
     use libc::{c_char, dirent, stat as Stat, O_CREAT, O_RDWR, SEEK_SET, S_IFDIR, S_IFREG};
-    use serde::{Deserialize, Serialize};
 
     use crate::client::syscall::timespec;
     #[allow(unused_imports)]
@@ -206,17 +205,17 @@ mod tests {
 
     #[test]
     fn test0() {
-        #[derive(Debug, Serialize, Deserialize)]
-        struct Test<'a> {
-            pub data: &'a [u8],
+        let item = RwLock::new(5);
+        let mut map = HashMap::new();
+        map.insert(120, item.read().unwrap());
+        if let Err(_e) = item.try_write(){
+            println!("can't write before remove");
         }
-        let a = (0..10).collect::<Vec<u8>>();
-        let d = Test { data: &a };
-        let mut buf = flexbuffers::FlexbufferSerializer::new();
-        d.serialize(&mut buf).unwrap();
-        let reader = flexbuffers::Reader::get_root(buf.view()).unwrap();
-        let data = Test::deserialize(reader).unwrap();
-        println!("{:?}", data);
+        map.remove(&120);  
+        if let Ok(_mg) = item.try_write(){
+            println!("can write after remove");
+        }
+        ;
     }
     #[test]
     pub fn test1() {
@@ -828,22 +827,32 @@ mod tests {
             println!("open error on thread {} ...", 1);
             return;
         }
-        for i in 0..1600 {
+        let thread = 100;
+        let cnt = 3;
+        for i in 0..thread {
             handles.push(thread::spawn(move || {
                 //println!("file {} opened on thread {} ...", fd, i);
-                let cnt = 1;
                 let data = vec!['a' as i8; cnt * CHUNK_SIZE as usize];
                 let res = sfs_write(fd, data.as_ptr() as *mut i8, data.len() as i64);
                 if res <= 0 {
                     println!("write error on thread {} ...", i);
                     return;
                 } else {
-                    //println!("{} bytes written on thread {} ...", res, i);
+                    println!("{} bytes written on thread {} ...", res, i);
                 }
             }))
         }
         for handle in handles {
             handle.join();
+        }
+        sfs_lseek(fd, 0, SEEK_SET);
+        let mut buf = vec![0 as u8; cnt * thread * CHUNK_SIZE as usize];
+        let res = sfs_read(fd, buf.as_mut_ptr() as *mut i8, cnt as i64 * thread as i64 * CHUNK_SIZE as i64);
+        if res <= 0 {
+            println!("read error ...");
+            return;
+        } else {
+            println!("{} bytes read", res);
         }
     }
     #[test]

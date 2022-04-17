@@ -1,7 +1,12 @@
+#[allow(unused)]
+use futures::Future;
+#[allow(unused)]
 use lazy_static::*;
-use std::{fs, io::Read, path::Path};
+#[allow(unused)]
+use std::{collections::HashMap, fs, io::Read, path::Path, sync::{Mutex, Arc}, task::Poll};
 
-use crate::server::{config::ServerConfig, storage::metadata::db::MetadataDB};
+#[allow(unused)]
+use crate::{server::{config::ServerConfig, storage::metadata::db::MetadataDB}, error_msg::error_msg};
 
 pub fn init_context() -> StorageContext {
     let mut context = StorageContext::new();
@@ -28,7 +33,13 @@ pub fn init_context() -> StorageContext {
     let root_dirpath = config.rootdir;
     //let root_dirpath = root_dir + &std::process::id().to_string();
     fs::create_dir_all(Path::new(&root_dirpath)).expect("fail to create root directory");
-    context.set_rootdir(root_dirpath);
+    context.set_rootdir(
+        fs::canonicalize(&root_dirpath)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string(),
+    );
     context.set_metadir(
         fs::canonicalize(&config.metadir)
             .unwrap()
@@ -177,3 +188,107 @@ impl StorageContext {
         self.host_id_
     }
 }
+/*
+enum RwStat {
+    Read { readers: u64 },
+    Write { writers: u64 },
+    Idle,
+}
+pub struct RwRead {
+    lock: Arc<Mutex<RwLock>>,
+}
+impl Future for RwRead {
+    type Output = bool;
+
+    fn poll(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        if self.lock.lock().unwrap().can_read(){
+            return Poll::Ready(true);
+        }
+        else{
+            return Poll::Pending;
+        }
+    }
+}
+pub struct RwLock {
+    stat_: Arc<Mutex<RwStat>>,
+}
+impl RwLock {
+    pub fn new() -> RwLock {
+        RwLock {
+            stat_: Arc::new(Mutex::new(RwStat::Idle)),
+        }
+    }
+    pub fn can_read(&mut self) -> bool {
+        let mut guard = self.stat_.lock().unwrap();
+        match *guard {
+            RwStat::Read { readers } => {
+                *guard = RwStat::Read { readers: readers + 1 };
+                return true;
+            },
+            RwStat::Write { writers } => {
+                if writers > 0 {
+                    return false;
+                } else {
+                    *guard = RwStat::Read { readers: 1 };
+                    return true;
+                }
+            }
+            RwStat::Idle => {
+                *guard = RwStat::Read { readers: 1 };
+                return true;
+            }
+        }
+    }
+    pub fn unread(&mut self){
+        let mut guard = self.stat_.lock().unwrap();
+        match *guard {
+            RwStat::Read { readers } => {
+                if readers > 1{
+                    *guard = RwStat::Read { readers: readers - 1 };
+                }
+                else{
+                    *guard = RwStat::Idle;
+                }
+            },
+            RwStat::Write { writers: _writers } => {
+                error_msg("global_lock::unread".to_string(), "try to unread a writing lock".to_string());
+            }
+            RwStat::Idle => {
+                error_msg("global_lock::unread".to_string(), "try to unread a idle lock".to_string());
+            }
+        }
+    }
+}
+
+pub enum RwOperate {
+    Read {id: u64},
+    Write {id: u64}
+}
+pub struct GlobalLock {
+    global_lock_: HashMap<u64, Arc<Mutex<RwLock>>>,
+}
+lazy_static! {
+    static ref LOCK: Mutex<GlobalLock> = Mutex::new(GlobalLock {
+        global_lock_: HashMap::new()
+    });
+}
+impl GlobalLock{
+    pub fn unlock(&self, op: RwOperate){
+        match op{
+            RwOperate::Read { id } => {
+                if let Some(lock) = self.global_lock_.get(&id){
+                    lock.lock().unwrap().unread();
+                }
+            },
+            RwOperate::Write { id } => {
+                if let Some(lock) = self.global_lock_.get(&id){
+                    lock.lock().unwrap().unread();
+                }
+            },
+        }
+    }
+}
+*/

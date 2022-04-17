@@ -1,5 +1,6 @@
 use std::fs;
 use std::os::unix::fs::PermissionsExt;
+#[allow(unused)]
 use std::os::unix::prelude::FileExt;
 use std::path::Path;
 
@@ -14,7 +15,7 @@ use sfs_global::global::util::path_util::is_absolute;
 use lazy_static::*;
 
 use crate::error_msg::error_msg;
-use crate::server::config::TRUNCATE_DIRECTORY;
+use crate::server::config::{STUFF_WITH_ROCKSDB, TRUNCATE_DIRECTORY};
 use crate::server::filesystem::storage_context::StorageContext;
 
 use super::stuff_db::StuffDB;
@@ -109,7 +110,7 @@ impl ChunkStorage {
         })
     }
     pub fn destroy_chunk_space(file_path: &String) {
-        if ENABLE_STUFFING{
+        if ENABLE_STUFFING && STUFF_WITH_ROCKSDB {
             StuffDB::get_instance().remove(file_path);
         }
         let chunk_dir = ChunkStorage::absolute(&ChunkStorage::get_chunks_dir(file_path));
@@ -133,7 +134,7 @@ impl ChunkStorage {
                 "beyond chunk storage range".to_string(),
             );
         }
-        if ENABLE_STUFFING && chunk_id == 0{
+        if ENABLE_STUFFING && STUFF_WITH_ROCKSDB && chunk_id == 0 {
             StuffDB::get_instance().write(file_path, offset, size, buf);
             return Ok(size);
         }
@@ -146,6 +147,7 @@ impl ChunkStorage {
             .open(chunk_path)
             .unwrap();
         let mut wrote_tot: u64 = 0;
+
         while wrote_tot != size {
             if let Ok(bytes) =
                 f.write_at(&buf[wrote_tot as usize..size as usize], offset + wrote_tot)
@@ -159,7 +161,7 @@ impl ChunkStorage {
                 return Err(-1);
             }
         }
-        Ok(wrote_tot)
+        Ok(wrote_tot as u64)
     }
     pub fn read_chunk(
         file_path: &String,
@@ -174,20 +176,19 @@ impl ChunkStorage {
                 "beyond chunk storage range".to_string(),
             );
         }
-        if ENABLE_STUFFING && chunk_id == 0{
-            if let Some(data) = StuffDB::get_instance().get(file_path){
-                if offset as usize > data.len(){
+        if ENABLE_STUFFING && STUFF_WITH_ROCKSDB && chunk_id == 0 {
+            if let Some(data) = StuffDB::get_instance().get(file_path) {
+                if offset as usize > data.len() {
                     return Err(-1);
                 }
                 let start = offset as usize;
-                let end = std::cmp::min((offset + size) as usize, data.len()); 
+                let end = std::cmp::min((offset + size) as usize, data.len());
                 let mut read = data[start..end].to_vec();
                 let len = read.len() as u64;
                 buf.clear();
                 buf.append(&mut read);
                 return Ok(len);
-            }
-            else{
+            } else {
                 return Err(-1);
             }
         }
@@ -229,18 +230,18 @@ impl ChunkStorage {
                 "server::storage::chunk_storage::read_chunk".to_string(),
                 "unable to fill the buf because of reaching EOF".to_string(),
             );
-            Ok(read_tot)
+            Ok(read_tot as u64)
         } else {
-            Ok(read_tot)
+            Ok(read_tot as u64)
         }
     }
     pub fn trim_chunk_space(file_path: &String, chunk_start: u64) {
-        if ENABLE_STUFFING && chunk_start == 0{
+        if ENABLE_STUFFING && STUFF_WITH_ROCKSDB && chunk_start == 0 {
             StuffDB::get_instance().remove(file_path);
         }
         let chunk_dir = ChunkStorage::absolute(&ChunkStorage::get_chunks_dir(file_path));
         let dir_res = std::fs::read_dir(Path::new(&chunk_dir));
-        if let Err(_e) = dir_res{
+        if let Err(_e) = dir_res {
             return;
         }
         let dir_iter = dir_res.unwrap();
@@ -278,10 +279,10 @@ impl ChunkStorage {
             );
             return;
         }
-        if ENABLE_STUFFING && chunk_id == 0{
+        if ENABLE_STUFFING && STUFF_WITH_ROCKSDB && chunk_id == 0 {
             StuffDB::get_instance().truncate(file_path, length);
             return;
-        } 
+        }
         let chunk_path =
             ChunkStorage::absolute(&ChunkStorage::get_chunks_path(file_path, chunk_id));
         let f_res = fs::OpenOptions::new()

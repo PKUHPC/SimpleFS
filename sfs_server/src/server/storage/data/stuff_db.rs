@@ -1,19 +1,20 @@
-
 use std::path::Path;
 
 use lazy_static::*;
 use libc::EINVAL;
-use rocksdb::{DB, Options, WriteOptions};
+use rocksdb::{Options, WriteOptions, DB};
 use sfs_global::global::{error_msg::error_msg, util::serde_util::serialize};
 
-use crate::{server::{filesystem::storage_context::StorageContext, config::TRUNCATE_DIRECTORY}, config::USE_WRITE_AHEAD_LOG};
+use crate::{
+    config::USE_WRITE_AHEAD_LOG,
+    server::{config::TRUNCATE_DIRECTORY, filesystem::storage_context::StorageContext},
+};
 
 use super::merge::{self, Operand};
 
 #[allow(unused_must_use)]
 pub fn init_sdb() -> StuffDB {
-    let stuff_path =
-        StorageContext::get_instance().get_rootdir().clone() + &"/stuff".to_string();
+    let stuff_path = StorageContext::get_instance().get_rootdir().clone() + &"/stuff".to_string();
 
     if TRUNCATE_DIRECTORY {
         std::fs::remove_dir_all(Path::new(&stuff_path));
@@ -30,8 +31,8 @@ pub struct StuffDB {
 lazy_static! {
     static ref SDB: StuffDB = init_sdb();
 }
-impl StuffDB{
-    pub fn get_instance() -> &'static StuffDB{
+impl StuffDB {
+    pub fn get_instance() -> &'static StuffDB {
         &SDB
     }
     pub fn optimize_rocksdb_options(options: &mut Options) {
@@ -76,7 +77,11 @@ impl StuffDB{
     }
     pub fn write(&self, key: &String, offset: u64, size: u64, data: &[u8]) -> i32 {
         //println!("putting key: {}", key);
-        let op = Operand::Write { offset, size, data: data.to_vec() };
+        let op = Operand::Write {
+            offset,
+            size,
+            data: data.to_vec(),
+        };
         let v = serialize(op);
         if let Err(_e) = self.db.merge_opt(key, v, &self.write_opts) {
             error_msg(

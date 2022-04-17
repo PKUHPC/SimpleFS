@@ -16,6 +16,7 @@ use grpcio::{Environment, ServerBuilder, WriteFlags};
 use handle::handle_precreate;
 use libc::{getgid, getuid, EINVAL, ENOENT, S_IFDIR, S_IRWXG, S_IRWXO, S_IRWXU};
 use server::network::network_service::NetworkService;
+use server::storage::data::stuff_db::StuffDB;
 use sfs_global::global::distributor::Distributor;
 use sfs_global::global::fsconfig::ENABLE_STUFFING;
 use sfs_global::global::network::forward_data::PreCreateData;
@@ -29,8 +30,8 @@ use sfs_global::{
         network::{
             config::CHUNK_SIZE,
             forward_data::{
-                CreateData, DecrData, DirentData, ReadData, TruncData,
-                UpdateMetadentryData, WriteData,
+                CreateData, DecrData, DirentData, ReadData, TruncData, UpdateMetadentryData,
+                WriteData,
             },
         },
         util::net_util::get_my_hostname,
@@ -141,11 +142,17 @@ async fn handle_request(post: &Post) -> PostResult {
                 update_data.append,
             );
             let mut extra = vec![0; 0];
-            if ENABLE_STUFFING{
+            if ENABLE_STUFFING {
                 let md = Metadata::deserialize(&MetadataDB::get_instance().get(&path).unwrap());
-                if md.is_stuffed(){
-                    let write_tot = ChunkStorage::write_chunk(&path, 0, &post.extra, update_data.size, update_data.offset as u64);
-                    if let Ok(len) = write_tot{
+                if md.is_stuffed() {
+                    let write_tot = ChunkStorage::write_chunk(
+                        &path,
+                        0,
+                        &post.extra,
+                        update_data.size,
+                        update_data.offset as u64,
+                    );
+                    if let Ok(len) = write_tot {
                         extra = serialize(len);
                     }
                 }
@@ -168,11 +175,7 @@ async fn handle_request(post: &Post) -> PostResult {
                 }
                 Some(str) => {
                     let md = Metadata::deserialize(&str);
-                    return post_result(
-                        0,
-                        serialize(md.get_size()),
-                        vec![0; 0],
-                    );
+                    return post_result(0, serialize(md.get_size()), vec![0; 0]);
                 }
             }
         }
@@ -242,8 +245,11 @@ impl SfsHandle for ServerHandler {
     ) {
         if ENABLE_PRECREATE {
             if let PostOption::UpdateMetadentry = i2option(req.option) {
-                let update_data: UpdateMetadentryData = deserialize::<UpdateMetadentryData>(&req.data);
-                let chunk_start = if let Some(md) = MetadataDB::get_instance().get(&update_data.path.to_string()) {
+                let update_data: UpdateMetadentryData =
+                    deserialize::<UpdateMetadentryData>(&req.data);
+                let chunk_start = if let Some(md) =
+                    MetadataDB::get_instance().get(&update_data.path.to_string())
+                {
                     Metadata::deserialize(&md).get_size() as u64 / CHUNK_SIZE + 1
                 } else {
                     0
@@ -384,6 +390,7 @@ fn populates_host_file() -> Option<Error> {
 async fn init_environment() -> Result<(), Error> {
     ChunkStorage::get_instance();
     MetadataDB::get_instance();
+    StuffDB::get_instance();
 
     let mut root_md = Metadata::new();
     root_md.set_mode(S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO);

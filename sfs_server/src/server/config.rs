@@ -7,6 +7,6 @@ pub struct ServerConfig {
     pub hosts_file: String,
     pub listen: String,
 }
-
+pub const STUFF_WITH_ROCKSDB: bool = false;
 pub const IGNORE_IF_EXISTS: bool = true;
 pub const TRUNCATE_DIRECTORY: bool = true;

@@ -1,9 +1,7 @@
 #[allow(unused)]
 use std::time::Instant;
 
-use crate::server::{
-    storage::data::chunk_storage::ChunkStorage,
-};
+use crate::server::storage::data::chunk_storage::ChunkStorage;
 use sfs_global::global::{
     network::{
         config::CHUNK_SIZE,
@@ -82,11 +80,9 @@ pub fn handle_precreate(input: &PreCreateData) {
     let path = input.path.to_string();
     ChunkStorage::init_chunk_space(&path);
     for chunk_id in input.chunks.iter() {
-        let chunk_path =
-            ChunkStorage::absolute(&ChunkStorage::get_chunks_path(&path, *chunk_id));
+        let chunk_path = ChunkStorage::absolute(&ChunkStorage::get_chunks_path(&path, *chunk_id));
         std::fs::OpenOptions::new()
             .create(true)
-            .write(true)
             .open(&chunk_path)
             .unwrap();
     }

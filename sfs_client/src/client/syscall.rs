@@ -3,7 +3,7 @@ use std::ffi::CStr;
 use std::hash::{Hash, Hasher};
 use std::os::raw::c_char;
 use std::slice;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use errno::{set_errno, Errno};
 #[allow(unused_imports)]
@@ -435,9 +435,9 @@ pub extern "C" fn sfs_lseek(fd: i32, offset: i64, whence: i32) -> i64 {
     if let None = f_res {
         return -1;
     }
-    internal_lseek(f_res.unwrap(), offset, whence)
+    internal_lseek(f_res.unwrap().lock().unwrap(), offset, whence).1
 }
-pub fn internal_lseek(fd: Arc<Mutex<OpenFile>>, offset: i64, whence: i32) -> i64 {
+pub fn internal_lseek(mut fd: MutexGuard<'_, OpenFile>, offset: i64, whence: i32) -> (MutexGuard<'_, OpenFile>, i64) {
     match whence {
         SEEK_SET => {
             if offset < 0 {
@@ -446,41 +446,42 @@ pub fn internal_lseek(fd: Arc<Mutex<OpenFile>>, offset: i64, whence: i32) -> i64
                     "offset must be positive".to_string(),
                 );
                 set_errno(Errno(EINVAL));
-                return -1;
+                return (fd, -1);
             }
-            fd.lock().unwrap().set_pos(offset);
+            fd.set_pos(offset);
         }
         SEEK_CUR => {
-            let curr_pos = fd.lock().unwrap().get_pos();
-            fd.lock().unwrap().set_pos(curr_pos + offset);
+            let curr_pos = fd.get_pos();
+            fd.set_pos(curr_pos + offset);
         }
         SEEK_END => {
-            let ret = forward_get_metadentry_size(fd.lock().unwrap().get_path());
+            let ret = forward_get_metadentry_size(fd.get_path());
             if ret.0 != 0 {
                 set_errno(Errno(ret.0));
-                return -1;
+                return (fd, -1);
             }
             let file_size = ret.1;
             if offset < 0 && file_size < -offset {
                 set_errno(Errno(EINVAL));
-                return -1;
+                return (fd, -1);
             }
-            fd.lock().unwrap().set_pos(file_size + offset);
+            fd.set_pos(file_size + offset);
         }
         SEEK_DATA => {
             set_errno(Errno(EINVAL));
-            return -1;
+            return (fd, -1);
         }
         SEEK_HOLE => {
             set_errno(Errno(EINVAL));
-            return -1;
+            return (fd, -1);
         }
         _ => {
             set_errno(Errno(EINVAL));
-            return -1;
+            return (fd, -1);
         }
     }
-    return fd.lock().unwrap().get_pos();
+    let pos = fd.get_pos();
+    return (fd, pos);
 }
 #[no_mangle]
 pub extern "C" fn internal_truncate(path: *const c_char, old_size: i64, new_size: i64) -> i32 {
@@ -529,33 +530,30 @@ pub extern "C" fn sfs_dup2(oldfd: i32, newfd: i32) -> i32 {
         .unwrap()
         .dup2(oldfd, newfd);
 }
-fn internal_pwrite(f: Arc<Mutex<OpenFile>>, buf: *const c_char, count: i64, offset: i64) -> i64 {
-    match f.lock().unwrap().get_type() {
+fn internal_pwrite(f: MutexGuard<'_, OpenFile>, buf: *const c_char, count: i64, offset: i64) -> (MutexGuard<'_, OpenFile>, i64) {
+    match f.get_type() {
         FileType::SFS_DIRECTORY => {
             error_msg(
                 "client::sfs_pwrite".to_string(),
                 "can not write directory".to_string(),
             );
             set_errno(Errno(EISDIR));
-            return -1;
+            return (f, -1);
         }
         FileType::SFS_REGULAR => {}
     }
-    let append_flag = f
-        .lock()
-        .unwrap()
-        .get_flag(super::openfile::OpenFileFlags::Append);
-    let path = f.lock().unwrap().get_path().clone();
+    let append_flag = f.get_flag(super::openfile::OpenFileFlags::Append);
+    let path = f.get_path();
     let ret_update_size = if ENABLE_STUFFING && offset + count < CHUNK_SIZE as i64 {
         forward_update_metadentry_size(
-            &path,
+            path,
             count as u64,
             offset,
             append_flag,
             unsafe { slice::from_raw_parts(buf as *const u8, count as usize) }.to_vec(),
         )
     } else {
-        forward_update_metadentry_size(&path, count as u64, offset, append_flag, vec![0; 0])
+        forward_update_metadentry_size(path, count as u64, offset, append_flag, vec![0; 0])
     };
     if ret_update_size.0 > 0 {
         error_msg(
@@ -563,14 +561,14 @@ fn internal_pwrite(f: Arc<Mutex<OpenFile>>, buf: *const c_char, count: i64, offs
             format!("update metadentry size with error {}", ret_update_size.0),
         );
         set_errno(Errno(ret_update_size.0));
-        return -1;
+        return (f, -1);
     }
     // stuffed file
     if ret_update_size.0 == -1 {
-        return ret_update_size.1;
+        return (f, ret_update_size.1);
     }
     let updated_size = ret_update_size.1;
-    let write_res = forward_write(&path, buf, append_flag, offset, count, updated_size);
+    let write_res = forward_write(path, buf, append_flag, offset, count, updated_size);
 
     if write_res.0 != 0 {
         error_msg(
@@ -578,9 +576,9 @@ fn internal_pwrite(f: Arc<Mutex<OpenFile>>, buf: *const c_char, count: i64, offs
             format!("write with error {}", write_res.0),
         );
         set_errno(Errno(write_res.0));
-        return -1;
+        return (f, -1);
     }
-    return write_res.1;
+    return (f, write_res.1);
 }
 #[no_mangle]
 pub extern "C" fn sfs_pwrite(fd: i32, buf: *const c_char, count: i64, offset: i64) -> i64 {
@@ -598,7 +596,7 @@ pub extern "C" fn sfs_pwrite(fd: i32, buf: *const c_char, count: i64, offset: i6
         return -1;
     }
     let f = f.unwrap();
-    return internal_pwrite(f, buf, count, offset);
+    return internal_pwrite(f.lock().unwrap(), buf, count, offset).1;
 }
 #[no_mangle]
 pub extern "C" fn sfs_write(fd: i32, buf: *const c_char, count: i64) -> i64 {
@@ -616,28 +614,27 @@ pub extern "C" fn sfs_write(fd: i32, buf: *const c_char, count: i64) -> i64 {
         return -1;
     }
     let f = f.unwrap();
-    let pos = f.lock().unwrap().get_pos();
-    if f.lock()
-        .unwrap()
-        .get_flag(super::openfile::OpenFileFlags::Append)
+    let mut mg = f.lock().unwrap();
+    let pos = mg.get_pos();
+    if mg.get_flag(super::openfile::OpenFileFlags::Append)
     {
-        internal_lseek(Arc::clone(&f), 0, SEEK_END);
+        mg = internal_lseek(mg, 0, SEEK_END).0;
     }
-    let write_res = internal_pwrite(Arc::clone(&f), buf, count, pos);
+    let (mut mg, write_res) = internal_pwrite(mg, buf, count, pos);
     if write_res > 0 {
-        f.lock().unwrap().set_pos(pos + count);
+        mg.set_pos(pos + count);
     }
     return write_res;
 }
-fn internal_pread(f: Arc<Mutex<OpenFile>>, buf: *mut c_char, count: i64, offset: i64) -> i64 {
-    match f.lock().unwrap().get_type() {
+fn internal_pread(f: MutexGuard<'_, OpenFile>, buf: *mut c_char, count: i64, offset: i64) -> (MutexGuard<'_, OpenFile>, i64) {
+    match f.get_type() {
         FileType::SFS_DIRECTORY => {
             error_msg(
                 "client::sfs_pread".to_string(),
                 "can not read directory".to_string(),
             );
             set_errno(Errno(EISDIR));
-            return -1;
+            return (f, -1);
         }
         FileType::SFS_REGULAR => {}
     }
@@ -646,8 +643,8 @@ fn internal_pread(f: Arc<Mutex<OpenFile>>, buf: *mut c_char, count: i64, offset:
             memset(buf as *mut c_void, 0, count as usize);
         }
     }
-    let path = f.lock().unwrap().get_path().clone();
-    let read_res = forward_read(&path, buf, offset, count);
+    let path = f.get_path();
+    let read_res = forward_read(path, buf, offset, count);
     //println!("finish: {}", read_res.0);
     if read_res.0 != 0 {
         error_msg(
@@ -655,9 +652,9 @@ fn internal_pread(f: Arc<Mutex<OpenFile>>, buf: *mut c_char, count: i64, offset:
             format!("read with error {}", read_res.0),
         );
         set_errno(Errno(read_res.0));
-        return -1;
+        return (f, -1);
     }
-    return read_res.1 as i64;
+    return (f, read_res.1 as i64);
 }
 #[no_mangle]
 pub extern "C" fn sfs_pread(fd: i32, buf: *mut c_char, count: i64, offset: i64) -> i64 {
@@ -675,7 +672,7 @@ pub extern "C" fn sfs_pread(fd: i32, buf: *mut c_char, count: i64, offset: i64) 
         return -1;
     }
     let f = f.unwrap();
-    return internal_pread(Arc::clone(&f), buf, count, offset);
+    return internal_pread(f.lock().unwrap(), buf, count, offset).1;
 }
 #[no_mangle]
 pub extern "C" fn sfs_read(fd: i32, buf: *mut c_char, count: i64) -> i64 {
@@ -690,10 +687,11 @@ pub extern "C" fn sfs_read(fd: i32, buf: *mut c_char, count: i64) -> i64 {
         return -1;
     }
     let f = f.unwrap();
-    let pos = f.lock().unwrap().get_pos();
-    let read_res = internal_pread(Arc::clone(&f), buf, count, pos);
+    let mg = f.lock().unwrap();
+    let pos = mg.get_pos();
+    let (mut mg, read_res) = internal_pread(mg, buf, count, pos);
     if read_res > 0 {
-        f.lock().unwrap().set_pos(pos + count);
+        mg.set_pos(pos + count);
     }
     return read_res;
 }
