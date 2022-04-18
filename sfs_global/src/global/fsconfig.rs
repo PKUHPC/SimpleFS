@@ -46,4 +46,4 @@ impl Clone for SFSConfig {
 pub static ZERO_BUF_BEFORE_READ: bool = false;
 pub static CWD: &str = "SFS_CWD";
 pub static ENABLE_OUTPUT: bool = false;
-pub static ENABLE_STUFFING: bool = true;
+pub static ENABLE_STUFFING: bool = false;

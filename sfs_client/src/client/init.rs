@@ -90,7 +90,7 @@ fn lookup_endpoint(
         "fail to connect to target host",
     ))
 }
-fn connect_hosts(hosts: &mut Vec<(String, String)>, context: &mut StaticContext) -> bool {
+fn connect_hosts(hosts: &mut Vec<(String, String)>, context: &mut StaticContext) -> u64 {
     let local_hostname = get_hostname(true);
     if ENABLE_OUTPUT {
         println!("localhost name: {}", local_hostname);
@@ -104,13 +104,13 @@ fn connect_hosts(hosts: &mut Vec<(String, String)>, context: &mut StaticContext)
         let hostname = &hosts.get(id as usize).unwrap().0;
         let uri = &hosts.get(id as usize).unwrap().1;
 
-        let lookup = lookup_endpoint(uri, 3, id);
+        let lookup = lookup_endpoint(uri, 1, id);
         if let Err(_e) = lookup {
             error_msg(
                 "client::init::connect_hosts".to_string(),
                 format!("can not reach host '{}' with '{}'", hostname, uri),
             );
-            return false;
+            return 0;
         } else {
             let res = lookup.unwrap();
             addrs.push(res.0);
@@ -125,10 +125,10 @@ fn connect_hosts(hosts: &mut Vec<(String, String)>, context: &mut StaticContext)
     if !local_host_found {
         context.set_local_host_id(0);
     }
-
+    let len = addrs.len() as u64;
     context.set_hosts(addrs);
     context.set_clients(clients);
-    return true;
+    return len;
 }
 fn read_host_file() -> Vec<(String, String)> {
     let hostfile = get_var("HOST_FILE".to_string(), HOSTFILE_PATH.to_string().clone());
@@ -150,11 +150,11 @@ pub fn init_environment() -> StaticContext {
     if ENABLE_OUTPUT {
         println!("found hosts: {:?}", hosts);
     }
-    if !connect_hosts(&mut hosts, &mut context) {
+    let host_len = connect_hosts(&mut hosts, &mut context);
+    if host_len == 0{
         return context;
     }
     let host_id = context.get_local_host_id();
-    let host_len = context.get_hosts().len() as u64;
     let distributor = SimpleHashDistributor::new(host_id, host_len);
     context.set_distributor(distributor);
 
