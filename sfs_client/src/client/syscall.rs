@@ -568,8 +568,8 @@ fn internal_pwrite(f: MutexGuard<'_, OpenFile>, buf: *const c_char, count: i64, 
         return (f, ret_update_size.1);
     }
     let updated_size = ret_update_size.1;
-    let write_res = forward_write(path, buf, append_flag, offset, count, updated_size);
-
+    let write_res = //forward_write(path, buf, append_flag, offset, count, updated_size);
+        DynamicContext::get_instance().get_runtime().block_on(forward_write(path, buf, append_flag, offset, count, updated_size));
     if write_res.0 != 0 {
         error_msg(
             "client::sfs_pwrite".to_string(),
@@ -644,7 +644,8 @@ fn internal_pread(f: MutexGuard<'_, OpenFile>, buf: *mut c_char, count: i64, off
         }
     }
     let path = f.get_path();
-    let read_res = forward_read(path, buf, offset, count);
+    let read_res = //forward_read(path, buf, offset, count);
+        DynamicContext::get_instance().get_runtime().block_on(forward_read(path, buf, offset, count));
     //println!("finish: {}", read_res.0);
     if read_res.0 != 0 {
         error_msg(

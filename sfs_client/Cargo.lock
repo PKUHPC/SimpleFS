@@ -922,6 +922,7 @@ dependencies = [
  "syscalls",
  "tokio",
  "tokio-stream",
+ "xxhash-rust",
 ]
 
 [[package]]

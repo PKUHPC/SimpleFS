@@ -23,7 +23,7 @@ use sfs_global::global::{
 };
 use sfs_rpc::proto::server_grpc::SfsHandleClient;
 
-use super::{context::StaticContext, network::forward_msg::forward_get_fs_config};
+use super::{context::{StaticContext, DynamicContext}, network::forward_msg::forward_get_fs_config};
 
 fn extract_protocol(_uri: &String) {}
 fn load_host_file(path: &String) -> Result<Vec<(String, String)>, Error> {
@@ -64,7 +64,7 @@ fn lookup_endpoint(
     for i in 0..max_retries {
         let serialized_data = serialize(&host_id);
         let post = post(option2i(&PostOption::Lookup), serialized_data, vec![0; 0]);
-        let env = Arc::new(Environment::new(12));
+        let env = Arc::new(Environment::new(2));
         let channel = ChannelBuilder::new(env).connect(&format!("{}:{}", endp.addr, 8082));
         let client = SfsHandleClient::new(channel);
         if let Ok(_post_res) = client.handle(&post) {
@@ -144,6 +144,7 @@ fn read_host_file() -> Vec<(String, String)> {
     return hosts;
 }
 pub fn init_environment() -> StaticContext {
+    DynamicContext::get_instance();
     let mut hosts = read_host_file();
 
     let mut context = StaticContext::new();

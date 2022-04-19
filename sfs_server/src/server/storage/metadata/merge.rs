@@ -8,8 +8,8 @@ use crate::error_msg::error_msg;
 #[derive(Debug, Deserialize, Serialize)]
 pub enum Operand {
     Create { md: Vec<u8> },
-    IncreaseSize { size: usize, append: bool },
-    DecreaseSize { size: usize },
+    IncreaseSize { size: usize, append: bool, time: i64 },
+    DecreaseSize { size: usize, time: i64 },
 }
 #[allow(unused_variables)]
 pub fn full_merge(
@@ -46,6 +46,7 @@ pub fn full_merge(
         }
     }
     let mut fsize = md.get_size();
+    let mut mtime: i64 = md.get_modify_time();
     let mut op;
     while {
         op = iter.next();
@@ -56,14 +57,15 @@ pub fn full_merge(
             Operand::Create { md: data } => {
                 continue;
             }
-            Operand::IncreaseSize { size, append } => {
+            Operand::IncreaseSize { size, append, time } => {
                 if append {
                     fsize += size as i64;
                 } else {
                     fsize = std::cmp::max(fsize, size as i64);
                 }
+                mtime = std::cmp::max(mtime, time);
             }
-            Operand::DecreaseSize { size } => {
+            Operand::DecreaseSize { size, time } => {
                 if size as i64 > fsize {
                     error_msg(
                         "server::merge::full_merge".to_string(),
@@ -71,7 +73,8 @@ pub fn full_merge(
                     );
                     return None;
                 }
-                fsize = size as i64
+                fsize = size as i64;
+                mtime = std::cmp::max(mtime, time);
             }
         }
     }
@@ -79,6 +82,7 @@ pub fn full_merge(
         md.unstuff();
     }
     md.set_size(fsize);
+    md.set_modify_time(mtime);
     Some(md.serialize())
 }
 #[allow(unused_variables)]

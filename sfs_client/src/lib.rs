@@ -185,7 +185,7 @@ pub extern "C" fn enable_interception() {
 }
 #[cfg(test)]
 mod tests {
-    use std::{thread, sync::RwLock, collections::HashMap};
+    use std::thread;
 
     #[allow(unused_imports)]
     use libc::{c_char, dirent, stat as Stat, O_CREAT, O_RDWR, SEEK_SET, S_IFDIR, S_IFREG};
@@ -205,17 +205,29 @@ mod tests {
 
     #[test]
     fn test0() {
-        let item = RwLock::new(5);
-        let mut map = HashMap::new();
-        map.insert(120, item.read().unwrap());
-        if let Err(_e) = item.try_write(){
-            println!("can't write before remove");
+        let s = "hello, here is the test data of sfs client lifetime test";
+        let path = "/file1\0".to_string();
+        let fd = sfs_open(
+            path.as_str().as_ptr() as *const c_char,
+            S_IFREG,
+            O_CREAT | O_RDWR,
+        );
+        if fd <= 0 {
+            println!("open error ...");
+            return;
         }
-        map.remove(&120);  
-        if let Ok(_mg) = item.try_write(){
-            println!("can write after remove");
+        println!("sleep start");
+        let time = std::time::Duration::from_secs(300);
+        std::thread::sleep(time);
+        println!("sleep end");
+        let res = sfs_write(fd, s.as_ptr() as *mut i8, s.len() as i64);
+        if res <= 0 {
+            println!("write error ...");
+            return;
+        } else {
+            println!("{} bytes written ...", res);
         }
-        ;
+        sfs_remove(s.as_ptr() as *const i8);
     }
     #[test]
     pub fn test1() {

@@ -285,7 +285,7 @@ impl SfsHandle for ServerHandler {
         }
         let f = async move {
             let handle_result = handle_request(&req).await;
-            sink.success(handle_result);
+            sink.success(handle_result).await.unwrap();
         };
         ctx.spawn(f);
     }
@@ -344,7 +344,7 @@ impl SfsHandle for ServerHandler {
 async fn init_server(addr: &String) -> Result<(), Error> {
     let server_addr: (Ipv4Addr, u16) = (addr.parse().unwrap(), 8082);
     println!("listening on {:?}", server_addr);
-    let env = Arc::new(Environment::new(12));
+    let env = Arc::new(Environment::new(2));
     let instance = ServerHandler {};
     let service = create_sfs_handle(instance);
     let mut server = ServerBuilder::new(env)

@@ -10,7 +10,8 @@ use libc::{c_char, c_void, memcpy, EBUSY};
 use sfs_global::global::util::serde_util::{deserialize, serialize};
 use sfs_rpc::proto::server::PostResult;
 
-use crate::client::context::StaticContext;
+#[allow(unused)]
+use crate::client::context::{StaticContext, DynamicContext};
 use crate::client::openfile::{FileType, OpenFile, O_RDONLY};
 use sfs_global::global::distributor::Distributor;
 use sfs_global::global::error_msg::error_msg;
@@ -44,6 +45,7 @@ pub fn forward_stat(path: &String) -> Result<Vec<u8>, i32> {
             "client::network::forward_stat".to_string(),
             format!("error {} occurs while fetching file stat", e),
         );
+        println!("{:?}", e);
         return Err(EBUSY);
     }
     let result = post_res.unwrap();
@@ -339,7 +341,6 @@ pub fn forward_update_metadentry_size(
         );
     }
 }
-#[tokio::main]
 pub async fn forward_write(
     path: &String,
     buf: *const c_char,
@@ -441,7 +442,6 @@ pub async fn forward_write(
     for join in joins {
         let post_result = join.unwrap();
         if let Err(_e) = post_result {
-            //println!("{}({} - {}) {:?}", path, chunk_start, chunk_end, _e);
             return (EBUSY, tot_write);
         }
         let response = post_result.unwrap();
@@ -454,7 +454,6 @@ pub async fn forward_write(
     }
     return (0, tot_write);
 }
-#[tokio::main]
 pub async fn forward_read(
     path: &String,
     buf: *mut c_char,

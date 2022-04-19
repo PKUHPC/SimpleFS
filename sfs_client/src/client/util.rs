@@ -1,11 +1,6 @@
-use std::{
-    collections::hash_map::DefaultHasher,
-    hash::{Hash, Hasher},
-};
-
 use errno::{set_errno, Errno};
 use libc::makedev;
-
+use xxhash_rust::xxh3::xxh3_64;
 use crate::client::context::StaticContext;
 #[allow(unused_imports)]
 use sfs_global::global::{metadata::Metadata, network::config::CHUNK_SIZE};
@@ -22,10 +17,8 @@ pub fn get_metadata(path: &String, _follow_link: bool) -> Result<Metadata, i32> 
 }
 pub fn metadata_to_stat(path: &String, md: Metadata, attr: *mut stat) -> i32 {
     unsafe { (*attr).st_dev = makedev(0, 0) };
-    let mut hasher = DefaultHasher::new();
-    path.hash(&mut hasher);
     unsafe {
-        (*attr).st_ino = hasher.finish();
+        (*attr).st_ino = xxh3_64(path.as_bytes());
         (*attr).st_nlink = 1;
         (*attr).st_uid = StaticContext::get_instance().get_fsconfig().uid;
         (*attr).st_gid = StaticContext::get_instance().get_fsconfig().gid;

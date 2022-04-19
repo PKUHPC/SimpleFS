@@ -32,3 +32,4 @@ sfs_global = {path = "../sfs_global"}
 errno = "0.2.8"
 tokio-stream = "0.1.8"
 flexbuffers = "2.0.0"
+xxhash-rust = { version = '0.8.4', features = ["xxh3"] }
