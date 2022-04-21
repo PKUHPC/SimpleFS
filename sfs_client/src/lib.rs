@@ -205,7 +205,7 @@ mod tests {
 
     #[test]
     fn test0() {
-        let s = "hello, here is the test data of sfs client lifetime test";
+        //let s = "hello, here is the test data of sfs client lifetime test";
         let path = "/file1\0".to_string();
         let fd = sfs_open(
             path.as_str().as_ptr() as *const c_char,
@@ -216,18 +216,7 @@ mod tests {
             println!("open error ...");
             return;
         }
-        println!("sleep start");
-        let time = std::time::Duration::from_secs(300);
-        std::thread::sleep(time);
-        println!("sleep end");
-        let res = sfs_write(fd, s.as_ptr() as *mut i8, s.len() as i64);
-        if res <= 0 {
-            println!("write error ...");
-            return;
-        } else {
-            println!("{} bytes written ...", res);
-        }
-        sfs_remove(s.as_ptr() as *const i8);
+        println!("{}", sfs_lseek(fd, 2147483648, SEEK_SET));
     }
     #[test]
     pub fn test1() {

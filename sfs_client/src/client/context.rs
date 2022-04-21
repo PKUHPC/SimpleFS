@@ -105,7 +105,7 @@ lazy_static! {
 
         cwd_: Mutex::new("".to_string()),
         runtime_: Builder::new_multi_thread()
-            .worker_threads(2)
+            .worker_threads(12)
             .thread_stack_size(3 * 1024 * 1024)
             .build()
             .unwrap(),

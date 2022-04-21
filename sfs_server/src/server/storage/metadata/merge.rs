@@ -7,9 +7,18 @@ use sfs_global::global::{
 use crate::error_msg::error_msg;
 #[derive(Debug, Deserialize, Serialize)]
 pub enum Operand {
-    Create { md: Vec<u8> },
-    IncreaseSize { size: usize, append: bool, time: i64 },
-    DecreaseSize { size: usize, time: i64 },
+    Create {
+        md: Vec<u8>,
+    },
+    IncreaseSize {
+        size: usize,
+        append: bool,
+        time: i64,
+    },
+    DecreaseSize {
+        size: usize,
+        time: i64,
+    },
 }
 #[allow(unused_variables)]
 pub fn full_merge(

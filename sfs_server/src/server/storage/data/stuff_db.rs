@@ -36,7 +36,7 @@ impl StuffDB {
         &SDB
     }
     pub fn optimize_rocksdb_options(options: &mut Options) {
-        options.set_max_successive_merges(2);
+        options.set_max_successive_merges(125);
     }
     pub fn new(path: &String) -> Option<StuffDB> {
         let mut options = Options::default();

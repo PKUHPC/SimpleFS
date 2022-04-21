@@ -18,14 +18,14 @@ extern "C" int sfs_statx(int, const char*, int, unsigned int, struct statx*, boo
 #endif
 extern "C" int sfs_statfs(struct statfs*);
 extern "C" int sfs_statvfs(struct statvfs*);
-extern "C" int sfs_lseek(int, long, int);
+extern "C" long sfs_lseek(int, long, int);
 extern "C" int sfs_truncate(const char*, long);
 extern "C" int sfs_dup(int);
 extern "C" int sfs_dup2(int, int);
-extern "C" int sfs_pwrite(int, const char*, long, long);
-extern "C" int sfs_write(int, const char*, long);
-extern "C" int sfs_pread(int, char*, long, long);
-extern "C" int sfs_read(int, char*, long);
+extern "C" long sfs_pwrite(int, const char*, long, long);
+extern "C" long sfs_write(int, const char*, long);
+extern "C" long sfs_pread(int, char*, long, long);
+extern "C" long sfs_read(int, char*, long);
 extern "C" int sfs_rmdir(const char*);
 extern "C" int sfs_opendir(const char*);
 extern "C" int sfs_getdents(int, struct dirent*, long);

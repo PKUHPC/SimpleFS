@@ -301,21 +301,27 @@ impl SfsHandle for ServerHandler {
                 let option = i2option(post.option);
                 match option {
                     Read => {
-                        let read_args: ReadData = deserialize::<ReadData>(&post.data);
-                        if ENABLE_OUTPUT {
-                            println!("handling read of '{}'....", read_args.path);
-                        }
-                        sink.send((handle_read(&read_args), WriteFlags::default()))
+                        let handle = thread::spawn(move || {
+                            let read_args: ReadData = deserialize::<ReadData>(&post.data);
+                            if ENABLE_OUTPUT {
+                                println!("handling read of '{}'....", read_args.path);
+                            }
+                            handle_read(&read_args)
+                        });
+                        sink.send((handle.join().unwrap(), WriteFlags::default()))
                             .await?;
                     }
                     Write => {
-                        let write_args: WriteData = deserialize::<WriteData>(&post.data);
-                        if ENABLE_OUTPUT {
-                            println!("handling write of '{}'....", write_args.path);
-                            println!("  - {:?}", write_args);
-                        }
-                        let data = post.extra;
-                        sink.send((handle_write(&write_args, &data), WriteFlags::default()))
+                        let handle = thread::spawn(move || {
+                            let write_args: WriteData = deserialize::<WriteData>(&post.data);
+                            if ENABLE_OUTPUT {
+                                println!("handling write of '{}'....", write_args.path);
+                                println!("  - {:?}", write_args);
+                            }
+                            let data = post.extra;
+                            handle_write(&write_args, &data)
+                        });
+                        sink.send((handle.join().unwrap(), WriteFlags::default()))
                             .await?;
                     }
                     _ => {
@@ -344,7 +350,7 @@ impl SfsHandle for ServerHandler {
 async fn init_server(addr: &String) -> Result<(), Error> {
     let server_addr: (Ipv4Addr, u16) = (addr.parse().unwrap(), 8082);
     println!("listening on {:?}", server_addr);
-    let env = Arc::new(Environment::new(2));
+    let env = Arc::new(Environment::new(48));
     let instance = ServerHandler {};
     let service = create_sfs_handle(instance);
     let mut server = ServerBuilder::new(env)

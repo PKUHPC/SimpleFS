@@ -3,10 +3,20 @@ use futures::Future;
 #[allow(unused)]
 use lazy_static::*;
 #[allow(unused)]
-use std::{collections::HashMap, fs, io::Read, path::Path, sync::{Mutex, Arc}, task::Poll};
+use std::{
+    collections::HashMap,
+    fs,
+    io::Read,
+    path::Path,
+    sync::{Arc, Mutex},
+    task::Poll,
+};
 
 #[allow(unused)]
-use crate::{server::{config::ServerConfig, storage::metadata::db::MetadataDB}, error_msg::error_msg};
+use crate::{
+    error_msg::error_msg,
+    server::{config::ServerConfig, storage::metadata::db::MetadataDB},
+};
 
 pub fn init_context() -> StorageContext {
     let mut context = StorageContext::new();
