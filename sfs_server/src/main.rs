@@ -56,7 +56,7 @@ use crate::handle::{handle_read, handle_trunc, handle_write};
 #[allow(unused)]
 use std::time::Instant;
 
-async fn handle_request(post: &Post) -> PostResult {
+fn handle_request(post: &Post) -> PostResult {
     let option = i2option(post.option);
     match option {
         Stat => {
@@ -239,7 +239,7 @@ struct ServerHandler {}
 impl SfsHandle for ServerHandler {
     fn handle(
         &mut self,
-        ctx: grpcio::RpcContext,
+        _ctx: grpcio::RpcContext,
         req: sfs_rpc::proto::server::Post,
         sink: grpcio::UnarySink<sfs_rpc::proto::server::PostResult>,
     ) {
@@ -280,19 +280,19 @@ impl SfsHandle for ServerHandler {
                             .unwrap();
                     }
                 };
-                ctx.spawn(f);
+                NetworkContext::get_instance().get_runtime().spawn(f);
             }
         }
         let f = async move {
-            let handle_result = handle_request(&req).await;
+            let handle_result = tokio::task::spawn_blocking(move||{handle_request(&req)}).await.unwrap();
             sink.success(handle_result).await.unwrap();
         };
-        ctx.spawn(f);
+        NetworkContext::get_instance().get_runtime().spawn(f);
     }
 
     fn handle_stream(
         &mut self,
-        ctx: grpcio::RpcContext,
+        _ctx: grpcio::RpcContext,
         mut stream: grpcio::RequestStream<sfs_rpc::proto::server::Post>,
         mut sink: grpcio::DuplexSink<sfs_rpc::proto::server::PostResult>,
     ) {
@@ -304,7 +304,7 @@ impl SfsHandle for ServerHandler {
                         let handle = thread::spawn(move || {
                             let read_args: ReadData = deserialize::<ReadData>(&post.data);
                             if ENABLE_OUTPUT {
-                                println!("handling read of '{}'....", read_args.path);
+                                println!("handling stream read of '{}'....", read_args.path);
                             }
                             handle_read(&read_args)
                         });
@@ -315,7 +315,7 @@ impl SfsHandle for ServerHandler {
                         let handle = thread::spawn(move || {
                             let write_args: WriteData = deserialize::<WriteData>(&post.data);
                             if ENABLE_OUTPUT {
-                                println!("handling write of '{}'....", write_args.path);
+                                println!("handling stream write of '{}'....", write_args.path);
                                 println!("  - {:?}", write_args);
                             }
                             let data = post.extra;
@@ -344,7 +344,7 @@ impl SfsHandle for ServerHandler {
             )
         })
         .map(|_| ());
-        ctx.spawn(f);
+        NetworkContext::get_instance().get_runtime().spawn(f);
     }
 }
 async fn init_server(addr: &String) -> Result<(), Error> {

@@ -13,7 +13,7 @@ use libc::{
     O_CREAT, O_DIRECTORY, O_EXCL, O_PATH, O_RDONLY, O_TRUNC, O_WRONLY, SEEK_CUR, SEEK_DATA,
     SEEK_END, SEEK_HOLE, SEEK_SET, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFMT, S_IFREG, S_IFSOCK,
 };
-use libc::{statx, EBADF, EBUSY, EINVAL, EISDIR, ENOENT, ENOTDIR, ENOTEMPTY, ENOTSUP};
+use libc::{statx, EBADF, EBUSY, EINVAL, EISDIR, ENOENT, ENOTDIR, ENOTEMPTY, ENOTSUP, EEXIST};
 
 use sfs_global::global;
 use sfs_global::global::error_msg::error_msg;
@@ -217,7 +217,7 @@ pub extern "C" fn sfs_create(path: *const c_char, mut mode: u32) -> i32 {
         return -1;
     } else {
         let err = create_res.unwrap();
-        if err != 0 {
+        if err != 0 && err != EEXIST {
             set_errno(Errno(err));
             return -1;
         }
