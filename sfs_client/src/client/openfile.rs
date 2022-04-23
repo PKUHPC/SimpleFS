@@ -220,8 +220,7 @@ impl OpenFileMap {
             self.fd_validation_needed_ = AtomicBool::new(true);
         }
         *fd_idx = *fd_idx + 1;
-        drop(fd_idx);
-        return *self.fd_idx_.lock().unwrap();
+        return *fd_idx;
     }
     pub fn safe_generate_fd_idx(&mut self) -> i32 {
         let mut fd = self.generate_fd_idx();

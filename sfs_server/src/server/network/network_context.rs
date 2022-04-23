@@ -15,7 +15,7 @@ use sfs_global::global::{
     util::env_util::{get_hostname, get_var},
 };
 use sfs_rpc::proto::server_grpc::SfsHandleClient;
-use tokio::runtime::{Runtime, Builder};
+use tokio::runtime::{Builder, Runtime};
 
 use crate::{error_msg::error_msg, server::filesystem::storage_context::StorageContext};
 
@@ -101,7 +101,7 @@ pub struct NetworkContext {
     clients_: Vec<SfsHandleClient>,
     distributor_: Arc<SimpleHashDistributor>,
     local_host_id: u64,
-    runtime_: Runtime
+    runtime_: Runtime,
 }
 lazy_static! {
     static ref NTC: NetworkContext = init_network();
@@ -176,7 +176,7 @@ impl NetworkContext {
     pub fn get_local_host_id(&self) -> u64 {
         self.local_host_id.clone()
     }
-    pub fn get_runtime(&self) -> &Runtime{
+    pub fn get_runtime(&self) -> &Runtime {
         &self.runtime_
     }
 }

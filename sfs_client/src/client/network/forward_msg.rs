@@ -4,9 +4,9 @@ use std::sync::{Arc, Mutex};
 #[allow(unused)]
 use std::time::Instant;
 
-use futures::future::join_all;
+use futures::future::{join_all};
 use grpcio::Error;
-use libc::{c_char, c_void, memcpy, EBUSY};
+use libc::{c_char, c_void, memcpy, EBUSY, getpid};
 use sfs_global::global::util::serde_util::{deserialize, serialize};
 use sfs_rpc::proto::server::PostResult;
 
@@ -438,9 +438,9 @@ pub async fn forward_write(
             .await
         }));
     }
-    let joins = join_all(handles).await;
-    for join in joins {
-        let post_result = join.unwrap();
+    //let joins = join_all(handles).await;
+    for handle in handles {
+        let post_result = handle.await.unwrap();
         if let Err(_e) = post_result {
             return (EBUSY, tot_write);
         }

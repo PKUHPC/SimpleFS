@@ -8,7 +8,6 @@ use crate::server::{
     storage::metadata::db::MetadataDB,
 };
 use config::ENABLE_PRECREATE;
-use error_msg::error_msg;
 use futures::channel::oneshot;
 use futures::executor::block_on;
 use futures::{FutureExt, SinkExt, TryFutureExt, TryStreamExt};
@@ -239,7 +238,7 @@ struct ServerHandler {}
 impl SfsHandle for ServerHandler {
     fn handle(
         &mut self,
-        _ctx: grpcio::RpcContext,
+        ctx: grpcio::RpcContext,
         req: sfs_rpc::proto::server::Post,
         sink: grpcio::UnarySink<sfs_rpc::proto::server::PostResult>,
     ) {
@@ -280,19 +279,19 @@ impl SfsHandle for ServerHandler {
                             .unwrap();
                     }
                 };
-                NetworkContext::get_instance().get_runtime().spawn(f);
+                ctx.spawn(f);
             }
         }
         let f = async move {
-            let handle_result = tokio::task::spawn_blocking(move||{handle_request(&req)}).await.unwrap();
+            let handle_result = handle_request(&req);
             sink.success(handle_result).await.unwrap();
         };
-        NetworkContext::get_instance().get_runtime().spawn(f);
+        ctx.spawn(f);
     }
 
     fn handle_stream(
         &mut self,
-        _ctx: grpcio::RpcContext,
+        ctx: grpcio::RpcContext,
         mut stream: grpcio::RequestStream<sfs_rpc::proto::server::Post>,
         mut sink: grpcio::DuplexSink<sfs_rpc::proto::server::PostResult>,
     ) {
@@ -301,33 +300,28 @@ impl SfsHandle for ServerHandler {
                 let option = i2option(post.option);
                 match option {
                     Read => {
-                        let handle = thread::spawn(move || {
-                            let read_args: ReadData = deserialize::<ReadData>(&post.data);
-                            if ENABLE_OUTPUT {
-                                println!("handling stream read of '{}'....", read_args.path);
-                            }
-                            handle_read(&read_args)
-                        });
-                        sink.send((handle.join().unwrap(), WriteFlags::default()))
+                        let read_args: ReadData = deserialize::<ReadData>(&post.data);
+                        if ENABLE_OUTPUT {
+                            println!("handling stream read of '{}'....", read_args.path);
+                        }
+                        sink.send((handle_read(&read_args), WriteFlags::default()))
                             .await?;
                     }
                     Write => {
-                        let handle = thread::spawn(move || {
-                            let write_args: WriteData = deserialize::<WriteData>(&post.data);
-                            if ENABLE_OUTPUT {
-                                println!("handling stream write of '{}'....", write_args.path);
-                                println!("  - {:?}", write_args);
-                            }
-                            let data = post.extra;
-                            handle_write(&write_args, &data)
-                        });
-                        sink.send((handle.join().unwrap(), WriteFlags::default()))
+                        let write_args: WriteData = deserialize::<WriteData>(&post.data);
+                        if ENABLE_OUTPUT {
+                            println!("handling stream write of '{}'....", write_args.path);
+                            println!("  - {:?}", write_args);
+                        }
+                        let data = post.extra;
+
+                        sink.send((handle_write(&write_args, &data), WriteFlags::default()))
                             .await?;
                     }
                     _ => {
                         println!("invalid option on 'handle_stream': {:?}", option);
                         sink.send((
-                            post_result(EINVAL, EINVAL.to_string().as_bytes().to_vec(), vec![0; 0]),
+                            post_result(EINVAL, vec![0; 0], vec![0; 0]),
                             WriteFlags::default(),
                         ))
                         .await?;
@@ -338,13 +332,10 @@ impl SfsHandle for ServerHandler {
             Ok(())
         }
         .map_err(|e: grpcio::Error| {
-            error_msg(
-                "server::handle_stream".to_string(),
-                format!("failed to handle stream: {:?}", e),
-            )
+            println!("server::handle_stream failed to handle stream: {:?}", e);
         })
         .map(|_| ());
-        NetworkContext::get_instance().get_runtime().spawn(f);
+        ctx.spawn(f);
     }
 }
 async fn init_server(addr: &String) -> Result<(), Error> {

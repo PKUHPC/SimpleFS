@@ -205,18 +205,11 @@ mod tests {
 
     #[test]
     fn test0() {
-        //let s = "hello, here is the test data of sfs client lifetime test";
-        let path = "/file1\0".to_string();
-        let fd = sfs_open(
-            path.as_str().as_ptr() as *const c_char,
-            S_IFREG,
-            O_CREAT | O_RDWR,
-        );
-        if fd <= 0 {
-            println!("open error ...");
-            return;
-        }
-        println!("{}", sfs_lseek(fd, 2147483648, SEEK_SET));
+        let path = "/sfs/test/create_dir/file1".to_string();
+        println!("1: {}", xxhash_rust::xxh3::xxh3_64(path.as_bytes()));
+        println!("2: {}", xxhash_rust::xxh3::xxh3_64(path.as_bytes()));
+        println!("3: {}", xxhash_rust::xxh3::xxh3_64(path.as_bytes()));
+        println!("4: {}", xxhash_rust::xxh3::xxh3_64(path.as_bytes()));
     }
     #[test]
     pub fn test1() {

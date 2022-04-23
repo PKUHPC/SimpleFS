@@ -94,7 +94,7 @@ pub struct DynamicContext {
     protected_fds_: BitVec,
 
     cwd_: Mutex<String>,
-    runtime_: Runtime,
+    runtime_: Arc<Runtime>,
     pub debug_counter: Mutex<i32>
 }
 lazy_static! {
@@ -104,11 +104,12 @@ lazy_static! {
         protected_fds_: BitVec::from_elem(MAX_INTERNEL_FDS as usize, true),
 
         cwd_: Mutex::new("".to_string()),
-        runtime_: Builder::new_multi_thread()
+        runtime_: Arc::new(Builder::new_current_thread()
             .worker_threads(12)
-            .thread_stack_size(3 * 1024 * 1024)
+            .thread_stack_size(4 * 1024 * 1024)
+            .enable_io()
             .build()
-            .unwrap(),
+            .unwrap()),
         debug_counter:  Mutex::new(0)
     };
 }
@@ -272,8 +273,8 @@ impl DynamicContext {
     pub fn get_cwd(&self) -> MutexGuard<'_, String> {
         self.cwd_.lock().unwrap()
     }
-    pub fn get_runtime(&self) -> &Runtime{
-        &self.runtime_
+    pub fn get_runtime(&self) -> Arc<Runtime>{
+        Arc::clone(&self.runtime_)
     }
     pub fn incr_counter(){
         *DCTX.debug_counter.lock().unwrap() += 1;

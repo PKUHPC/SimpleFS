@@ -596,7 +596,9 @@ pub extern "C" fn sfs_pwrite(fd: i32, buf: *const c_char, count: i64, offset: i6
         return -1;
     }
     let f = f.unwrap();
-    return internal_pwrite(f.lock().unwrap(), buf, count, offset).1;
+    let res = internal_pwrite(f.lock().unwrap(), buf, count, offset);
+    drop(res.0);
+    return res.1;
 }
 #[no_mangle]
 pub extern "C" fn sfs_write(fd: i32, buf: *const c_char, count: i64) -> i64 {
