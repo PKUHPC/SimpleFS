@@ -6,7 +6,7 @@ use std::time::Instant;
 
 use futures::future::{join_all};
 use grpcio::Error;
-use libc::{c_char, c_void, memcpy, EBUSY, getpid};
+use libc::{c_char, c_void, memcpy, EBUSY};
 use sfs_global::global::util::serde_util::{deserialize, serialize};
 use sfs_rpc::proto::server::PostResult;
 
@@ -580,8 +580,9 @@ pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>) {
     }
     let post_results = NetworkService::group_post(posts);
     if let Err(_e) = post_results {
+        println!("fail to get dirents: {} {:?}", path, _e);
         return (
-            -1,
+            EBUSY,
             Arc::new(Mutex::new(OpenFile::new(
                 &"".to_string(),
                 0,

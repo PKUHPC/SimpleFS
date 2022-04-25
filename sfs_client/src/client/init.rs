@@ -4,7 +4,7 @@ use std::{
     io::{BufRead, BufReader, Error},
     path::Path,
     sync::Arc,
-    thread, time::Duration,
+    thread,
 };
 
 use grpcio::{ChannelBuilder, Environment};
@@ -64,8 +64,8 @@ fn lookup_endpoint(
     for i in 0..max_retries {
         let serialized_data = serialize(&host_id);
         let post = post(option2i(&PostOption::Lookup), serialized_data, vec![0; 0]);
-        let env = Arc::new(Environment::new(512));
-        let channel = ChannelBuilder::new(env).keepalive_time(Duration::from_secs(2)).max_concurrent_stream(4).connect(&format!("{}:{}", endp.addr, 8082));
+        let env = Arc::new(Environment::new(12));
+        let channel = ChannelBuilder::new(env).max_receive_message_len(128 * 1024 * 1024).max_send_message_len(128 * 1024 * 1024).connect(&format!("{}:{}", endp.addr, 8082));
         let client = SfsHandleClient::new(channel);
         if let Ok(_post_res) = client.handle(&post) {
             if ENABLE_OUTPUT {

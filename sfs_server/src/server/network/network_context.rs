@@ -136,9 +136,9 @@ impl NetworkContext {
             clients_: Vec::new(),
             distributor_: Arc::new(SimpleHashDistributor::init()),
             local_host_id: 0,
-            runtime_: Builder::new_multi_thread()
+            runtime_: Builder::new_current_thread()
                 .worker_threads(12)
-                .thread_stack_size(3 * 1024 * 1024)
+                .thread_stack_size(24 * 1024 * 1024)
                 .build()
                 .unwrap(),
         }
