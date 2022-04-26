@@ -30,6 +30,13 @@ const METHOD_SFS_HANDLE_HANDLE_STREAM: ::grpcio::Method<super::server::Post, sup
     resp_mar: ::grpcio::Marshaller { ser: ::grpcio::pb_ser, de: ::grpcio::pb_de },
 };
 
+const METHOD_SFS_HANDLE_HANDLE_DIRENTS: ::grpcio::Method<super::server::Post, super::server::PostResult> = ::grpcio::Method {
+    ty: ::grpcio::MethodType::ServerStreaming,
+    name: "/sfs_server.SFSHandle/handle_dirents",
+    req_mar: ::grpcio::Marshaller { ser: ::grpcio::pb_ser, de: ::grpcio::pb_de },
+    resp_mar: ::grpcio::Marshaller { ser: ::grpcio::pb_ser, de: ::grpcio::pb_de },
+};
+
 #[derive(Clone)]
 pub struct SfsHandleClient {
     client: ::grpcio::Client,
@@ -65,6 +72,14 @@ impl SfsHandleClient {
     pub fn handle_stream(&self) -> ::grpcio::Result<(::grpcio::ClientDuplexSender<super::server::Post>, ::grpcio::ClientDuplexReceiver<super::server::PostResult>)> {
         self.handle_stream_opt(::grpcio::CallOption::default())
     }
+
+    pub fn handle_dirents_opt(&self, req: &super::server::Post, opt: ::grpcio::CallOption) -> ::grpcio::Result<::grpcio::ClientSStreamReceiver<super::server::PostResult>> {
+        self.client.server_streaming(&METHOD_SFS_HANDLE_HANDLE_DIRENTS, req, opt)
+    }
+
+    pub fn handle_dirents(&self, req: &super::server::Post) -> ::grpcio::Result<::grpcio::ClientSStreamReceiver<super::server::PostResult>> {
+        self.handle_dirents_opt(req, ::grpcio::CallOption::default())
+    }
     pub fn spawn<F>(&self, f: F) where F: ::futures::Future<Output = ()> + Send + 'static {
         self.client.spawn(f)
     }
@@ -73,6 +88,7 @@ impl SfsHandleClient {
 pub trait SfsHandle {
     fn handle(&mut self, ctx: ::grpcio::RpcContext, req: super::server::Post, sink: ::grpcio::UnarySink<super::server::PostResult>);
     fn handle_stream(&mut self, ctx: ::grpcio::RpcContext, stream: ::grpcio::RequestStream<super::server::Post>, sink: ::grpcio::DuplexSink<super::server::PostResult>);
+    fn handle_dirents(&mut self, ctx: ::grpcio::RpcContext, req: super::server::Post, sink: ::grpcio::ServerStreamingSink<super::server::PostResult>);
 }
 
 pub fn create_sfs_handle<S: SfsHandle + Send + Clone + 'static>(s: S) -> ::grpcio::Service {
@@ -81,9 +97,13 @@ pub fn create_sfs_handle<S: SfsHandle + Send + Clone + 'static>(s: S) -> ::grpci
     builder = builder.add_unary_handler(&METHOD_SFS_HANDLE_HANDLE, move |ctx, req, resp| {
         instance.handle(ctx, req, resp)
     });
-    let mut instance = s;
+    let mut instance = s.clone();
     builder = builder.add_duplex_streaming_handler(&METHOD_SFS_HANDLE_HANDLE_STREAM, move |ctx, req, resp| {
         instance.handle_stream(ctx, req, resp)
+    });
+    let mut instance = s;
+    builder = builder.add_server_streaming_handler(&METHOD_SFS_HANDLE_HANDLE_DIRENTS, move |ctx, req, resp| {
+        instance.handle_dirents(ctx, req, resp)
     });
     builder.build()
 }

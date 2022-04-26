@@ -49,7 +49,6 @@ use std::{
     path::Path,
 };
 
-use crate::config::ENABLE_OUTPUT;
 use crate::handle::{handle_read, handle_trunc, handle_write};
 
 #[allow(unused)]
@@ -60,7 +59,7 @@ fn handle_request(post: &Post) -> PostResult {
     match option {
         Stat => {
             let path = deserialize::<&str>(&post.data);
-            if ENABLE_OUTPUT {
+            if StorageContext::get_instance().output() {
                 println!("handling metadata of '{}'....", path);
             }
             let md_res = MetadataDB::get_instance().get(&path.to_string());
@@ -72,7 +71,7 @@ fn handle_request(post: &Post) -> PostResult {
         }
         Create => {
             let create_data: CreateData = deserialize::<CreateData>(&post.data);
-            if ENABLE_OUTPUT {
+            if StorageContext::get_instance().output() {
                 println!("handling create of '{}'....", create_data.path);
             }
             let mode = create_data.mode;
@@ -87,7 +86,7 @@ fn handle_request(post: &Post) -> PostResult {
         }
         Remove => {
             let path = deserialize::<&str>(&post.data);
-            if ENABLE_OUTPUT {
+            if StorageContext::get_instance().output() {
                 println!("handling remove of '{}'....", path);
             }
             ChunkStorage::destroy_chunk_space(&path.to_string());
@@ -95,7 +94,7 @@ fn handle_request(post: &Post) -> PostResult {
         }
         RemoveMeta => {
             let path = deserialize::<&str>(&post.data);
-            if ENABLE_OUTPUT {
+            if StorageContext::get_instance().output() {
                 println!("handling remove metadata of '{}'....", path);
             }
             let md_res = MetadataDB::get_instance().get(&path.to_string());
@@ -107,13 +106,13 @@ fn handle_request(post: &Post) -> PostResult {
             }
         }
         Lookup => {
-            if ENABLE_OUTPUT {
+            if StorageContext::get_instance().output() {
                 println!("handling look up....");
             }
             return post_result(0, vec![0; 0], vec![0; 0]);
         }
         FsConfig => {
-            if ENABLE_OUTPUT {
+            if StorageContext::get_instance().output() {
                 println!("handling fsconfig....");
             }
             let mut fs_config = SFSConfig::new();
@@ -130,7 +129,7 @@ fn handle_request(post: &Post) -> PostResult {
         }
         UpdateMetadentry => {
             let update_data: UpdateMetadentryData = deserialize::<UpdateMetadentryData>(&post.data);
-            if ENABLE_OUTPUT {
+            if StorageContext::get_instance().output() {
                 println!("handling update metadentry of '{}'....", update_data.path);
             }
             let path = update_data.path.to_string();
@@ -163,7 +162,7 @@ fn handle_request(post: &Post) -> PostResult {
             );
         }
         GetMetadentry => {
-            if ENABLE_OUTPUT {
+            if StorageContext::get_instance().output() {
                 println!("handling get metadentry....");
             }
             let path = deserialize::<&str>(&post.data);
@@ -179,7 +178,7 @@ fn handle_request(post: &Post) -> PostResult {
             }
         }
         ChunkStat => {
-            if ENABLE_OUTPUT {
+            if StorageContext::get_instance().output() {
                 println!("handling chunk stat....");
             }
             let chunk_stat = ChunkStorage::chunk_stat();
@@ -188,7 +187,7 @@ fn handle_request(post: &Post) -> PostResult {
         }
         DecrSize => {
             let decr_data: DecrData = deserialize::<DecrData>(&post.data);
-            if ENABLE_OUTPUT {
+            if StorageContext::get_instance().output() {
                 println!("handling decrease size of '{}'....", decr_data.path);
             }
             MetadataDB::get_instance()
@@ -197,31 +196,14 @@ fn handle_request(post: &Post) -> PostResult {
         }
         Trunc => {
             let trunc_data: TruncData = deserialize::<TruncData>(&post.data);
-            if ENABLE_OUTPUT {
+            if StorageContext::get_instance().output() {
                 println!("handling truncate of '{}'....", trunc_data.path);
             }
             return handle_trunc(trunc_data);
         }
-        GetDirents => {
-            let data: DirentData = deserialize::<DirentData>(&post.data);
-            let path = data.path;
-            if ENABLE_OUTPUT {
-                println!("handling get dirents of '{}'....", path);
-            }
-            let entries = MetadataDB::get_instance().get_dirents(&path.to_string());
-            if entries.len() == 0 {
-                return post_result(
-                    0,
-                    serialize(&(Vec::new() as Vec<(String, bool)>)),
-                    vec![0; 0],
-                );
-            } else {
-                return post_result(0, serialize(&entries), vec![0; 0]);
-            }
-        }
         PreCreate => {
             let data: PreCreateData = deserialize::<PreCreateData>(&post.data);
-            if ENABLE_OUTPUT {
+            if StorageContext::get_instance().output() {
                 println!("handling precreate of '{}'....", data.path);
             }
             handle_precreate(&data);
@@ -301,7 +283,7 @@ impl SfsHandle for ServerHandler {
                 match option {
                     Read => {
                         let read_args: ReadData = deserialize::<ReadData>(&post.data);
-                        if ENABLE_OUTPUT {
+                        if StorageContext::get_instance().output() {
                             println!("handling stream read of '{}'....", read_args.path);
                         }
                         sink.send((handle_read(&read_args), WriteFlags::default()))
@@ -309,7 +291,7 @@ impl SfsHandle for ServerHandler {
                     }
                     Write => {
                         let write_args: WriteData = deserialize::<WriteData>(&post.data);
-                        if ENABLE_OUTPUT {
+                        if StorageContext::get_instance().output() {
                             println!("handling stream write of '{}'....", write_args.path);
                             println!("  - {:?}", write_args);
                         }
@@ -333,6 +315,49 @@ impl SfsHandle for ServerHandler {
         }
         .map_err(|e: grpcio::Error| {
             println!("server::handle_stream failed to handle stream: {:?}", e);
+        })
+        .map(|_| ());
+        ctx.spawn(f);
+    }
+
+    fn handle_dirents(
+        &mut self,
+        ctx: grpcio::RpcContext,
+        req: sfs_rpc::proto::server::Post,
+        mut sink: grpcio::ServerStreamingSink<sfs_rpc::proto::server::PostResult>,
+    ) {
+        let f = async move {
+            let option = i2option(req.option);
+            match option {
+                GetDirents => {
+                    let data: DirentData = deserialize::<DirentData>(&req.data);
+                    let path = data.path;
+                    if StorageContext::get_instance().output() {
+                        println!("handling get dirents of '{}'....", path);
+                    }
+                    let entries = MetadataDB::get_instance().get_dirents(&path.to_string());
+                    for entry in entries {
+                        sink.send((
+                            post_result(0, serialize(entry), vec![0; 0]),
+                            WriteFlags::default(),
+                        ))
+                        .await?
+                    }
+                }
+                _ => {
+                    println!("invalid option on 'handle_dirents': {:?}", option);
+                    sink.send((
+                        post_result(EINVAL, vec![0; 0], vec![0; 0]),
+                        WriteFlags::default(),
+                    ))
+                    .await?;
+                }
+            }
+            sink.close().await?;
+            Ok(())
+        }
+        .map_err(|e: grpcio::Error| {
+            println!("server::handle_dirents failed to handle stream: {:?}", e);
         })
         .map(|_| ());
         ctx.spawn(f);

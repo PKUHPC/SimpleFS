@@ -718,7 +718,7 @@ pub extern "C" fn sfs_rmdir(path: *const c_char) -> i32 {
         set_errno(Errno(ENOTDIR));
         return -1;
     }
-    let dirent_res = forward_get_dirents(&path);
+    let dirent_res = DynamicContext::get_instance().get_runtime().block_on(forward_get_dirents(&path));
     if dirent_res.0 != 0 {
         error_msg(
             "client::sfs_rmdir".to_string(),
@@ -772,7 +772,7 @@ pub extern "C" fn sfs_opendir(path: *const c_char) -> i32 {
         set_errno(Errno(ENOTDIR));
         return -1;
     }
-    let dirent_res = forward_get_dirents(&path);
+    let dirent_res = DynamicContext::get_instance().get_runtime().block_on(forward_get_dirents(&path));
     if dirent_res.0 != 0 {
         error_msg(
             "client::sfs_opendir".to_string(),

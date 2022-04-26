@@ -25,12 +25,12 @@ extern "C" {
 }
 */
 
-static MAX_INTERNAL_FDS: u32 = 256;
-static MAX_OPEN_FDS: u32 = 1024;
-static MIN_INTERNEL_FD: u32 = MAX_OPEN_FDS - MAX_INTERNAL_FDS;
 #[allow(dead_code)]
-static MAX_USER_FDS: u32 = MIN_INTERNEL_FD;
-static MAX_INTERNEL_FDS: u32 = 100000;
+pub static MAX_OPEN_FDS: u32 = 10000000;
+pub static MIN_INTERNAL_FD: i32 = 1000000;
+#[allow(dead_code)]
+pub static MAX_USER_FDS: i32 = MIN_INTERNAL_FD;
+pub static MAX_INTERNAL_FDS: i32 = 150000000;
 
 static AT_FDCWD: i32 = -100;
 static SEPERATOR: char = '/';
@@ -100,13 +100,13 @@ pub struct DynamicContext {
 lazy_static! {
     static ref DCTX: DynamicContext = DynamicContext {
         open_file_map_: Arc::new(Mutex::new(OpenFileMap::new())),
-        internal_fds_: Mutex::new(BitVec::new()),
-        protected_fds_: BitVec::from_elem(MAX_INTERNEL_FDS as usize, true),
+        internal_fds_: Mutex::new(BitVec::from_elem(MAX_INTERNAL_FDS as usize, true)),
+        protected_fds_: BitVec::from_elem(MAX_INTERNAL_FDS as usize, true),
 
         cwd_: Mutex::new("".to_string()),
         runtime_: Arc::new(Builder::new_current_thread()
             .worker_threads(12)
-            .thread_stack_size(4 * 1024 * 1024)
+            .thread_stack_size(12 * 1024 * 1024)
             .enable_io()
             .build()
             .unwrap()),
@@ -207,23 +207,24 @@ impl DynamicContext {
     pub fn get_ofm(&self) -> Arc<Mutex<OpenFileMap>> {
         Arc::clone(&self.open_file_map_)
     }
-    pub fn register_internel_fd(&mut self, fd: i32) -> i32 {
+    // internal fd is not implmented currently
+    pub fn register_internal_fd(&mut self, fd: i32) -> i32 {
         if fd < 0 {
             error_msg(
-                "client:client_context:register_internel_fd".to_string(),
+                "client:client_context:register_INTERNAL_fd".to_string(),
                 "file descriptor must be positive".to_string(),
             );
             return fd;
         }
+        if fd < MIN_INTERNAL_FD as i32 {
+            error_msg(
+                "client:client_context:register_INTERNAL_fd".to_string(),
+                "file descriptor must be larger than MIN_INTERNAL_FD".to_string(),
+            );
+            return fd;
+        }
         if !SCTX.internal_fds_must_relocate_ {
-            if fd < MIN_INTERNEL_FD as i32 {
-                error_msg(
-                    "client:client_context:register_internel_fd".to_string(),
-                    "file descriptor must be larger than MIN_INTERNEL_FD".to_string(),
-                );
-                return fd;
-            }
-            (*self.internal_fds_.lock().unwrap()).set(fd.clone() as usize, false);
+            (*self.internal_fds_.lock().unwrap()).set(fd as usize, false);
             return fd;
         }
         let mut pos: usize = MAX_INTERNAL_FDS as usize + 1;
@@ -235,36 +236,37 @@ impl DynamicContext {
         }
         if pos == MAX_INTERNAL_FDS as usize + 1 {
             error_msg(
-                "client:client_context:register_internel_fd".to_string(),
-                "no available internel fd slot".to_string(),
+                "client:client_context:register_INTERNAL_fd".to_string(),
+                "no available INTERNAL fd slot".to_string(),
             );
             return fd;
         }
         (*self.internal_fds_.lock().unwrap()).set(pos, false);
         let ifd = 0;
         //unsafe {
-        //ifd = syscall_no_intercept(SYS_dup3, fd.clone(), pos + MIN_INTERNEL_FD as usize, O_CLOEXEC);
+        //ifd = syscall_no_intercept(SYS_dup3, fd.clone(), pos + MIN_INTERNAL_FD as usize, O_CLOEXEC);
         //syscall_no_intercept(SYS_close, fd.clone());
         //}
         ifd
     }
-    pub fn unregister_internel_fd(&mut self, fd: i32) {
-        if fd < MIN_INTERNEL_FD as i32 {
+    pub fn unregister_internal_fd(&mut self, fd: i32) {
+        if fd < MIN_INTERNAL_FD as i32 {
             error_msg(
-                "client:client_context:unregister_internel_fd".to_string(),
-                "file descriptor must be larger than MIN_INTERNEL_FD".to_string(),
+                "client:client_context:unregister_INTERNAL_fd".to_string(),
+                "file descriptor must be larger than MIN_INTERNAL_FD".to_string(),
             );
             return;
         }
-        let pos: usize = fd as usize - MIN_INTERNEL_FD as usize;
+        let pos: usize = fd as usize - MIN_INTERNAL_FD as usize;
         (*self.internal_fds_.lock().unwrap()).set(pos, true);
     }
-    pub fn is_internel_fd(&self, fd: i32) -> bool {
-        if fd < MIN_INTERNEL_FD as i32 {
-            //error_msg("client:client_context:is_internel_fd".to_string(), "file descriptor must be larger than MIN_INTERNEL_FD".to_string());
+    #[allow(unreachable_code, unused)]
+    pub fn is_internal_fd(&self, fd: i32) -> bool {
+        if fd < MIN_INTERNAL_FD as i32 {
+            //error_msg("client:client_context:is_INTERNAL_fd".to_string(), "file descriptor must be larger than MIN_INTERNAL_FD".to_string());
             return false;
         }
-        let pos: usize = fd as usize - MIN_INTERNEL_FD as usize;
+        let pos: usize = fd as usize - MIN_INTERNAL_FD as usize;
         return !(*self.internal_fds_.lock().unwrap()).get(pos).unwrap();
     }
     pub fn set_cwd(&self, path: String) {

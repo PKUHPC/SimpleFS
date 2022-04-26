@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 #[allow(unused)]
 use std::time::Instant;
 
-use futures::future::{join_all};
+use futures::{future::join_all, TryStreamExt};
 use grpcio::Error;
 use libc::{c_char, c_void, memcpy, EBUSY};
 use sfs_global::global::util::serde_util::{deserialize, serialize};
@@ -556,7 +556,7 @@ pub async fn forward_read(
     }
     return (0, tot_read);
 }
-pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>) {
+pub async fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>) {
     let targets = StaticContext::get_instance()
         .get_distributor()
         .locate_dir_metadata(path);
@@ -578,7 +578,16 @@ pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>) {
             ),
         ));
     }
-    let post_results = NetworkService::group_post(posts);
+    let post_results: Result<Vec<PostResult>, Error> = {
+        let mut post_results = Vec::new();
+        for (client, post) in posts {
+            let mut receiver = client.handle_dirents(&post).unwrap();
+            while let Some(res) = receiver.try_next().await.unwrap() {
+                post_results.push(res);
+            }
+        }
+        Ok(post_results)
+    };
     if let Err(_e) = post_results {
         println!("fail to get dirents: {} {:?}", path, _e);
         return (
@@ -598,17 +607,15 @@ pub fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>) {
     );
 
     for result in results {
-        let entries: Vec<(String, bool)> = deserialize::<Vec<(String, bool)>>(&result.data);
-        for entry in entries {
-            open_dir.add(
-                entry.0,
-                if entry.1 {
-                    FileType::SFS_DIRECTORY
-                } else {
-                    FileType::SFS_REGULAR
-                },
-            );
-        }
+        let entry: (String, bool) = deserialize::<(String, bool)>(&result.data);
+        open_dir.add(
+            entry.0,
+            if entry.1 {
+                FileType::SFS_DIRECTORY
+            } else {
+                FileType::SFS_REGULAR
+            },
+        );
     }
     (0, Arc::new(Mutex::new(open_dir)))
 }

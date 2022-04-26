@@ -67,6 +67,8 @@ pub fn init_context() -> StorageContext {
     context.set_link_count_state(true);
     context.set_blocks_state(true);
 
+    context.set_output(config.output);
+
     context
 }
 pub struct StorageContext {
@@ -85,6 +87,8 @@ pub struct StorageContext {
     ctime_state_: bool,
     link_count_state_: bool,
     blocks_state_: bool,
+
+    output: bool,
 }
 lazy_static! {
     static ref CTX: StorageContext = init_context();
@@ -110,6 +114,8 @@ impl StorageContext {
             ctime_state_: true,
             link_count_state_: true,
             blocks_state_: true,
+
+            output: false
         }
     }
     pub fn get_rootdir(&self) -> &String {
@@ -196,6 +202,12 @@ impl StorageContext {
     }
     pub fn get_host_id(&self) -> u64 {
         self.host_id_
+    }
+    pub fn set_output(&mut self, v: bool){
+        self.output = v;
+    }
+    pub fn output(&self) -> bool{
+        self.output
     }
 }
 /*

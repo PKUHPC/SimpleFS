@@ -6,6 +6,8 @@ use std::{
 
 use sfs_global::global::error_msg::error_msg;
 
+use super::context::MIN_INTERNAL_FD;
+
 pub static O_RDONLY: i32 = 0x0000; // open for reading only
 pub static O_WRONLY: i32 = 0x0001; // open for writing only
 pub static O_RDWR: i32 = 0x0002; // open for reading and writing
@@ -16,7 +18,7 @@ pub static O_TRUNC: i32 = 0x0200; // open and truncate
 pub static O_EXCL: i32 = 0x0400; // open only if file doesn't already exist
 
 pub static MAX_FD: i32 = 0x7fffffff;
-pub static MIN_FD: i32 = 100000;
+pub static MIN_FD: i32 = MIN_INTERNAL_FD;
 
 #[derive(Debug)]
 #[allow(non_camel_case_types)]

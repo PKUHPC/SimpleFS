@@ -3,5 +3,6 @@
     "rootdir": "/home/dev/Desktop/storage/",
     "metadir": "/home/dev/Desktop/metadata",
     "hosts_file": "/home/dev/Desktop/SimpleFS/sfs_server/hostfile",
-    "listen": "192.168.230.137"
+    "listen": "192.168.230.137",
+    "output": false
 }

@@ -501,9 +501,10 @@ static file_descriptor_proto_data: &'static [u8] = b"\
     data\x12\x14\n\x05extra\x18\x03\x20\x01(\x0cR\x05extra\"H\n\nPostResult\
     \x12\x10\n\x03err\x18\x01\x20\x01(\x05R\x03err\x12\x12\n\x04data\x18\x02\
     \x20\x01(\x0cR\x04data\x12\x14\n\x05extra\x18\x03\x20\x01(\x0cR\x05extra\
-    2~\n\tSFSHandle\x122\n\x06handle\x12\x10.sfs_server.Post\x1a\x16.sfs_ser\
-    ver.PostResult\x12=\n\rhandle_stream\x12\x10.sfs_server.Post\x1a\x16.sfs\
-    _server.PostResult(\x010\x01b\x06proto3\
+    2\xbc\x01\n\tSFSHandle\x122\n\x06handle\x12\x10.sfs_server.Post\x1a\x16.\
+    sfs_server.PostResult\x12=\n\rhandle_stream\x12\x10.sfs_server.Post\x1a\
+    \x16.sfs_server.PostResult(\x010\x01\x12<\n\x0ehandle_dirents\x12\x10.sf\
+    s_server.Post\x1a\x16.sfs_server.PostResult0\x01b\x06proto3\
 ";
 
 static file_descriptor_proto_lazy: ::protobuf::rt::LazyV2<::protobuf::descriptor::FileDescriptorProto> = ::protobuf::rt::LazyV2::INIT;

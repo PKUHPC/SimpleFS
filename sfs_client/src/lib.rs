@@ -62,7 +62,7 @@ pub extern "C" fn fd_remove(fd: i32) {
 }
 #[no_mangle]
 pub extern "C" fn fd_is_internal(fd: i32) -> bool {
-    DynamicContext::get_instance().is_internel_fd(fd)
+    DynamicContext::get_instance().is_internal_fd(fd)
 }
 #[no_mangle]
 pub extern "C" fn fd_get_path(fd: i32, path: *mut c_char) {
@@ -187,6 +187,7 @@ pub extern "C" fn enable_interception() {
 mod tests {
     use std::thread;
 
+    use bit_vec::BitVec;
     #[allow(unused_imports)]
     use libc::{c_char, dirent, stat as Stat, O_CREAT, O_RDWR, SEEK_SET, S_IFDIR, S_IFREG};
 
@@ -205,11 +206,8 @@ mod tests {
 
     #[test]
     fn test0() {
-        let path = "/sfs/test/create_dir/file1".to_string();
-        println!("1: {}", xxhash_rust::xxh3::xxh3_64(path.as_bytes()));
-        println!("2: {}", xxhash_rust::xxh3::xxh3_64(path.as_bytes()));
-        println!("3: {}", xxhash_rust::xxh3::xxh3_64(path.as_bytes()));
-        println!("4: {}", xxhash_rust::xxh3::xxh3_64(path.as_bytes()));
+        let bv = BitVec::from_elem(10000000, false);
+        println!("{}", bv.get(30).unwrap());
     }
     #[test]
     pub fn test1() {

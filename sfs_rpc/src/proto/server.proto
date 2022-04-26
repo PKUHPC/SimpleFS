@@ -4,6 +4,7 @@ package sfs_server;
 service SFSHandle{
     rpc handle(Post) returns (PostResult);
     rpc handle_stream(stream Post) returns (stream PostResult);
+    rpc handle_dirents(Post) returns (stream PostResult);
 }
 
 message Post{
