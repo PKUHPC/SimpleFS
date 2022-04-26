@@ -1,4 +1,4 @@
-use std::{path::Path, time};
+use std::{path::Path, time::{self, UNIX_EPOCH}};
 
 use libc::{EEXIST, EINVAL};
 use rocksdb::{Options, WriteOptions, DB};
@@ -155,7 +155,7 @@ impl MetadataDB {
         let op_s = Operand::IncreaseSize {
             size,
             append,
-            time: time::SystemTime::now().elapsed().unwrap().as_secs() as i64,
+            time: time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64,
         };
         let v = serialize(&op_s);
         if let Err(_e) = self.db.merge_opt(key, v, &self.write_opts) {
@@ -168,7 +168,7 @@ impl MetadataDB {
     pub fn decrease_size(&self, key: &String, size: usize) {
         let op_s = Operand::DecreaseSize {
             size,
-            time: time::SystemTime::now().elapsed().unwrap().as_secs() as i64,
+            time: time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64,
         };
         let v = serialize(&op_s);
         if let Err(_e) = self.db.merge_opt(key, v, &self.write_opts) {

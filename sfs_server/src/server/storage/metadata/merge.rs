@@ -56,6 +56,7 @@ pub fn full_merge(
     }
     let mut fsize = md.get_size();
     let mut mtime: i64 = md.get_modify_time();
+    let mut ctime: i64 = md.get_change_time();
     let mut op;
     while {
         op = iter.next();
@@ -84,6 +85,7 @@ pub fn full_merge(
                 }
                 fsize = size as i64;
                 mtime = std::cmp::max(mtime, time);
+                ctime = std::cmp::max(ctime, time);
             }
         }
     }
@@ -92,6 +94,7 @@ pub fn full_merge(
     }
     md.set_size(fsize);
     md.set_modify_time(mtime);
+    md.set_change_time(ctime);
     Some(md.serialize())
 }
 #[allow(unused_variables)]

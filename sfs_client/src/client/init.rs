@@ -23,7 +23,10 @@ use sfs_global::global::{
 };
 use sfs_rpc::proto::server_grpc::SfsHandleClient;
 
-use super::{context::{StaticContext, DynamicContext}, network::forward_msg::forward_get_fs_config};
+use super::{
+    context::{DynamicContext, StaticContext},
+    network::forward_msg::forward_get_fs_config,
+};
 
 fn extract_protocol(_uri: &String) {}
 fn load_host_file(path: &String) -> Result<Vec<(String, String)>, Error> {
@@ -65,7 +68,10 @@ fn lookup_endpoint(
         let serialized_data = serialize(&host_id);
         let post = post(option2i(&PostOption::Lookup), serialized_data, vec![0; 0]);
         let env = Arc::new(Environment::new(12));
-        let channel = ChannelBuilder::new(env).max_receive_message_len(128 * 1024 * 1024).max_send_message_len(128 * 1024 * 1024).connect(&format!("{}:{}", endp.addr, 8082));
+        let channel = ChannelBuilder::new(env)
+            .max_receive_message_len(128 * 1024 * 1024)
+            .max_send_message_len(128 * 1024 * 1024)
+            .connect(&format!("{}:{}", endp.addr, 8082));
         let client = SfsHandleClient::new(channel);
         if let Ok(_post_res) = client.handle(&post) {
             if ENABLE_OUTPUT {
@@ -152,7 +158,7 @@ pub fn init_environment() -> StaticContext {
         println!("found hosts: {:?}", hosts);
     }
     let host_len = connect_hosts(&mut hosts, &mut context);
-    if host_len == 0{
+    if host_len == 0 {
         return context;
     }
     let host_id = context.get_local_host_id();

@@ -1,7 +1,7 @@
 use lazy_static::*;
 use sfs_global::global::endpoint::SFSEndpoint;
 use sfs_rpc::proto::server_grpc::SfsHandleClient;
-use tokio::runtime::{Runtime, Builder};
+use tokio::runtime::{Builder, Runtime};
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -94,8 +94,7 @@ pub struct DynamicContext {
     protected_fds_: BitVec,
 
     cwd_: Mutex<String>,
-    runtime_: Arc<Runtime>,
-    pub debug_counter: Mutex<i32>
+    pub debug_counter: Mutex<i32>,
 }
 lazy_static! {
     static ref DCTX: DynamicContext = DynamicContext {
@@ -104,13 +103,7 @@ lazy_static! {
         protected_fds_: BitVec::from_elem(MAX_INTERNAL_FDS as usize, true),
 
         cwd_: Mutex::new("".to_string()),
-        runtime_: Arc::new(Builder::new_current_thread()
-            .worker_threads(12)
-            .thread_stack_size(12 * 1024 * 1024)
-            .enable_io()
-            .build()
-            .unwrap()),
-        debug_counter:  Mutex::new(0)
+        debug_counter: Mutex::new(0)
     };
 }
 impl DynamicContext {
@@ -275,16 +268,13 @@ impl DynamicContext {
     pub fn get_cwd(&self) -> MutexGuard<'_, String> {
         self.cwd_.lock().unwrap()
     }
-    pub fn get_runtime(&self) -> Arc<Runtime>{
-        Arc::clone(&self.runtime_)
-    }
-    pub fn incr_counter(){
+    pub fn incr_counter() {
         *DCTX.debug_counter.lock().unwrap() += 1;
     }
-    pub fn decr_counter(){
+    pub fn decr_counter() {
         *DCTX.debug_counter.lock().unwrap() -= 1;
     }
-    pub fn show_counter(){
+    pub fn show_counter() {
         println!("current counter: {}", *DCTX.debug_counter.lock().unwrap());
     }
 }
@@ -305,6 +295,7 @@ pub struct StaticContext {
     auto_sm_: bool,
 
     internal_fds_must_relocate_: bool,
+    runtime_: Arc<Runtime>,
 
     pub init_flag: bool,
 }
@@ -330,6 +321,14 @@ impl StaticContext {
             auto_sm_: false,
             internal_fds_must_relocate_: true,
             init_flag: false,
+            runtime_: Arc::new(
+                Builder::new_current_thread()
+                    .worker_threads(4)
+                    .enable_all()
+                    .thread_stack_size(12 * 1024 * 1024)
+                    .build()
+                    .unwrap(),
+            ),
         }
     }
     pub fn set_mountdir(&mut self, mut path: String) {
@@ -404,6 +403,9 @@ impl StaticContext {
     }
     pub fn get_init_flag(&self) -> bool {
         self.init_flag
+    }
+    pub fn get_runtime(&self) -> Arc<Runtime> {
+        Arc::clone(&self.runtime_)
     }
     pub fn protect_user_fds() {}
     pub fn unprotect_user_fds() {}

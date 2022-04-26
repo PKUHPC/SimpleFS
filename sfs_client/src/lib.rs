@@ -185,13 +185,11 @@ pub extern "C" fn enable_interception() {
 }
 #[cfg(test)]
 mod tests {
-    use std::thread;
+    use std::{thread, time};
 
-    use bit_vec::BitVec;
     #[allow(unused_imports)]
-    use libc::{c_char, dirent, stat as Stat, O_CREAT, O_RDWR, SEEK_SET, S_IFDIR, S_IFREG};
+    use libc::{c_char, dirent, stat, O_CREAT, O_RDWR, SEEK_SET, S_IFDIR, S_IFREG};
 
-    use crate::client::syscall::timespec;
     #[allow(unused_imports)]
     use crate::client::{
         context::{DynamicContext, StaticContext},
@@ -199,15 +197,21 @@ mod tests {
         syscall::{
             internal_truncate, sfs_create, sfs_dup, sfs_dup2, sfs_getdents, sfs_lseek, sfs_open,
             sfs_opendir, sfs_pread, sfs_pwrite, sfs_read, sfs_remove, sfs_rmdir, sfs_stat,
-            sfs_write, stat,
+            sfs_write,
         },
     };
     use sfs_global::global::network::config::CHUNK_SIZE;
+    use std::time::UNIX_EPOCH;
 
     #[test]
     fn test0() {
-        let bv = BitVec::from_elem(10000000, false);
-        println!("{}", bv.get(30).unwrap());
+        println!(
+            "{}",
+            time::SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+        );
     }
     #[test]
     pub fn test1() {
@@ -450,105 +454,6 @@ mod tests {
             return;
         } else {
             println!("read: {}", String::from_utf8(buf).unwrap());
-        }
-    }
-    #[test]
-    pub fn test5() {
-        let data = "hello, here is the test data of sfs small-data local-host stat test";
-
-        let dpath_sfs = "/sfs\0".to_string();
-        let _cres = sfs_create(dpath_sfs.as_ptr() as *const i8, S_IFDIR);
-
-        let fpath_file1 = "/sfs/file1\0".to_string();
-        let fd = sfs_open(
-            fpath_file1.as_str().as_ptr() as *const c_char,
-            S_IFREG,
-            O_CREAT | O_RDWR,
-        );
-
-        let len = data.len() as i64;
-        let _wres = sfs_write(fd, data.as_ptr() as *mut i8, len);
-
-        let mut stat: stat = stat {
-            st_dev: 0,
-            st_ino: 0,
-            st_nlink: 0,
-            st_mode: 0,
-            st_uid: 0,
-            st_gid: 0,
-            __pad0: 0,
-            st_rdev: 0,
-            st_size: 0,
-            st_blksize: 0,
-            st_blocks: 0,
-            st_atim: timespec {
-                tv_sec: 0,
-                tv_nsec: 0,
-            },
-            st_mtim: timespec {
-                tv_sec: 0,
-                tv_nsec: 0,
-            },
-            st_ctim: timespec {
-                tv_sec: 0,
-                tv_nsec: 0,
-            },
-            __glibc_reserved: [0; 3],
-        };
-        let res = sfs_stat(
-            fpath_file1.as_str().as_ptr() as *const c_char,
-            &mut stat as *mut stat,
-            false,
-        );
-        if res < 0 {
-            println!("stat error ...");
-            return;
-        } else {
-            println!("stat: {:?}", stat);
-        }
-
-        let tres = internal_truncate(fpath_file1.as_str().as_ptr() as *const c_char, len, 13);
-        if tres != 0 {
-            println!("truncate error ...");
-            return;
-        }
-
-        let mut stat: stat = stat {
-            st_dev: 0,
-            st_ino: 0,
-            st_nlink: 0,
-            st_mode: 0,
-            st_uid: 0,
-            st_gid: 0,
-            __pad0: 0,
-            st_rdev: 0,
-            st_size: 0,
-            st_blksize: 0,
-            st_blocks: 0,
-            st_atim: timespec {
-                tv_sec: 0,
-                tv_nsec: 0,
-            },
-            st_mtim: timespec {
-                tv_sec: 0,
-                tv_nsec: 0,
-            },
-            st_ctim: timespec {
-                tv_sec: 0,
-                tv_nsec: 0,
-            },
-            __glibc_reserved: [0; 3],
-        };
-        let res = sfs_stat(
-            fpath_file1.as_str().as_ptr() as *const c_char,
-            &mut stat as *mut stat,
-            false,
-        );
-        if res < 0 {
-            println!("stat error ...");
-            return;
-        } else {
-            println!("stat: {:?}", stat);
         }
     }
     #[test]
@@ -839,7 +744,11 @@ mod tests {
         }
         sfs_lseek(fd, 0, SEEK_SET);
         let mut buf = vec![0 as u8; cnt * thread * CHUNK_SIZE as usize];
-        let res = sfs_read(fd, buf.as_mut_ptr() as *mut i8, cnt as i64 * thread as i64 * CHUNK_SIZE as i64);
+        let res = sfs_read(
+            fd,
+            buf.as_mut_ptr() as *mut i8,
+            cnt as i64 * thread as i64 * CHUNK_SIZE as i64,
+        );
         if res <= 0 {
             println!("read error ...");
             return;

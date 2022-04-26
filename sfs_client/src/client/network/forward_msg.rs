@@ -83,10 +83,10 @@ pub fn forward_create(path: &String, mode: u32) -> Result<i32, Error> {
         return Ok(0);
     }
 }
-pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> Result<i32, Error> {
+pub fn forward_remove(path: &String, remove_metadentry_only: bool, size: i64) -> Result<i32, Error> {
     let endp_id = StaticContext::get_instance()
         .get_distributor()
-        .locate_file_metadata(&path);
+        .locate_file_metadata(path);
     let _post_res = NetworkService::post::<&str>(
         StaticContext::get_instance()
             .get_clients()
@@ -102,7 +102,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
     if (size / CHUNK_SIZE as i64) < StaticContext::get_instance().get_hosts().len() as i64 {
         let meta_host_id = StaticContext::get_instance()
             .get_distributor()
-            .locate_file_metadata(&path);
+            .locate_file_metadata(path);
 
         let chunk_start = 0;
         let chunk_end = size as u64 / CHUNK_SIZE;
@@ -121,7 +121,7 @@ pub fn forward_remove(path: String, remove_metadentry_only: bool, size: i64) -> 
         for chunk_id in chunk_start..(chunk_end + 1) {
             let chunk_host_id = StaticContext::get_instance()
                 .get_distributor()
-                .locate_data(&path, chunk_id);
+                .locate_data(path, chunk_id);
             if chunk_host_id == meta_host_id {
                 continue;
             }
@@ -428,29 +428,35 @@ pub async fn forward_write(
             ));
         }
         handles.push(tokio::spawn(async move {
-            NetworkService::post_stream(
+            let mut tot_write = 0;
+            let post_result =  NetworkService::post_stream(
                 StaticContext::get_instance()
                     .get_clients()
                     .get(target as usize)
                     .unwrap(),
                 posts,
             )
-            .await
+            .await;
+            if let Err(_e) = post_result {
+                return (EBUSY, tot_write);
+            }
+            let response = post_result.unwrap();
+            for res in response {
+                if res.err != 0 {
+                    return (res.err, tot_write);
+                }
+                tot_write += deserialize::<u64>(&res.data) as i64;
+            }
+            (0, tot_write)
         }));
     }
     //let joins = join_all(handles).await;
     for handle in handles {
         let post_result = handle.await.unwrap();
-        if let Err(_e) = post_result {
-            return (EBUSY, tot_write);
+        if post_result.0 != 0{
+            return (post_result.0, tot_write);
         }
-        let response = post_result.unwrap();
-        for res in response {
-            if res.err != 0 {
-                return (res.err, tot_write);
-            }
-            tot_write += deserialize::<u64>(&res.data) as i64;
-        }
+        tot_write += post_result.1;
     }
     return (0, tot_write);
 }

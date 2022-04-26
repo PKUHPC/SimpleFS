@@ -44,9 +44,9 @@ impl fmt::Display for Metadata {
 impl Metadata {
     pub fn new() -> Metadata {
         Metadata {
-            access_time_: time::SystemTime::now().elapsed().unwrap().as_secs() as i64,
-            modify_time_: time::SystemTime::now().elapsed().unwrap().as_secs() as i64,
-            change_time_: time::SystemTime::now().elapsed().unwrap().as_secs() as i64,
+            access_time_: time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64,
+            modify_time_: time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64,
+            change_time_: time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64,
             mode_: 0,
             link_count_: 1,
             size_: 0,
@@ -62,9 +62,9 @@ impl Metadata {
     }
     pub fn init_acm_time(&mut self) {
         if let Ok(n) = SystemTime::now().duration_since(UNIX_EPOCH) {
-            self.access_time_ = n.as_micros() as i64;
-            self.change_time_ = n.as_micros() as i64;
-            self.modify_time_ = n.as_micros() as i64;
+            self.access_time_ = n.as_secs() as i64;
+            self.change_time_ = n.as_secs() as i64;
+            self.modify_time_ = n.as_secs() as i64;
         } else {
             print!("error::global::metadata::init_acm_time - invalid time detected\n");
         }
@@ -72,13 +72,13 @@ impl Metadata {
     pub fn update_acm_time(&mut self, a: bool, c: bool, m: bool) {
         if let Ok(n) = SystemTime::now().duration_since(UNIX_EPOCH) {
             if a {
-                self.access_time_ = n.as_micros() as i64;
+                self.access_time_ = n.as_secs() as i64;
             }
             if c {
-                self.change_time_ = n.as_micros() as i64;
+                self.change_time_ = n.as_secs() as i64;
             }
             if m {
-                self.modify_time_ = n.as_micros() as i64;
+                self.modify_time_ = n.as_secs() as i64;
             }
         } else {
             print!("error::global::metadata::update_acm_time - invalid time detected\n");

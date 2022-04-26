@@ -13,7 +13,8 @@ use libc::{
     O_CREAT, O_DIRECTORY, O_EXCL, O_PATH, O_RDONLY, O_TRUNC, O_WRONLY, SEEK_CUR, SEEK_DATA,
     SEEK_END, SEEK_HOLE, SEEK_SET, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFMT, S_IFREG, S_IFSOCK,
 };
-use libc::{statx, EBADF, EBUSY, EINVAL, EISDIR, ENOENT, ENOTDIR, ENOTEMPTY, ENOTSUP, EEXIST};
+#[allow(unused)]
+use libc::{statx, EBADF, EBUSY, EINVAL, EISDIR, ENOENT, ENOTDIR, ENOTEMPTY, ENOTSUP, EEXIST, stat};
 
 use sfs_global::global;
 use sfs_global::global::error_msg::error_msg;
@@ -23,6 +24,7 @@ use sfs_global::global::network::config::CHUNK_SIZE;
 use sfs_global::global::util::path_util::dirname;
 
 use super::config::CHECK_PARENT_DIR;
+use super::context::StaticContext;
 #[allow(unused_imports)]
 use super::context::{interception_enabled, DynamicContext};
 use super::network::forward_msg::{
@@ -238,7 +240,7 @@ pub extern "C" fn sfs_remove(path: *const c_char) -> i32 {
     }
     let md = md_res.unwrap();
     let has_data = S_ISREG(md.get_mode()) && md.get_size() != 0;
-    let rm_res = forward_remove(path.clone(), !has_data, md.get_size());
+    let rm_res = forward_remove(&path, !has_data, md.get_size());
     if let Err(_e) = rm_res {
         error_msg(
             "client::sfs_remove".to_string(),
@@ -262,6 +264,7 @@ pub extern "C" fn sfs_access(path: *const c_char, _mask: i32, _follow_links: boo
     }
     return 0;
 }
+/*
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct timespec {
@@ -287,6 +290,7 @@ pub struct stat {
     pub st_ctim: timespec,
     pub __glibc_reserved: [i64; 3],
 }
+*/
 #[no_mangle]
 pub extern "C" fn sfs_stat(path: *const c_char, buf: *mut stat, _follow_links: bool) -> i32 {
     let path = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
@@ -298,6 +302,7 @@ pub extern "C" fn sfs_stat(path: *const c_char, buf: *mut stat, _follow_links: b
     metadata_to_stat(&path, md, buf);
     return 0;
 }
+/*
 #[no_mangle]
 pub extern "C" fn sfs_statx(
     _dirfs: i32,
@@ -328,19 +333,12 @@ pub extern "C" fn sfs_statx(
         st_size: 0,
         st_blksize: 0,
         st_blocks: 0,
-        st_atim: timespec {
-            tv_sec: 0,
-            tv_nsec: 0,
-        },
-        st_mtim: timespec {
-            tv_sec: 0,
-            tv_nsec: 0,
-        },
-        st_ctim: timespec {
-            tv_sec: 0,
-            tv_nsec: 0,
-        },
-        __glibc_reserved: [0; 3],
+        st_atime: 0,
+        st_mtime: 0,
+        st_ctime: 0,
+        st_atime_nsec: 0,
+        st_mtime_nsec: 0,
+        st_ctime_nsec: 0,
     };
 
     metadata_to_stat(&path, md, &mut stat);
@@ -357,19 +355,20 @@ pub extern "C" fn sfs_statx(
         (*buf).stx_blocks = stat.st_blocks as u64;
         (*buf).stx_attributes_mask = 0;
 
-        (*buf).stx_atime.tv_sec = stat.st_atim.tv_sec;
-        (*buf).stx_atime.tv_nsec = stat.st_atim.tv_nsec as u32;
+        (*buf).stx_atime.tv_sec = stat.st_atime;
+        (*buf).stx_atime.tv_nsec = stat.st_atime as u32;
 
-        (*buf).stx_mtime.tv_sec = stat.st_mtim.tv_sec;
-        (*buf).stx_mtime.tv_nsec = stat.st_mtim.tv_nsec as u32;
+        (*buf).stx_mtime.tv_sec = stat.st_mtime;
+        (*buf).stx_mtime.tv_nsec = stat.st_mtime as u32;
 
-        (*buf).stx_ctime.tv_sec = stat.st_ctim.tv_sec;
-        (*buf).stx_ctime.tv_nsec = stat.st_ctim.tv_nsec as u32;
+        (*buf).stx_ctime.tv_sec = stat.st_ctime;
+        (*buf).stx_ctime.tv_nsec = stat.st_ctime as u32;
 
         (*buf).stx_btime = (*buf).stx_atime;
     }
     return 0;
 }
+*/
 #[no_mangle]
 pub extern "C" fn sfs_statfs(buf: *mut statfs) -> i32 {
     let ret = forward_get_chunk_stat();
@@ -568,8 +567,7 @@ fn internal_pwrite(f: MutexGuard<'_, OpenFile>, buf: *const c_char, count: i64, 
         return (f, ret_update_size.1);
     }
     let updated_size = ret_update_size.1;
-    let write_res = //forward_write(path, buf, append_flag, offset, count, updated_size);
-        DynamicContext::get_instance().get_runtime().block_on(forward_write(path, buf, append_flag, offset, count, updated_size));
+    let write_res = StaticContext::get_instance().get_runtime().block_on(forward_write(path, buf, append_flag, offset, count, updated_size));
     if write_res.0 != 0 {
         error_msg(
             "client::sfs_pwrite".to_string(),
@@ -647,7 +645,7 @@ fn internal_pread(f: MutexGuard<'_, OpenFile>, buf: *mut c_char, count: i64, off
     }
     let path = f.get_path();
     let read_res = //forward_read(path, buf, offset, count);
-        DynamicContext::get_instance().get_runtime().block_on(forward_read(path, buf, offset, count));
+        StaticContext::get_instance().get_runtime().block_on(forward_read(path, buf, offset, count));
     //println!("finish: {}", read_res.0);
     if read_res.0 != 0 {
         error_msg(
@@ -718,7 +716,7 @@ pub extern "C" fn sfs_rmdir(path: *const c_char) -> i32 {
         set_errno(Errno(ENOTDIR));
         return -1;
     }
-    let dirent_res = DynamicContext::get_instance().get_runtime().block_on(forward_get_dirents(&path));
+    let dirent_res = StaticContext::get_instance().get_runtime().block_on(forward_get_dirents(&path));
     if dirent_res.0 != 0 {
         error_msg(
             "client::sfs_rmdir".to_string(),
@@ -736,7 +734,7 @@ pub extern "C" fn sfs_rmdir(path: *const c_char) -> i32 {
         set_errno(Errno(ENOTEMPTY));
         return -1;
     }
-    let rm_res = forward_remove(path.clone(), true, 0);
+    let rm_res = forward_remove(&path, true, 0);
     if let Err(_e) = rm_res {
         error_msg(
             "client::sfs_rmdir".to_string(),
@@ -772,7 +770,7 @@ pub extern "C" fn sfs_opendir(path: *const c_char) -> i32 {
         set_errno(Errno(ENOTDIR));
         return -1;
     }
-    let dirent_res = DynamicContext::get_instance().get_runtime().block_on(forward_get_dirents(&path));
+    let dirent_res = StaticContext::get_instance().get_runtime().block_on(forward_get_dirents(&path));
     if dirent_res.0 != 0 {
         error_msg(
             "client::sfs_opendir".to_string(),
