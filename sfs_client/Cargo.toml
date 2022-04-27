@@ -24,7 +24,7 @@ serde_json = "*"
 bindgen = '*'
 regex = '*'
 tokio = { version = "1.17", features = ["full"] }
-futures = '*'
+futures = "0.3.21"
 prost = "0.9.0"
 grpcio = "0.10.1"
 sfs_rpc = {path = "../sfs_rpc"}

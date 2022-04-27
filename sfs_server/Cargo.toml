@@ -13,7 +13,7 @@ serde_json = "*"
 tokio = { version = "1.17", features = ["full"] }
 prost = "0.9.0"
 grpcio = "0.10.1"
-futures = '*'
+futures = "0.3.21"
 sfs_global = {path = "../sfs_global"}
 sfs_rpc = {path = "../sfs_rpc"}
 tokio-stream = "0.1.8"
