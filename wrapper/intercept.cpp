@@ -75,6 +75,7 @@ hook(long syscall_number,
                     hook_stat(reinterpret_cast<char*>(arg0),
                                           reinterpret_cast<struct stat*>(arg1));
             break;
+/*
 #ifdef STATX_TYPE
         case SYS_statx:
             *result = hook_statx(
@@ -83,6 +84,7 @@ hook(long syscall_number,
                     reinterpret_cast<struct statx*>(arg4));
             break;
 #endif
+*/
         case SYS_lstat:
             *result = hook_lstat(
                     reinterpret_cast<char*>(arg0),

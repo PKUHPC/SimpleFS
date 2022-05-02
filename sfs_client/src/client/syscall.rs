@@ -893,7 +893,7 @@ pub extern "C" fn sfs_getdents64(fd: i32, dirp: *mut dirent64, count: i64) -> i3
         if total_size as i64 > count - written {
             break;
         }
-        let current_dirp = unsafe { (dirp as *mut c_char).offset(written as isize) as *mut dirent };
+        let current_dirp = unsafe { (dirp as *mut c_char).offset(written as isize) as *mut dirent64 };
         let mut s = DefaultHasher::new();
         let p = opendir.lock().unwrap().get_path().clone() + "/" + &de.get_name();
         p.hash(&mut s);
