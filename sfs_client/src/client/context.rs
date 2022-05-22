@@ -323,7 +323,6 @@ impl StaticContext {
             init_flag: false,
             runtime_: Arc::new(
                 Builder::new_current_thread()
-                    .worker_threads(4)
                     .enable_all()
                     .thread_stack_size(12 * 1024 * 1024)
                     .build()
