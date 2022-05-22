@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 pub struct WriteData<'a> {
     pub path: &'a str,
     pub offset: i64,
-    pub chunk_id: u64,
     pub write_size: u64,
+    pub rdma_addr: &'a str,
+    pub rdma_port: u16
 }
 
 #[derive(Serialize, Deserialize, Debug)]

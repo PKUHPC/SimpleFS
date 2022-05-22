@@ -2,6 +2,7 @@
 use std::time::Instant;
 
 use crate::server::storage::data::chunk_storage::ChunkStorage;
+#[allow(unused)]
 use sfs_global::global::{
     network::{
         config::CHUNK_SIZE,
@@ -14,7 +15,7 @@ use sfs_global::global::{
     },
 };
 use sfs_rpc::proto::server::PostResult;
-
+/*
 pub fn handle_write(input: &WriteData, data: &[u8]) -> PostResult {
     let write_tot = if let Ok(nwrite) = ChunkStorage::write_chunk(
         &input.path.to_string(),
@@ -30,6 +31,7 @@ pub fn handle_write(input: &WriteData, data: &[u8]) -> PostResult {
     let post_res = post_result(0, serialize(write_tot), vec![0; 0]);
     return post_res;
 }
+*/
 
 #[allow(unused_variables)]
 #[allow(unused_assignments)]

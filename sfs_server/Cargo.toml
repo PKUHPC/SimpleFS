@@ -16,6 +16,7 @@ grpcio = "0.10.1"
 futures = "0.3.21"
 sfs_global = {path = "../sfs_global"}
 sfs_rpc = {path = "../sfs_rpc"}
+sfs_rdma = {path = "../sfs_rdma"}
 tokio-stream = "0.1.8"
 flexbuffers = "2.0.0"
 

@@ -6,7 +6,7 @@ use crate::CHUNK_SIZE;
 
 use crate::{transfer::{Message, ReceiverContext, MessageType}, get_addr, process_rdma_cm_event, CQ_CAPACITY, MAX_WR, MAX_SGE, build_params, rdma::CQPoller, chunk_operation::ChunkOp};
 
-pub(crate) fn recver_client(addr: String, port: u16, op: ChunkOp) -> Result<i64, i32>{
+pub(crate) fn recver_client(addr: &String, port: u16, op: ChunkOp) -> Result<i64, i32>{
     let mut server_sockaddr = sockaddr_in {
         sin_family: AF_INET as u16,
         sin_port: port,

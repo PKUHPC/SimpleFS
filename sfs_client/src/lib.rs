@@ -620,7 +620,7 @@ mod tests {
     }
     */
     #[test]
-    pub fn test10() {
+    pub fn test_10() {
         let data = "hello, here is the test data of sfs small-data local-host dup2 test";
 
         let dpath_sfs = "/sfs\0".to_string();
@@ -663,7 +663,7 @@ mod tests {
     }
     #[test]
     pub fn test_bigdata() {
-        let cnt = 1500;
+        let cnt = 1200;
 
         let path = "/file1\0".to_string();
         let fd = sfs_open(
@@ -765,16 +765,16 @@ mod tests {
             S_IFREG,
             O_CREAT | O_RDWR,
         );
-        for i in 0..1600 {
+        for i in 0..3 {
             //println!("file {} opened on thread {} ...", fd, i);
-            let cnt = 1;
+            let cnt = 500;
             let data = vec!['a' as i8; cnt * CHUNK_SIZE as usize];
             let res = sfs_write(fd, data.as_ptr() as *mut i8, data.len() as i64);
             if res <= 0 {
-                println!("write error on thread {} ...", i);
+                println!("write error on task {} ...", i);
                 return;
             } else {
-                //println!("{} bytes written on thread {} ...", res, i);
+                println!("{} bytes written on task {} ...", res, i);
             }
         }
     }

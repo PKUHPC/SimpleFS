@@ -124,10 +124,11 @@ impl ChunkStorage {
     pub fn write_chunk(
         file_path: &String,
         chunk_id: u64,
-        buf: &[u8],
+        buf: *mut u8,
         size: u64,
         offset: u64,
-    ) -> Result<u64, i32> {
+    ) -> Result<i64, i32> {
+        let buf = unsafe{std::slice::from_raw_parts(buf.cast(), size as usize)};
         if size + offset > CNK.get_chunk_size() {
             error_msg(
                 "server::storage::chunk_storage::write_chunk".to_string(),
@@ -136,7 +137,7 @@ impl ChunkStorage {
         }
         if ENABLE_STUFFING && STUFF_WITH_ROCKSDB && chunk_id == 0 {
             StuffDB::get_instance().write(file_path, offset, size, buf);
-            return Ok(size);
+            return Ok(size as i64);
         }
         ChunkStorage::init_chunk_space(file_path);
         let chunk_path =
@@ -161,7 +162,7 @@ impl ChunkStorage {
                 return Err(-1);
             }
         }
-        Ok(wrote_tot as u64)
+        Ok(wrote_tot as i64)
     }
     pub fn read_chunk(
         file_path: &String,

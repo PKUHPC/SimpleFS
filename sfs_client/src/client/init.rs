@@ -1,7 +1,7 @@
 use core::time;
 use std::{
     fs::OpenOptions,
-    io::{BufRead, BufReader, Error},
+    io::{BufRead, BufReader, Error, Read},
     path::Path,
     sync::Arc,
     thread,
@@ -15,7 +15,7 @@ use sfs_global::global::{
     endpoint::SFSEndpoint,
     error_msg::error_msg,
     fsconfig::{ENABLE_OUTPUT, HOSTFILE_PATH},
-    network::post::{option2i, post, PostOption},
+    network::{post::{option2i, post, PostOption}, config::RDMAConfig},
     util::{
         env_util::{get_hostname, get_var},
         serde_util::serialize,
@@ -171,6 +171,17 @@ pub fn init_environment() -> StaticContext {
             "fail to fetch fs config".to_string(),
         );
     }
+    let mut json: Vec<u8> = Vec::new();
+    let mut f = std::fs::OpenOptions::new()
+        .read(true)
+        .open("config.json".to_string())
+        .unwrap();
+
+    f.read_to_end(&mut json).expect("fail to read config file");
+    let s = String::from_utf8(json.clone()).unwrap();
+    let config: RDMAConfig =
+        serde_json::from_str(s.as_str()).expect("JSON was not well-formatted");
+    context.rdma_addr = config.addr;
 
     context.init_flag = true;
     return context;

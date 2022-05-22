@@ -20,8 +20,9 @@ pub (crate) fn on_completion(wc: *mut ibv_wc, _pd: *mut ibv_pd, op: &ChunkOp) ->
             else{
                 post_receive(id);
                 (*(*ctx).msg).mtype = MessageType::MSG_READY;
+                let ret = op.submit(ChunkInfo{ chunk_id: chunk_id as u64, data: (*ctx).buffer });
                 send_message(id);
-                return op.submit(ChunkInfo{ chunk_id: chunk_id as u64, data: (*ctx).buffer });
+                return ret;
             }
         }
         return Ok(0);

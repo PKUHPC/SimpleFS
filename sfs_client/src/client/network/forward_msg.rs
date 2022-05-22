@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+#[allow(unused)]
 use std::slice;
 use std::sync::{Arc, Mutex};
 #[allow(unused)]
@@ -8,6 +9,9 @@ use futures::{future::join_all, TryStreamExt};
 use grpcio::Error;
 use libc::{c_char, c_void, memcpy, EBUSY};
 use sfs_global::global::util::serde_util::{deserialize, serialize};
+use sfs_rdma::chunk_operation::ChunkOp;
+use sfs_rdma::rdma::RDMA;
+use sfs_rdma::transfer::ChunkTransferTask;
 use sfs_rpc::proto::server::PostResult;
 
 #[allow(unused)]
@@ -357,7 +361,7 @@ pub async fn forward_write(
     } else {
         updated_metadentry_size - write_size
     };
-    let chunk_start = offset_to_chunk_id(offset.clone(), CHUNK_SIZE);
+    let chunk_start = offset_to_chunk_id(offset, CHUNK_SIZE);
     let chunk_end = offset_to_chunk_id(offset + write_size - 1, CHUNK_SIZE);
     let mut target_chunks: HashMap<u64, Vec<u64>> = HashMap::new();
     let mut targets: Vec<u64> = Vec::new();
@@ -376,78 +380,45 @@ pub async fn forward_write(
     }
     let mut tot_write = 0;
     //let buf = unsafe { CStr::from_ptr(buf).to_string_lossy().into_owned() };
-    let buf = unsafe { slice::from_raw_parts(buf as *const u8, write_size as usize) };
+    //let buf = unsafe { slice::from_raw_parts(buf as *const u8, write_size as usize) };
     let mut handles = Vec::new();
+    let mut rdma_handles = Vec::new();
     for target in targets {
-        let mut posts = Vec::new();
-        for chunk in target_chunks.get(&target).unwrap() {
-            let total_size = if *chunk == chunk_start {
-                if *chunk == chunk_end {
-                    write_size as u64
-                } else {
-                    chunk_rpad(offset, CHUNK_SIZE)
-                }
-            } else if *chunk == chunk_end {
-                let pad = chunk_lpad(offset + write_size, CHUNK_SIZE);
-                if pad == 0 {
-                    CHUNK_SIZE
-                } else {
-                    pad
-                }
-            } else {
-                CHUNK_SIZE
+        let rdma_port = portpicker::pick_unused_port().unwrap();
+        let data = WriteData {
+            path: path.as_str(),
+            offset: in_offset,
+            write_size: write_size as u64,
+            rdma_addr: StaticContext::get_instance().rdma_addr.as_str(),
+            rdma_port
+        };
+        let addr = buf as u64;
+        let chunk_ids = target_chunks.remove(&target).unwrap();
+        rdma_handles.push({
+            let op = ChunkOp::none();
+            let chunk_transfer = ChunkTransferTask{
+                chunk_id: chunk_ids,
+                chunk_start: chunk_start as u64,
+                offset: offset as u64 % CHUNK_SIZE,
+                addr: addr,
+                size: write_size as u64,
             };
-
-            let offset_start = if *chunk == chunk_start {
-                0
-            } else {
-                (*chunk - chunk_start) * CHUNK_SIZE - offset as u64 % CHUNK_SIZE
-            } as usize;
-
-            let offset_end = if *chunk == chunk_end {
-                write_size as u64
-            } else if *chunk == chunk_start {
-                chunk_rpad(offset, CHUNK_SIZE)
-            } else {
-                (*chunk - chunk_start + 1) * CHUNK_SIZE - offset as u64 % CHUNK_SIZE
-            } as usize;
-            let data = WriteData {
-                path: path.as_str(),
-                offset: if *chunk == chunk_start {
-                    chunk_lpad(offset, CHUNK_SIZE) as i64
-                } else {
-                    0
-                },
-                chunk_id: *chunk,
-                write_size: total_size,
-            };
-            posts.push(post(
-                option2i(&PostOption::Write),
-                serialize(&data),
-                buf[offset_start..offset_end].to_vec(),
-            ));
-        }
+            RDMA::sender_server(StaticContext::get_instance().get_rdma_addr(), rdma_port, chunk_transfer, op)
+        });
+        let serialized_data = serialize(data);
         handles.push(tokio::spawn(async move {
-            let mut tot_write = 0;
-            let post_result =  NetworkService::post_stream(
+            let post_result =  NetworkService::post_serialized(
                 StaticContext::get_instance()
                     .get_clients()
                     .get(target as usize)
                     .unwrap(),
-                posts,
-            )
-            .await;
+                serialized_data,
+                PostOption::Write
+            );
             if let Err(_e) = post_result {
-                return (EBUSY, tot_write);
+                return (EBUSY, 0);
             }
-            let response = post_result.unwrap();
-            for res in response {
-                if res.err != 0 {
-                    return (res.err, tot_write);
-                }
-                tot_write += deserialize::<u64>(&res.data) as i64;
-            }
-            (0, tot_write)
+            (0, deserialize::<i64>(&post_result.unwrap().data))
         }));
     }
     //let joins = join_all(handles).await;
@@ -457,6 +428,9 @@ pub async fn forward_write(
             return (post_result.0, tot_write);
         }
         tot_write += post_result.1;
+    }
+    for rdma in rdma_handles{
+        rdma.join().unwrap();
     }
     return (0, tot_write);
 }

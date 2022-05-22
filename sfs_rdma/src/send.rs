@@ -40,7 +40,8 @@ pub(crate) fn write_remote(id: *mut rdma_cm_id, len: u32) {
         wr.send_flags = ibv_send_flags::IBV_SEND_SIGNALED.0;
         wr.imm_data_invalidated_rkey_union = imm_data_invalidated_rkey_union_t {
             imm_data: if len > 0 {
-                (*(*ctx).chunk_id).to_be() as u32
+                let chunk_id = (*ctx).chunk_id.remove(0) as u32;
+                chunk_id.to_be()
             } else {
                 u32::MAX
             },
@@ -72,16 +73,15 @@ pub(crate) fn send_next_chunk(id: *mut rdma_cm_id, pd: *mut ibv_pd){
     unsafe {
         let mut ctx: *mut SenderContext = (*id).context.cast();
 
-        let transfer_size = if (*ctx).chunks > 0 {
+        let transfer_size = if (*ctx).chunk_id.len() > 0 {
             assert_eq!(ibv_dereg_mr((*ctx).buffer_mr), 0);
 
-            let offset = CHUNK_SIZE * (*(*ctx).chunk_id);
+            let offset = if (*ctx).chunk_id[0] == (*ctx).chunk_start {0} else {CHUNK_SIZE * ((*ctx).chunk_id[0]  - (*ctx).chunk_start) - (*ctx).offset};
             (*ctx).buffer = ((*ctx).addr as *mut u8).offset(offset as isize);
-            let len = u64::min(CHUNK_SIZE, (*ctx).size - offset);
+            let len = if (*ctx).chunk_id[0] == (*ctx).chunk_start {u64::min(CHUNK_SIZE - (*ctx).offset, (*ctx).size)} else {u64::min(CHUNK_SIZE, (*ctx).size - offset)};
             (*ctx).buffer_mr = ibv_reg_mr(pd, (*ctx).buffer.cast(), len as usize, 0);
 
-            (*ctx).chunks -= 1;
-            (*ctx).chunk_id = (*ctx).chunk_id.offset(1);
+            //println!("{} - {}: {} {} | {} {}", (*ctx).chunk_start, (*ctx).chunk_id[0], (*ctx).offset, (*ctx).size, offset, len);
             len
         } else {
             0

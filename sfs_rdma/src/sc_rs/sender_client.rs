@@ -6,7 +6,7 @@ use crate::CHUNK_SIZE;
 
 use crate::{transfer::{ChunkTransferTask, SenderContext, Message}, get_addr, process_rdma_cm_event, CQ_CAPACITY, MAX_WR, MAX_SGE, build_params, rdma::CQPoller, chunk_operation::ChunkOp};
 
-pub(crate) fn sender_client(addr: String, port: u16, task: ChunkTransferTask, op: ChunkOp) {
+pub(crate) fn sender_client(addr: &String, port: u16, task: ChunkTransferTask, op: ChunkOp) {
     let mut server_sockaddr = sockaddr_in {
         sin_family: AF_INET as u16,
         sin_port: port,
@@ -24,10 +24,11 @@ pub(crate) fn sender_client(addr: String, port: u16, task: ChunkTransferTask, op
         0
     );
     unsafe {
-        let mut ctx: SenderContext = std::mem::zeroed();
+        let mut ctx: SenderContext = SenderContext::new();
         ctx.addr = task.addr;
         ctx.chunk_id = task.chunk_id;
-        ctx.chunks = task.chunks;
+        ctx.chunk_start = task.chunk_start;
+        ctx.offset = task.offset;
         ctx.size = task.size;
 
         let ec = rdma_create_event_channel();

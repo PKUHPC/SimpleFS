@@ -297,6 +297,8 @@ pub struct StaticContext {
     internal_fds_must_relocate_: bool,
     runtime_: Arc<Runtime>,
 
+    pub rdma_addr: String,
+
     pub init_flag: bool,
 }
 lazy_static! {
@@ -321,6 +323,7 @@ impl StaticContext {
             auto_sm_: false,
             internal_fds_must_relocate_: true,
             init_flag: false,
+            rdma_addr: "127.0.0.1".to_string(),
             runtime_: Arc::new(
                 Builder::new_current_thread()
                     .enable_all()
@@ -405,6 +408,9 @@ impl StaticContext {
     }
     pub fn get_runtime(&self) -> Arc<Runtime> {
         Arc::clone(&self.runtime_)
+    }
+    pub fn get_rdma_addr(&self) -> &String{
+        &self.rdma_addr
     }
     pub fn protect_user_fds() {}
     pub fn unprotect_user_fds() {}

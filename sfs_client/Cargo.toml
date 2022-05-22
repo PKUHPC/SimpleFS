@@ -29,7 +29,10 @@ prost = "0.9.0"
 grpcio = "0.10.1"
 sfs_rpc = {path = "../sfs_rpc"}
 sfs_global = {path = "../sfs_global"}
+sfs_rdma = {path = "../sfs_rdma"}
 errno = "0.2.8"
 tokio-stream = "0.1.8"
 flexbuffers = "2.0.0"
 xxhash-rust = { version = '0.8.4', features = ["xxh3"] }
+
+portpicker = "0.1.1"

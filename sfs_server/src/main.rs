@@ -21,6 +21,7 @@ use sfs_global::global::fsconfig::ENABLE_STUFFING;
 use sfs_global::global::network::forward_data::PreCreateData;
 use sfs_global::global::network::post::{i2option, post_result, PostOption};
 use sfs_global::global::util::serde_util::{deserialize, serialize};
+use sfs_global::global::util::arith_util::offset_to_chunk_id;
 use sfs_global::{
     global::network::post::PostOption::*,
     global::{
@@ -36,6 +37,8 @@ use sfs_global::{
         util::net_util::get_my_hostname,
     },
 };
+use sfs_rdma::chunk_operation::ChunkOp;
+use sfs_rdma::rdma::RDMA;
 use sfs_rpc::proto::server::{Post, PostResult};
 use sfs_rpc::proto::server_grpc::{create_sfs_handle, SfsHandle};
 use std::collections::HashMap;
@@ -49,7 +52,7 @@ use std::{
     path::Path,
 };
 
-use crate::handle::{handle_read, handle_trunc, handle_write};
+use crate::handle::{handle_read, handle_trunc};
 
 #[allow(unused)]
 use std::time::Instant;
@@ -139,8 +142,9 @@ fn handle_request(post: &Post) -> PostResult {
                 update_data.size as usize + update_data.offset as usize,
                 update_data.append,
             );
-            let mut extra = vec![0; 0];
+            let extra = vec![0; 0];
             if ENABLE_STUFFING {
+                /*
                 let md = Metadata::deserialize(&MetadataDB::get_instance().get(&path).unwrap());
                 if md.is_stuffed() {
                     let write_tot = ChunkStorage::write_chunk(
@@ -154,6 +158,7 @@ fn handle_request(post: &Post) -> PostResult {
                         extra = serialize(len);
                     }
                 }
+                */
             }
             return post_result(
                 0,
@@ -208,6 +213,26 @@ fn handle_request(post: &Post) -> PostResult {
             }
             handle_precreate(&data);
             return post_result(0, vec![0; 0], vec![0; 0]);
+        }
+        Write => {
+            let write_data: WriteData = deserialize::<WriteData>(&post.data);
+            if StorageContext::get_instance().output() {
+                println!("handling stream write of '{}'....", write_data.path);
+                println!("  - {:?}", write_data);
+            }
+            let op = ChunkOp{
+                path: write_data.path.to_string(),
+                offset: write_data.offset as u64 % CHUNK_SIZE,
+                chunk_start: offset_to_chunk_id(write_data.offset, CHUNK_SIZE),
+                size: write_data.write_size,
+                op: ChunkStorage::write_chunk,
+            };
+            let result = RDMA::recver_client(&write_data.rdma_addr.to_string(), write_data.rdma_port, op);
+            if let Err(e) = result{
+                return post_result(e, vec![0; 0], vec![0; 0]);
+            }
+            let write_tot = result.unwrap();
+            return post_result(0, serialize(write_tot), vec![0; 0]);
         }
         _ => {
             println!("invalid option on 'handle': {:?}", option);
@@ -287,17 +312,6 @@ impl SfsHandle for ServerHandler {
                             println!("handling stream read of '{}'....", read_args.path);
                         }
                         sink.send((handle_read(&read_args), WriteFlags::default()))
-                            .await?;
-                    }
-                    Write => {
-                        let write_args: WriteData = deserialize::<WriteData>(&post.data);
-                        if StorageContext::get_instance().output() {
-                            println!("handling stream write of '{}'....", write_args.path);
-                            println!("  - {:?}", write_args);
-                        }
-                        let data = post.extra;
-
-                        sink.send((handle_write(&write_args, &data), WriteFlags::default()))
                             .await?;
                     }
                     _ => {
