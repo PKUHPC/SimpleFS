@@ -22,6 +22,7 @@ use sfs_global::global::fsconfig::{ENABLE_STUFFING, ZERO_BUF_BEFORE_READ};
 use sfs_global::global::metadata::{S_ISDIR, S_ISREG};
 use sfs_global::global::network::config::CHUNK_SIZE;
 use sfs_global::global::util::path_util::dirname;
+use xxhash_rust::xxh3::xxh3_64;
 
 use super::config::CHECK_PARENT_DIR;
 use super::context::StaticContext;
@@ -889,43 +890,39 @@ pub extern "C" fn sfs_getdents64(fd: i32, dirp: *mut dirent64, count: i64) -> i3
     let size = opendir.lock().unwrap().get_size() as i64;
     while pos < size {
         let de = opendir.lock().unwrap().getdent(pos);
-        let total_size = align(19 + de.get_name().len() + 1, 8);
+        let total_size = align(19 + de.get_name().len() + 1 + 1, 8);
         if total_size as i64 > count - written {
             break;
         }
-        let current_dirp = unsafe { (dirp as *mut c_char).offset(written as isize) as *mut dirent64 };
-        let mut s = DefaultHasher::new();
+        let current_dirp =
+            unsafe { (dirp as *mut c_char).offset(written as isize) as *mut dirent64 };
         let p = opendir.lock().unwrap().get_path().clone() + "/" + &de.get_name();
-        p.hash(&mut s);
         let name = de.get_name() + "\0";
         unsafe {
-            (*current_dirp).d_ino = s.finish() as u64;
+            (*current_dirp).d_ino = xxh3_64(p.as_bytes()) as u64;
             (*current_dirp).d_reclen = total_size as u16;
             let c: u8;
             match de.get_type() {
                 FileType::SFS_REGULAR => c = DT_REG,
                 FileType::SFS_DIRECTORY => c = DT_DIR,
             }
-            (*current_dirp).d_type = c;
+            (*current_dirp).d_type= c;
+            /*
             strcpy(
                 (*current_dirp).d_name.as_ptr() as *mut i8,
                 name.as_ptr() as *const i8,
             );
-            /*
+            */
             memcpy(
-                (*current_dirp).d_name.as_ptr() as *mut c_void,
+                (current_dirp as *const c_char).offset(19) as *mut c_void,
                 name.as_ptr() as *const c_void,
                 name.len(),
             );
-            */
-            (*current_dirp).d_off = pos;
+            (*current_dirp).d_off = pos as i64;
             pos += 1;
             written += total_size as i64;
         }
     }
-    if written == 0 {
-        return -1;
-    }
     opendir.lock().unwrap().set_pos(pos);
-    return 0;
+    return written as i32;
 }

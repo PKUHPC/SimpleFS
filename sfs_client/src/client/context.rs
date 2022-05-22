@@ -409,7 +409,7 @@ impl StaticContext {
     pub fn get_runtime(&self) -> Arc<Runtime> {
         Arc::clone(&self.runtime_)
     }
-    pub fn get_rdma_addr(&self) -> &String{
+    pub fn get_rdma_addr(&self) -> &String {
         &self.rdma_addr
     }
     pub fn protect_user_fds() {}

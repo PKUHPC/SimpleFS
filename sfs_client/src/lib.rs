@@ -724,8 +724,8 @@ mod tests {
             println!("open error on thread {} ...", 1);
             return;
         }
-        let thread = 100;
-        let cnt = 3;
+        let thread = 10;
+        let cnt = 30;
         for i in 0..thread {
             handles.push(thread::spawn(move || {
                 //println!("file {} opened on thread {} ...", fd, i);

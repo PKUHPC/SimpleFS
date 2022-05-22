@@ -177,6 +177,7 @@ mod tests {
         let op = ChunkOp{
             path: "".to_string(),
             offset: 0,
+            chunk_start: 0,
             size: "hello, here is RDMA data transfer test!\0".len() as u64,
             op: show,
         };
@@ -191,13 +192,15 @@ mod tests {
         let chunk_ids: Vec<u64> = (0..chunks).into_iter().collect();
         let task = ChunkTransferTask {
             chunk_id: chunk_ids,
-            chunks: chunks,
+            chunk_start: 0,
+            offset: 0,
             addr: data.as_ptr() as u64,
             size: data.len() as u64,
         };
         let op = ChunkOp{
             path: "".to_string(),
             offset: 0,
+            chunk_start: 0,
             size: "hello, here is RDMA data transfer test!\0".len() as u64,
             op: show,
         };
@@ -211,13 +214,15 @@ mod tests {
         let chunk_ids: Vec<u64> = (0..chunks).into_iter().collect();
         let task = ChunkTransferTask {
             chunk_id: chunk_ids,
-            chunks: chunks,
+            offset: 0,
             addr: data.as_ptr() as u64,
             size: data.len() as u64,
+            chunk_start: 0,
         };
         let op = ChunkOp{
             path: "".to_string(),
             offset: 0,
+            chunk_start: 0,
             size: "hello, here is RDMA data transfer test!\0".len() as u64,
             op: show,
         };
@@ -228,6 +233,7 @@ mod tests {
         let op = ChunkOp{
             path: "".to_string(),
             offset: 0,
+            chunk_start: 0,
             size: "hello, here is RDMA data transfer test!\0".len() as u64,
             op: show,
         };

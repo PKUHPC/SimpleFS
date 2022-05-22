@@ -15,7 +15,7 @@ use sfs_rdma::transfer::ChunkTransferTask;
 use sfs_rpc::proto::server::PostResult;
 
 #[allow(unused)]
-use crate::client::context::{StaticContext, DynamicContext};
+use crate::client::context::{DynamicContext, StaticContext};
 use crate::client::openfile::{FileType, OpenFile, O_RDONLY};
 use sfs_global::global::distributor::Distributor;
 use sfs_global::global::error_msg::error_msg;
@@ -87,7 +87,11 @@ pub fn forward_create(path: &String, mode: u32) -> Result<i32, Error> {
         return Ok(0);
     }
 }
-pub fn forward_remove(path: &String, remove_metadentry_only: bool, size: i64) -> Result<i32, Error> {
+pub fn forward_remove(
+    path: &String,
+    remove_metadentry_only: bool,
+    size: i64,
+) -> Result<i32, Error> {
     let endp_id = StaticContext::get_instance()
         .get_distributor()
         .locate_file_metadata(path);
@@ -225,10 +229,7 @@ pub fn forward_get_metadentry_size(path: &String) -> (i32, i64) {
         if result.err != 0 {
             return (result.err, 0);
         }
-        return (
-            0,
-            deserialize::<i64>(&result.data)
-        );
+        return (0, deserialize::<i64>(&result.data));
     }
 }
 pub fn forward_decr_size(path: &String, new_size: i64) -> i32 {
@@ -336,12 +337,12 @@ pub fn forward_update_metadentry_size(
         if res.extra.len() != 0 {
             return (
                 if res.err != 0 { res.err } else { -1 },
-                deserialize::<u64>(&res.extra) as i64
+                deserialize::<u64>(&res.extra) as i64,
             );
         }
         return (
             if res.err != 0 { res.err } else { 0 },
-            deserialize::<i64>(&res.data)
+            deserialize::<i64>(&res.data),
         );
     }
 }
@@ -390,30 +391,35 @@ pub async fn forward_write(
             offset: in_offset,
             write_size: write_size as u64,
             rdma_addr: StaticContext::get_instance().rdma_addr.as_str(),
-            rdma_port
+            rdma_port,
         };
         let addr = buf as u64;
         let chunk_ids = target_chunks.remove(&target).unwrap();
         rdma_handles.push({
             let op = ChunkOp::none();
-            let chunk_transfer = ChunkTransferTask{
+            let chunk_transfer = ChunkTransferTask {
                 chunk_id: chunk_ids,
                 chunk_start: chunk_start as u64,
                 offset: offset as u64 % CHUNK_SIZE,
                 addr: addr,
                 size: write_size as u64,
             };
-            RDMA::sender_server(StaticContext::get_instance().get_rdma_addr(), rdma_port, chunk_transfer, op)
+            RDMA::sender_server(
+                StaticContext::get_instance().get_rdma_addr(),
+                rdma_port,
+                chunk_transfer,
+                op,
+            )
         });
         let serialized_data = serialize(data);
         handles.push(tokio::spawn(async move {
-            let post_result =  NetworkService::post_serialized(
+            let post_result = NetworkService::post_serialized(
                 StaticContext::get_instance()
                     .get_clients()
                     .get(target as usize)
                     .unwrap(),
                 serialized_data,
-                PostOption::Write
+                PostOption::Write,
             );
             if let Err(_e) = post_result {
                 return (EBUSY, 0);
@@ -424,12 +430,12 @@ pub async fn forward_write(
     //let joins = join_all(handles).await;
     for handle in handles {
         let post_result = handle.await.unwrap();
-        if post_result.0 != 0{
+        if post_result.0 != 0 {
             return (post_result.0, tot_write);
         }
         tot_write += post_result.1;
     }
-    for rdma in rdma_handles{
+    for rdma in rdma_handles {
         rdma.join().unwrap();
     }
     return (0, tot_write);
