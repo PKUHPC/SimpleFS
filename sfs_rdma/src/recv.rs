@@ -1,26 +1,33 @@
 use std::ptr::null_mut;
 
-use rdma_sys::{ibv_wc, ibv_pd, rdma_cm_id, ibv_wc_opcode::IBV_WC_RECV_RDMA_WITH_IMM, ibv_send_wr, ibv_sge, ibv_wr_opcode::IBV_WR_SEND, ibv_send_flags, ibv_post_send, ibv_recv_wr, ibv_post_recv};
+use rdma_sys::{
+    ibv_pd, ibv_post_recv, ibv_post_send, ibv_recv_wr, ibv_send_flags, ibv_send_wr, ibv_sge,
+    ibv_wc, ibv_wc_opcode::IBV_WC_RECV_RDMA_WITH_IMM, ibv_wr_opcode::IBV_WR_SEND, rdma_cm_id,
+};
 
-use crate::{transfer::{MessageType, ReceiverContext}, chunk_operation::{ChunkOp, ChunkInfo}};
+use crate::{
+    chunk_operation::{ChunkInfo, ChunkOp},
+    transfer::{MessageType, ReceiverContext},
+};
 
-
-pub (crate) fn on_completion(wc: *mut ibv_wc, _pd: *mut ibv_pd, op: &ChunkOp) -> Result<i64, i32>{
-    unsafe{
+pub(crate) fn on_completion(wc: *mut ibv_wc, _pd: *mut ibv_pd, op: &ChunkOp) -> Result<i64, i32> {
+    unsafe {
         let id: *mut rdma_cm_id = (*wc).wr_id as *mut rdma_cm_id;
         let ctx: *mut ReceiverContext = (*id).context.cast();
 
-        if (*wc).opcode == IBV_WC_RECV_RDMA_WITH_IMM{
+        if (*wc).opcode == IBV_WC_RECV_RDMA_WITH_IMM {
             let chunk_id = u32::from_be((*wc).imm_data_invalidated_rkey_union.imm_data);
-            if chunk_id == u32::MAX{
+            if chunk_id == u32::MAX {
                 (*(*ctx).msg).mtype = MessageType::MSG_DONE;
                 send_message(id);
                 return Ok(-1);
-            }
-            else{
+            } else {
                 post_receive(id);
                 (*(*ctx).msg).mtype = MessageType::MSG_READY;
-                let ret = op.submit(ChunkInfo{ chunk_id: chunk_id as u64, data: (*ctx).buffer });
+                let ret = op.submit(ChunkInfo {
+                    chunk_id: chunk_id as u64,
+                    data: (*ctx).buffer,
+                });
                 send_message(id);
                 return ret;
             }
@@ -28,8 +35,8 @@ pub (crate) fn on_completion(wc: *mut ibv_wc, _pd: *mut ibv_pd, op: &ChunkOp) ->
         return Ok(0);
     }
 }
-pub (crate) fn send_message(id: *mut rdma_cm_id){
-    unsafe{
+pub(crate) fn send_message(id: *mut rdma_cm_id) {
+    unsafe {
         let ctx: *mut ReceiverContext = (*id).context.cast();
         let mut wr: ibv_send_wr = std::mem::zeroed();
         let mut bad_wr: *mut ibv_send_wr = null_mut();
@@ -48,8 +55,8 @@ pub (crate) fn send_message(id: *mut rdma_cm_id){
         assert_eq!(ibv_post_send((*id).qp, &mut wr, &mut bad_wr), 0);
     }
 }
-pub (crate) fn post_receive(id: *mut rdma_cm_id){
-    unsafe{
+pub(crate) fn post_receive(id: *mut rdma_cm_id) {
+    unsafe {
         let mut wr: ibv_recv_wr = std::mem::zeroed();
         let mut bad_wr: *mut ibv_recv_wr = null_mut();
         wr.wr_id = id as u64;

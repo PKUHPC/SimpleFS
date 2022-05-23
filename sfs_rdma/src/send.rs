@@ -1,28 +1,33 @@
 use std::ptr::null_mut;
 
-use rdma_sys::{ibv_wc, ibv_pd, rdma_cm_id, ibv_wc_opcode::IBV_WC_RECV, ibv_send_wr, ibv_wr_opcode::IBV_WR_RDMA_WRITE_WITH_IMM, ibv_send_flags, imm_data_invalidated_rkey_union_t, ibv_sge, ibv_post_send, ibv_dereg_mr, ibv_reg_mr, ibv_recv_wr, ibv_post_recv, rdma_disconnect};
 use crate::CHUNK_SIZE;
+use rdma_sys::{
+    ibv_dereg_mr, ibv_pd, ibv_post_recv, ibv_post_send, ibv_recv_wr, ibv_reg_mr, ibv_send_flags,
+    ibv_send_wr, ibv_sge, ibv_wc, ibv_wc_opcode::IBV_WC_RECV,
+    ibv_wr_opcode::IBV_WR_RDMA_WRITE_WITH_IMM, imm_data_invalidated_rkey_union_t, rdma_cm_id,
+    rdma_disconnect,
+};
 
-use crate::{transfer::{SenderContext, MessageType}, chunk_operation::ChunkOp};
+use crate::{
+    chunk_operation::ChunkOp,
+    transfer::{MessageType, SenderContext},
+};
 
-
-pub(crate) fn on_completion(wc: *mut ibv_wc, pd: *mut ibv_pd, _op: &ChunkOp) -> Result<i64, i32>{
-    unsafe{
+pub(crate) fn on_completion(wc: *mut ibv_wc, pd: *mut ibv_pd, _op: &ChunkOp) -> Result<i64, i32> {
+    unsafe {
         let id: *mut rdma_cm_id = (*wc).wr_id as *mut rdma_cm_id;
         let ctx: *mut SenderContext = (*id).context.cast();
 
-        if (*wc).opcode & IBV_WC_RECV != 0{
-            if matches!((*(*ctx).msg).mtype, MessageType::MSG_MR){
+        if (*wc).opcode & IBV_WC_RECV != 0 {
+            if matches!((*(*ctx).msg).mtype, MessageType::MSG_MR) {
                 post_receive(id);
                 (*ctx).peer_addr = (*(*ctx).msg).addr;
                 (*ctx).peer_rkey = (*(*ctx).msg).rkey;
                 send_next_chunk(id, pd);
-            }
-            else if matches!((*(*ctx).msg).mtype, MessageType::MSG_READY){
+            } else if matches!((*(*ctx).msg).mtype, MessageType::MSG_READY) {
                 post_receive(id);
                 send_next_chunk(id, pd);
-            }
-            else if matches!((*(*ctx).msg).mtype, MessageType::MSG_DONE){
+            } else if matches!((*(*ctx).msg).mtype, MessageType::MSG_DONE) {
                 sender_disconnect(id);
                 return Ok(-1);
             }
@@ -69,16 +74,24 @@ pub(crate) fn write_remote(id: *mut rdma_cm_id, len: u32) {
         );
     }
 }
-pub(crate) fn send_next_chunk(id: *mut rdma_cm_id, pd: *mut ibv_pd){
+pub(crate) fn send_next_chunk(id: *mut rdma_cm_id, pd: *mut ibv_pd) {
     unsafe {
         let mut ctx: *mut SenderContext = (*id).context.cast();
 
         let transfer_size = if (*ctx).chunk_id.len() > 0 {
             assert_eq!(ibv_dereg_mr((*ctx).buffer_mr), 0);
 
-            let offset = if (*ctx).chunk_id[0] == (*ctx).chunk_start {0} else {CHUNK_SIZE * ((*ctx).chunk_id[0]  - (*ctx).chunk_start) - (*ctx).offset};
+            let offset = if (*ctx).chunk_id[0] == (*ctx).chunk_start {
+                0
+            } else {
+                CHUNK_SIZE * ((*ctx).chunk_id[0] - (*ctx).chunk_start) - (*ctx).offset
+            };
             (*ctx).buffer = ((*ctx).addr as *mut u8).offset(offset as isize);
-            let len = if (*ctx).chunk_id[0] == (*ctx).chunk_start {u64::min(CHUNK_SIZE - (*ctx).offset, (*ctx).size)} else {u64::min(CHUNK_SIZE, (*ctx).size - offset)};
+            let len = if (*ctx).chunk_id[0] == (*ctx).chunk_start {
+                u64::min(CHUNK_SIZE - (*ctx).offset, (*ctx).size)
+            } else {
+                u64::min(CHUNK_SIZE, (*ctx).size - offset)
+            };
             (*ctx).buffer_mr = ibv_reg_mr(pd, (*ctx).buffer.cast(), len as usize, 0);
 
             //println!("{} - {}: {} {} | {} {}", (*ctx).chunk_start, (*ctx).chunk_id[0], (*ctx).offset, (*ctx).size, offset, len);
@@ -89,8 +102,8 @@ pub(crate) fn send_next_chunk(id: *mut rdma_cm_id, pd: *mut ibv_pd){
         write_remote(id, transfer_size as u32);
     }
 }
-pub(crate) fn post_receive(id: *mut rdma_cm_id){
-    unsafe{
+pub(crate) fn post_receive(id: *mut rdma_cm_id) {
+    unsafe {
         let ctx: *mut SenderContext = (*id).context.cast();
 
         let mut wr: ibv_recv_wr = std::mem::zeroed();
@@ -107,8 +120,8 @@ pub(crate) fn post_receive(id: *mut rdma_cm_id){
         assert_eq!(ibv_post_recv((*id).qp, &mut wr, &mut bad_wr), 0);
     }
 }
-pub(crate) fn sender_disconnect(id: *mut rdma_cm_id){
-    unsafe{
+pub(crate) fn sender_disconnect(id: *mut rdma_cm_id) {
+    unsafe {
         rdma_disconnect(id);
     }
 }

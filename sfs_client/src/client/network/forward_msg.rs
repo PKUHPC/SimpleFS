@@ -386,7 +386,22 @@ pub async fn forward_write(
     let mut handles = Vec::new();
     let mut rdma_handles = Vec::new();
     for target in targets {
-        let rdma_port = portpicker::pick_unused_port().unwrap();
+        let addr = buf as u64;
+        let chunk_ids = target_chunks.remove(&target).unwrap();
+        let op = ChunkOp::none();
+        let chunk_transfer = ChunkTransferTask {
+            chunk_id: chunk_ids,
+            chunk_start: chunk_start as u64,
+            offset: offset as u64 % CHUNK_SIZE,
+            addr: addr,
+            size: write_size as u64,
+        };
+        let (rdma_port, handle) = RDMA::sender_server(
+            StaticContext::get_instance().get_rdma_addr(),
+            chunk_transfer,
+            op,
+        );
+        rdma_handles.push(handle);
         let data = WriteData {
             path: path.as_str(),
             offset: in_offset,
@@ -394,24 +409,6 @@ pub async fn forward_write(
             rdma_addr: StaticContext::get_instance().rdma_addr.as_str(),
             rdma_port,
         };
-        let addr = buf as u64;
-        let chunk_ids = target_chunks.remove(&target).unwrap();
-        rdma_handles.push({
-            let op = ChunkOp::none();
-            let chunk_transfer = ChunkTransferTask {
-                chunk_id: chunk_ids,
-                chunk_start: chunk_start as u64,
-                offset: offset as u64 % CHUNK_SIZE,
-                addr: addr,
-                size: write_size as u64,
-            };
-            RDMA::sender_server(
-                StaticContext::get_instance().get_rdma_addr(),
-                rdma_port,
-                chunk_transfer,
-                op,
-            )
-        });
         let serialized_data = serialize(data);
         handles.push(tokio::spawn(async move {
             let post_result = NetworkService::post_serialized(

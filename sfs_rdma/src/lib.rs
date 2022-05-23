@@ -5,29 +5,27 @@ use std::{
 
 use errno::errno;
 use libc::{
-    addrinfo, c_char, c_void, freeaddrinfo, getaddrinfo, malloc, memcpy, sockaddr,
-    sockaddr_in,
+    addrinfo, c_char, c_void, freeaddrinfo, getaddrinfo, malloc, memcpy, sockaddr, sockaddr_in,
 };
 use rdma::RDMA;
 use rdma_sys::{
-    ibv_alloc_pd, ibv_context,
-    ibv_create_comp_channel, ibv_create_cq, 
-    ibv_qp_init_attr, ibv_qp_type::IBV_QPT_RC, ibv_req_notify_cq, 
-    rdma_ack_cm_event, rdma_cm_event,
-    rdma_cm_event_type, rdma_cm_id, rdma_conn_param, rdma_create_qp, 
-    rdma_event_channel, rdma_event_str, rdma_get_cm_event,
+    ibv_alloc_pd, ibv_context, ibv_create_comp_channel, ibv_create_cq, ibv_qp_init_attr,
+    ibv_qp_type::IBV_QPT_RC, ibv_req_notify_cq, rdma_ack_cm_event, rdma_cm_event,
+    rdma_cm_event_type, rdma_cm_id, rdma_conn_param, rdma_create_qp, rdma_event_channel,
+    rdma_event_str, rdma_get_cm_event,
 };
 //pub mod function;
 //pub mod memory_region;
 pub mod chunk_operation;
-pub mod rdma;
-pub mod transfer;
-mod sc_rs;
 mod rc_ss;
-mod send;
+pub mod rdma;
 mod recv;
+mod sc_rs;
+mod send;
+pub mod transfer;
 //pub mod work_request;
 
+static MAX_PORT_TRY: u32 = 10;
 pub static CQ_CAPACITY: i32 = 16;
 pub static MAX_SGE: u32 = 2;
 pub static MAX_WR: u32 = 8;
@@ -154,12 +152,43 @@ static CHUNK_SIZE: u64 = sfs_global::global::network::config::CHUNK_SIZE;
 #[cfg(test)]
 mod tests {
 
-    use crate::{rdma::RDMA, transfer::ChunkTransferTask, chunk_operation::ChunkOp, CHUNK_SIZE};
+    use crate::{chunk_operation::ChunkOp, rdma::RDMA, transfer::ChunkTransferTask, CHUNK_SIZE};
 
     #[test]
     fn it_works() {
-        let result = 2 + 2;
-        assert_eq!(result, 4);
+        std::thread::spawn(|| {
+            let data = "hello, here is RDMA data transfer test!\0";
+            let chunks = (data.len() as u64 + CHUNK_SIZE - 1) / CHUNK_SIZE;
+            let chunk_ids: Vec<u64> = (0..chunks).into_iter().collect();
+            let task = ChunkTransferTask {
+                chunk_id: chunk_ids,
+                offset: 0,
+                addr: data.as_ptr() as u64,
+                size: data.len() as u64,
+                chunk_start: 0,
+            };
+            RDMA::sender_server(&"192.168.230.142".to_string(), task, ChunkOp::none())
+                .1
+                .join()
+                .unwrap();
+        });
+        std::thread::spawn(|| {
+            let data = "hello, here is RDMA data transfer test!\0";
+            let chunks = (data.len() as u64 + CHUNK_SIZE - 1) / CHUNK_SIZE;
+            let chunk_ids: Vec<u64> = (0..chunks).into_iter().collect();
+            let task = ChunkTransferTask {
+                chunk_id: chunk_ids,
+                offset: 0,
+                addr: data.as_ptr() as u64,
+                size: data.len() as u64,
+                chunk_start: 0,
+            };
+            RDMA::sender_server(&"192.168.230.142".to_string(), task, ChunkOp::none())
+                .1
+                .join()
+                .unwrap();
+        });
+        std::thread::sleep(std::time::Duration::from_secs(10));
     }
     pub fn show(
         _file_path: &String,
@@ -167,25 +196,29 @@ mod tests {
         buf: *mut u8,
         size: u64,
         _offset: u64,
-    ) -> Result<i64, i32>{
-        let str = unsafe{std::ffi::CStr::from_ptr(buf.cast()).to_string_lossy().into_owned()};
+    ) -> Result<i64, i32> {
+        let str = unsafe {
+            std::ffi::CStr::from_ptr(buf.cast())
+                .to_string_lossy()
+                .into_owned()
+        };
         println!("received {}", str);
         return Ok(size as i64);
     }
-    #[test] 
+    #[test]
     fn test_recv_server() {
-        let op = ChunkOp{
+        let op = ChunkOp {
             path: "".to_string(),
             offset: 0,
             chunk_start: 0,
             size: "hello, here is RDMA data transfer test!\0".len() as u64,
             op: show,
         };
-        if let Ok(data) = RDMA::recver_server(&"192.168.230.142".to_string(), 20432, op){
+        if let Ok(data) = RDMA::recver_server(&"192.168.230.142".to_string(), op).1.join().unwrap() {
             println!("receiver result: {}", data);
         }
     }
-    #[test] 
+    #[test]
     fn test_send_client() {
         let data = "hello, here is RDMA data transfer test!\0";
         let chunks = (data.len() as u64 + CHUNK_SIZE - 1) / CHUNK_SIZE;
@@ -197,7 +230,7 @@ mod tests {
             addr: data.as_ptr() as u64,
             size: data.len() as u64,
         };
-        let op = ChunkOp{
+        let op = ChunkOp {
             path: "".to_string(),
             offset: 0,
             chunk_start: 0,
@@ -206,8 +239,8 @@ mod tests {
         };
         RDMA::sender_client(&"192.168.230.142".to_string(), 20432, task, op);
     }
-    
-    #[test] 
+
+    #[test]
     fn test_send_server() {
         let data = "hello, here is RDMA data transfer test!\0";
         let chunks = (data.len() as u64 + CHUNK_SIZE - 1) / CHUNK_SIZE;
@@ -219,25 +252,28 @@ mod tests {
             size: data.len() as u64,
             chunk_start: 0,
         };
-        let op = ChunkOp{
+        let op = ChunkOp {
             path: "".to_string(),
             offset: 0,
             chunk_start: 0,
             size: "hello, here is RDMA data transfer test!\0".len() as u64,
             op: show,
         };
-        RDMA::sender_server(&"192.168.230.142".to_string(), 20532, task, op).join().unwrap();
+        RDMA::sender_server(&"192.168.230.142".to_string(), task, op)
+            .1
+            .join()
+            .unwrap();
     }
-    #[test] 
+    #[test]
     fn test_recv_client() {
-        let op = ChunkOp{
+        let op = ChunkOp {
             path: "".to_string(),
             offset: 0,
             chunk_start: 0,
             size: "hello, here is RDMA data transfer test!\0".len() as u64,
             op: show,
         };
-        if let Ok(data) = RDMA::recver_client(&"192.168.230.142".to_string(), 20532, op){
+        if let Ok(data) = RDMA::recver_client(&"192.168.230.142".to_string(), 20532, op) {
             println!("receiver result: {}", data);
         }
     }

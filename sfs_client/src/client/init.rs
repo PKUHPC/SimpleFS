@@ -24,7 +24,7 @@ use sfs_global::global::{
         serde_util::serialize,
     },
 };
-use sfs_rpc::{proto::server_grpc::SfsHandleClient, post};
+use sfs_rpc::{post, proto::server_grpc::SfsHandleClient};
 
 use super::{
     context::{DynamicContext, StaticContext},

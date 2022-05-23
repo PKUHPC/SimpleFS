@@ -2,8 +2,6 @@ use std::ptr::null_mut;
 
 use rdma_sys::ibv_mr;
 
-
-
 #[allow(non_camel_case_types)]
 pub enum MessageType {
     MSG_MR,
@@ -41,9 +39,9 @@ pub struct SenderContext {
     pub peer_addr: u64,
     pub peer_rkey: u32,
 }
-impl SenderContext{
-    pub fn new() -> Self{
-        SenderContext{
+impl SenderContext {
+    pub fn new() -> Self {
+        SenderContext {
             chunk_id: Vec::new(),
             chunk_start: 0,
             offset: 0,
@@ -66,4 +64,3 @@ pub struct ReceiverContext {
     pub msg: *mut Message,
     pub msg_mr: *mut ibv_mr,
 }
-

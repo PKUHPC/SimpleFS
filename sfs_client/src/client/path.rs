@@ -83,7 +83,11 @@ pub fn resolve(path: &String, resolve_last_link: bool) -> (bool, String) {
             }
             // need to be checked on linux file system
             if let Ok(md) = fs::metadata(resolved.clone()) {
-                if std::fs::symlink_metadata(resolved.as_str()).unwrap().file_type().is_symlink() {
+                if std::fs::symlink_metadata(resolved.as_str())
+                    .unwrap()
+                    .file_type()
+                    .is_symlink()
+                {
                     if !resolve_last_link && end == path.len() {
                         continue;
                     }

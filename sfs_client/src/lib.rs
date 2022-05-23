@@ -185,7 +185,7 @@ pub extern "C" fn enable_interception() {
 }
 #[cfg(test)]
 mod tests {
-    use std::{thread, time};
+    use std::thread;
 
     #[allow(unused_imports)]
     use libc::{c_char, dirent, stat, O_CREAT, O_RDWR, SEEK_SET, S_IFDIR, S_IFREG};
@@ -201,17 +201,11 @@ mod tests {
         },
     };
     use sfs_global::global::network::config::CHUNK_SIZE;
-    use std::time::UNIX_EPOCH;
 
     #[test]
     fn test0() {
-        println!(
-            "{}",
-            time::SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs()
-        );
+        std::net::TcpListener::bind(("127.0.0.1", 21312)).unwrap();
+        std::net::TcpListener::bind(("127.0.0.1", 21312)).unwrap();
     }
     #[test]
     pub fn test1() {

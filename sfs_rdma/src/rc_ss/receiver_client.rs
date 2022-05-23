@@ -1,12 +1,32 @@
 use std::ptr::null_mut;
 
-use libc::{sockaddr_in, AF_INET, sockaddr, in_addr, INADDR_LOOPBACK, calloc};
-use rdma_sys::{rdma_create_event_channel, rdma_cm_id, rdma_cm_event, rdma_create_id, rdma_port_space::RDMA_PS_TCP, rdma_resolve_addr, rdma_ack_cm_event, rdma_cm_event_type::{RDMA_CM_EVENT_ADDR_RESOLVED, RDMA_CM_EVENT_ROUTE_RESOLVED, RDMA_CM_EVENT_ESTABLISHED, RDMA_CM_EVENT_DISCONNECTED}, rdma_resolve_route, ibv_alloc_pd, ibv_create_comp_channel, ibv_create_cq, ibv_req_notify_cq, ibv_qp_init_attr, ibv_qp_type::IBV_QPT_RC, rdma_create_qp, ibv_reg_mr, ibv_access_flags, rdma_conn_param, rdma_connect, rdma_destroy_qp, rdma_destroy_id, rdma_destroy_event_channel, ibv_destroy_comp_channel, ibv_destroy_cq, ibv_dealloc_pd, ibv_dereg_mr};
 use crate::CHUNK_SIZE;
+use libc::{calloc, in_addr, sockaddr, sockaddr_in, AF_INET, INADDR_LOOPBACK};
+use rdma_sys::{
+    ibv_access_flags, ibv_alloc_pd, ibv_create_comp_channel, ibv_create_cq, ibv_dealloc_pd,
+    ibv_dereg_mr, ibv_destroy_comp_channel, ibv_destroy_cq, ibv_qp_init_attr,
+    ibv_qp_type::IBV_QPT_RC,
+    ibv_reg_mr, ibv_req_notify_cq, rdma_ack_cm_event, rdma_cm_event,
+    rdma_cm_event_type::{
+        RDMA_CM_EVENT_ADDR_RESOLVED, RDMA_CM_EVENT_DISCONNECTED, RDMA_CM_EVENT_ESTABLISHED,
+        RDMA_CM_EVENT_ROUTE_RESOLVED,
+    },
+    rdma_cm_id, rdma_conn_param, rdma_connect, rdma_create_event_channel, rdma_create_id,
+    rdma_create_qp, rdma_destroy_event_channel, rdma_destroy_id, rdma_destroy_qp,
+    rdma_port_space::RDMA_PS_TCP,
+    rdma_resolve_addr, rdma_resolve_route,
+};
 
-use crate::{transfer::{Message, ReceiverContext, MessageType}, get_addr, process_rdma_cm_event, CQ_CAPACITY, MAX_WR, MAX_SGE, build_params, rdma::CQPoller, chunk_operation::ChunkOp};
+use crate::{
+    build_params,
+    chunk_operation::ChunkOp,
+    get_addr, process_rdma_cm_event,
+    rdma::CQPoller,
+    transfer::{Message, MessageType, ReceiverContext},
+    CQ_CAPACITY, MAX_SGE, MAX_WR,
+};
 
-pub(crate) fn recver_client(addr: &String, port: u16, op: ChunkOp) -> Result<i64, i32>{
+pub(crate) fn recver_client(addr: &String, port: u16, op: ChunkOp) -> Result<i64, i32> {
     let mut server_sockaddr = sockaddr_in {
         sin_family: AF_INET as u16,
         sin_port: port,
@@ -23,7 +43,7 @@ pub(crate) fn recver_client(addr: &String, port: u16, op: ChunkOp) -> Result<i64
         ),
         0
     );
-    unsafe{
+    unsafe {
         let mut ctx: ReceiverContext = std::mem::zeroed();
 
         let ec = rdma_create_event_channel();
@@ -32,13 +52,16 @@ pub(crate) fn recver_client(addr: &String, port: u16, op: ChunkOp) -> Result<i64
         assert_eq!(rdma_create_id(ec, &mut cm_id, null_mut(), RDMA_PS_TCP), 0);
         (*cm_id).context = ((&mut ctx) as *mut ReceiverContext).cast();
         // resolve addr
-        assert_eq!(rdma_resolve_addr(
-            cm_id,
-            null_mut(),
-            (&mut server_sockaddr) as *mut sockaddr_in as *mut sockaddr,
-            2000,
-        ), 0);
-        
+        assert_eq!(
+            rdma_resolve_addr(
+                cm_id,
+                null_mut(),
+                (&mut server_sockaddr) as *mut sockaddr_in as *mut sockaddr,
+                2000,
+            ),
+            0
+        );
+
         process_rdma_cm_event(ec, RDMA_CM_EVENT_ADDR_RESOLVED, &mut cm_event);
         assert_eq!(rdma_ack_cm_event(cm_event), 0);
 
@@ -57,7 +80,7 @@ pub(crate) fn recver_client(addr: &String, port: u16, op: ChunkOp) -> Result<i64
         assert_eq!(ibv_req_notify_cq(cq, 0), 0);
 
         let poll_cq = CQPoller::new(comp_channel, pd, crate::recv::on_completion, op);
-        let handle = std::thread::spawn(move || {poll_cq.poll()});
+        let handle = std::thread::spawn(move || poll_cq.poll());
 
         let mut attr: ibv_qp_init_attr = std::mem::zeroed();
         attr.recv_cq = cq;
@@ -68,17 +91,24 @@ pub(crate) fn recver_client(addr: &String, port: u16, op: ChunkOp) -> Result<i64
         attr.cap.max_recv_wr = MAX_WR;
         attr.cap.max_send_sge = MAX_SGE;
         attr.cap.max_recv_sge = MAX_SGE;
-        
+
         assert_eq!(rdma_create_qp(cm_id, pd, &mut attr), 0);
         let _qp = (*cm_id).qp;
-        
+
         // prepare receiver context
         let mut ctx: ReceiverContext = std::mem::zeroed();
         (*cm_id).context = ((&mut ctx) as *mut ReceiverContext).cast();
 
         ctx.buffer = calloc(1, CHUNK_SIZE as usize).cast();
-        ctx.buffer_mr =
-            ibv_reg_mr(pd, ctx.buffer.cast(), CHUNK_SIZE as usize, (ibv_access_flags::IBV_ACCESS_REMOTE_WRITE | ibv_access_flags::IBV_ACCESS_REMOTE_READ | ibv_access_flags::IBV_ACCESS_LOCAL_WRITE).0 as i32);
+        ctx.buffer_mr = ibv_reg_mr(
+            pd,
+            ctx.buffer.cast(),
+            CHUNK_SIZE as usize,
+            (ibv_access_flags::IBV_ACCESS_REMOTE_WRITE
+                | ibv_access_flags::IBV_ACCESS_REMOTE_READ
+                | ibv_access_flags::IBV_ACCESS_LOCAL_WRITE)
+                .0 as i32,
+        );
 
         ctx.msg = calloc(1, std::mem::size_of::<Message>()).cast();
         ctx.msg_mr = ibv_reg_mr(
@@ -87,7 +117,7 @@ pub(crate) fn recver_client(addr: &String, port: u16, op: ChunkOp) -> Result<i64
             std::mem::size_of::<Message>(),
             ibv_access_flags::IBV_ACCESS_LOCAL_WRITE.0 as i32,
         );
-        
+
         // pre-post receive buffer
         crate::recv::post_receive(cm_id);
 
@@ -105,7 +135,7 @@ pub(crate) fn recver_client(addr: &String, port: u16, op: ChunkOp) -> Result<i64
         (*ctx.msg).rkey = (*ctx.buffer_mr).rkey;
 
         crate::recv::send_message(cm_id);
-        
+
         process_rdma_cm_event(ec, RDMA_CM_EVENT_DISCONNECTED, &mut cm_event);
         rdma_ack_cm_event(cm_event);
 

@@ -14,7 +14,9 @@ use libc::{
     SEEK_END, SEEK_HOLE, SEEK_SET, S_IFBLK, S_IFCHR, S_IFDIR, S_IFIFO, S_IFMT, S_IFREG, S_IFSOCK,
 };
 #[allow(unused)]
-use libc::{statx, EBADF, EBUSY, EINVAL, EISDIR, ENOENT, ENOTDIR, ENOTEMPTY, ENOTSUP, EEXIST, stat};
+use libc::{
+    stat, statx, EBADF, EBUSY, EEXIST, EINVAL, EISDIR, ENOENT, ENOTDIR, ENOTEMPTY, ENOTSUP,
+};
 
 use sfs_global::global;
 use sfs_global::global::error_msg::error_msg;
@@ -437,7 +439,11 @@ pub extern "C" fn sfs_lseek(fd: i32, offset: i64, whence: i32) -> i64 {
     }
     internal_lseek(f_res.unwrap().lock().unwrap(), offset, whence).1
 }
-pub fn internal_lseek(mut fd: MutexGuard<'_, OpenFile>, offset: i64, whence: i32) -> (MutexGuard<'_, OpenFile>, i64) {
+pub fn internal_lseek(
+    mut fd: MutexGuard<'_, OpenFile>,
+    offset: i64,
+    whence: i32,
+) -> (MutexGuard<'_, OpenFile>, i64) {
     match whence {
         SEEK_SET => {
             if offset < 0 {
@@ -530,7 +536,12 @@ pub extern "C" fn sfs_dup2(oldfd: i32, newfd: i32) -> i32 {
         .unwrap()
         .dup2(oldfd, newfd);
 }
-fn internal_pwrite(f: MutexGuard<'_, OpenFile>, buf: *const c_char, count: i64, offset: i64) -> (MutexGuard<'_, OpenFile>, i64) {
+fn internal_pwrite(
+    f: MutexGuard<'_, OpenFile>,
+    buf: *const c_char,
+    count: i64,
+    offset: i64,
+) -> (MutexGuard<'_, OpenFile>, i64) {
     match f.get_type() {
         FileType::SFS_DIRECTORY => {
             error_msg(
@@ -568,7 +579,16 @@ fn internal_pwrite(f: MutexGuard<'_, OpenFile>, buf: *const c_char, count: i64, 
         return (f, ret_update_size.1);
     }
     let updated_size = ret_update_size.1;
-    let write_res = StaticContext::get_instance().get_runtime().block_on(forward_write(path, buf, append_flag, offset, count, updated_size));
+    let write_res = StaticContext::get_instance()
+        .get_runtime()
+        .block_on(forward_write(
+            path,
+            buf,
+            append_flag,
+            offset,
+            count,
+            updated_size,
+        ));
     if write_res.0 != 0 {
         error_msg(
             "client::sfs_pwrite".to_string(),
@@ -617,8 +637,7 @@ pub extern "C" fn sfs_write(fd: i32, buf: *const c_char, count: i64) -> i64 {
     let f = f.unwrap();
     let mut mg = f.lock().unwrap();
     let pos = mg.get_pos();
-    if mg.get_flag(super::openfile::OpenFileFlags::Append)
-    {
+    if mg.get_flag(super::openfile::OpenFileFlags::Append) {
         mg = internal_lseek(mg, 0, SEEK_END).0;
     }
     let (mut mg, write_res) = internal_pwrite(mg, buf, count, pos);
@@ -627,7 +646,12 @@ pub extern "C" fn sfs_write(fd: i32, buf: *const c_char, count: i64) -> i64 {
     }
     return write_res;
 }
-fn internal_pread(f: MutexGuard<'_, OpenFile>, buf: *mut c_char, count: i64, offset: i64) -> (MutexGuard<'_, OpenFile>, i64) {
+fn internal_pread(
+    f: MutexGuard<'_, OpenFile>,
+    buf: *mut c_char,
+    count: i64,
+    offset: i64,
+) -> (MutexGuard<'_, OpenFile>, i64) {
     match f.get_type() {
         FileType::SFS_DIRECTORY => {
             error_msg(
@@ -717,7 +741,9 @@ pub extern "C" fn sfs_rmdir(path: *const c_char) -> i32 {
         set_errno(Errno(ENOTDIR));
         return -1;
     }
-    let dirent_res = StaticContext::get_instance().get_runtime().block_on(forward_get_dirents(&path));
+    let dirent_res = StaticContext::get_instance()
+        .get_runtime()
+        .block_on(forward_get_dirents(&path));
     if dirent_res.0 != 0 {
         error_msg(
             "client::sfs_rmdir".to_string(),
@@ -771,7 +797,9 @@ pub extern "C" fn sfs_opendir(path: *const c_char) -> i32 {
         set_errno(Errno(ENOTDIR));
         return -1;
     }
-    let dirent_res = StaticContext::get_instance().get_runtime().block_on(forward_get_dirents(&path));
+    let dirent_res = StaticContext::get_instance()
+        .get_runtime()
+        .block_on(forward_get_dirents(&path));
     if dirent_res.0 != 0 {
         error_msg(
             "client::sfs_opendir".to_string(),
@@ -906,7 +934,7 @@ pub extern "C" fn sfs_getdents64(fd: i32, dirp: *mut dirent64, count: i64) -> i3
                 FileType::SFS_REGULAR => c = DT_REG,
                 FileType::SFS_DIRECTORY => c = DT_DIR,
             }
-            (*current_dirp).d_type= c;
+            (*current_dirp).d_type = c;
             /*
             strcpy(
                 (*current_dirp).d_name.as_ptr() as *mut i8,
