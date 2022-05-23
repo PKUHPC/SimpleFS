@@ -30,7 +30,7 @@ pub static MAX_OPEN_FDS: u32 = 10000000;
 pub static MIN_INTERNAL_FD: i32 = 1000000;
 #[allow(dead_code)]
 pub static MAX_USER_FDS: i32 = MIN_INTERNAL_FD;
-pub static MAX_INTERNAL_FDS: i32 = 150000000;
+pub static MAX_INTERNAL_FDS: i32 = 15000000;
 
 static AT_FDCWD: i32 = -100;
 static SEPERATOR: char = '/';

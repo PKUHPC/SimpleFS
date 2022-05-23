@@ -12,6 +12,7 @@ use sfs_global::global::util::serde_util::{deserialize, serialize};
 use sfs_rdma::chunk_operation::ChunkOp;
 use sfs_rdma::rdma::RDMA;
 use sfs_rdma::transfer::ChunkTransferTask;
+use sfs_rpc::post;
 use sfs_rpc::proto::server::PostResult;
 
 #[allow(unused)]
@@ -25,7 +26,7 @@ use sfs_global::global::network::forward_data::{
     ChunkStat, CreateData, DecrData, DirentData, ReadData, ReadResult, TruncData,
     UpdateMetadentryData, WriteData,
 };
-use sfs_global::global::network::post::{option2i, post, PostOption};
+use sfs_global::global::network::post::{option2i, PostOption};
 use sfs_global::global::util::arith_util::{
     block_index, chunk_lpad, chunk_rpad, offset_to_chunk_id,
 };

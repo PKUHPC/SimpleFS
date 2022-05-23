@@ -24,6 +24,7 @@
 /arch.sh
 /sfs_1.tar
 /sfs_2.tar
+/sfs_3.tar
 
 /sfs_client/.cargo
 /sfs_client/vendor

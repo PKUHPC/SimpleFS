@@ -17,14 +17,14 @@ use sfs_global::global::{
     fsconfig::{ENABLE_OUTPUT, HOSTFILE_PATH},
     network::{
         config::RDMAConfig,
-        post::{option2i, post, PostOption},
+        post::{option2i, PostOption},
     },
     util::{
         env_util::{get_hostname, get_var},
         serde_util::serialize,
     },
 };
-use sfs_rpc::proto::server_grpc::SfsHandleClient;
+use sfs_rpc::{proto::server_grpc::SfsHandleClient, post};
 
 use super::{
     context::{DynamicContext, StaticContext},

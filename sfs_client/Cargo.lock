@@ -1003,7 +1003,6 @@ dependencies = [
  "libc",
  "serde",
  "serde_json",
- "sfs_rpc",
  "xxhash-rust",
 ]
 

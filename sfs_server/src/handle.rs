@@ -7,14 +7,13 @@ use sfs_global::global::{
     network::{
         config::CHUNK_SIZE,
         forward_data::{PreCreateData, ReadData, ReadResult, TruncData, WriteData},
-        post::post_result,
     },
     util::{
         arith_util::{block_index, block_overrun},
         serde_util::serialize,
     },
 };
-use sfs_rpc::proto::server::PostResult;
+use sfs_rpc::{proto::server::PostResult, post_result};
 /*
 pub fn handle_write(input: &WriteData, data: &[u8]) -> PostResult {
     let write_tot = if let Ok(nwrite) = ChunkStorage::write_chunk(

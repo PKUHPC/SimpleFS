@@ -19,7 +19,7 @@ use server::storage::data::stuff_db::StuffDB;
 use sfs_global::global::distributor::Distributor;
 use sfs_global::global::fsconfig::ENABLE_STUFFING;
 use sfs_global::global::network::forward_data::PreCreateData;
-use sfs_global::global::network::post::{i2option, post_result, PostOption};
+use sfs_global::global::network::post::{i2option, PostOption};
 use sfs_global::global::util::serde_util::{deserialize, serialize};
 use sfs_global::global::util::arith_util::offset_to_chunk_id;
 use sfs_global::{
@@ -39,6 +39,7 @@ use sfs_global::{
 };
 use sfs_rdma::chunk_operation::ChunkOp;
 use sfs_rdma::rdma::RDMA;
+use sfs_rpc::post_result;
 use sfs_rpc::proto::server::{Post, PostResult};
 use sfs_rpc::proto::server_grpc::{create_sfs_handle, SfsHandle};
 use std::collections::HashMap;

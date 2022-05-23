@@ -724,8 +724,8 @@ mod tests {
             println!("open error on thread {} ...", 1);
             return;
         }
-        let thread = 10;
-        let cnt = 30;
+        let thread = 12;
+        let cnt = 100;
         for i in 0..thread {
             handles.push(thread::spawn(move || {
                 //println!("file {} opened on thread {} ...", fd, i);
@@ -765,9 +765,9 @@ mod tests {
             S_IFREG,
             O_CREAT | O_RDWR,
         );
-        for i in 0..3 {
+        for i in 0..1500 {
             //println!("file {} opened on thread {} ...", fd, i);
-            let cnt = 500;
+            let cnt = 1;
             let data = vec!['a' as i8; cnt * CHUNK_SIZE as usize];
             let res = sfs_write(fd, data.as_ptr() as *mut i8, data.len() as i64);
             if res <= 0 {

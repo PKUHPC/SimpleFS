@@ -1,7 +1,7 @@
 use std::{ptr::null_mut, thread::JoinHandle};
 
 use libc::{sockaddr_in, AF_INET, in_addr, INADDR_LOOPBACK, sockaddr, calloc, c_void};
-use rdma_sys::{rdma_cm_id, rdma_cm_event, rdma_create_id, rdma_bind_addr, rdma_create_event_channel, rdma_port_space::RDMA_PS_TCP, rdma_listen, rdma_cm_event_type::{RDMA_CM_EVENT_CONNECT_REQUEST, RDMA_CM_EVENT_ESTABLISHED, RDMA_CM_EVENT_DISCONNECTED}, rdma_ack_cm_event, ibv_alloc_pd, ibv_create_comp_channel, ibv_create_cq, ibv_req_notify_cq, ibv_qp_init_attr, ibv_qp_type::IBV_QPT_RC, rdma_create_qp, ibv_reg_mr, ibv_access_flags, rdma_conn_param, rdma_accept, rdma_destroy_qp, rdma_destroy_id, rdma_destroy_event_channel, rdma_event_channel};
+use rdma_sys::{rdma_cm_id, rdma_cm_event, rdma_create_id, rdma_bind_addr, rdma_create_event_channel, rdma_port_space::RDMA_PS_TCP, rdma_listen, rdma_cm_event_type::{RDMA_CM_EVENT_CONNECT_REQUEST, RDMA_CM_EVENT_ESTABLISHED, RDMA_CM_EVENT_DISCONNECTED}, rdma_ack_cm_event, ibv_alloc_pd, ibv_create_comp_channel, ibv_create_cq, ibv_req_notify_cq, ibv_qp_init_attr, ibv_qp_type::IBV_QPT_RC, rdma_create_qp, ibv_reg_mr, ibv_access_flags, rdma_conn_param, rdma_accept, rdma_destroy_qp, rdma_destroy_id, rdma_destroy_event_channel, rdma_event_channel, ibv_dealloc_pd, ibv_destroy_cq, ibv_destroy_comp_channel, ibv_dereg_mr};
 use crate::CHUNK_SIZE;
 
 use crate::{transfer::{ChunkTransferTask, SenderContext, Message}, get_addr, process_rdma_cm_event, CQ_CAPACITY, MAX_WR, MAX_SGE, build_params, rdma::CQPoller, chunk_operation::ChunkOp};
@@ -66,7 +66,7 @@ pub(crate) fn sender_server(addr: &String, port: u16, task: ChunkTransferTask, o
             assert_eq!(ibv_req_notify_cq(cq, 0), 0);
     
             let poll_cq = CQPoller::new(comp_channel, pd, crate::send::on_completion, op);
-            std::thread::spawn(move || {poll_cq.poll()});
+            let handle = std::thread::spawn(move || {poll_cq.poll()});
     
             let mut attr: ibv_qp_init_attr = std::mem::zeroed();
             attr.send_cq = cq;
@@ -106,16 +106,22 @@ pub(crate) fn sender_server(addr: &String, port: u16, task: ChunkTransferTask, o
             
             process_rdma_cm_event(ec, RDMA_CM_EVENT_DISCONNECTED, &mut cm_event);
             rdma_ack_cm_event(cm_event);
+            
+            ibv_dereg_mr(ctx.buffer_mr);
+            ibv_dereg_mr(ctx.msg_mr);
     
             rdma_destroy_qp(cm_id);
             rdma_destroy_id(cm_id);
-            //ibv_dereg_mr(ctx.buffer_mr);
-            //ibv_dereg_mr(ctx.msg_mr);
     
             libc::free(ctx.msg.cast());
     
             rdma_destroy_id(listener);
             rdma_destroy_event_channel(ec);
+            
+            handle.join().unwrap().unwrap();
+            ibv_dealloc_pd(pd);
+            ibv_destroy_cq(cq);
+            ibv_destroy_comp_channel(comp_channel);
 
         });
 

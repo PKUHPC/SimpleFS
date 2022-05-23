@@ -1,7 +1,7 @@
 use std::ptr::null_mut;
 
 use libc::{sockaddr_in, AF_INET, sockaddr, in_addr, INADDR_LOOPBACK, calloc};
-use rdma_sys::{rdma_create_event_channel, rdma_cm_id, rdma_cm_event, rdma_create_id, rdma_port_space::RDMA_PS_TCP, rdma_resolve_addr, rdma_ack_cm_event, rdma_cm_event_type::{RDMA_CM_EVENT_ADDR_RESOLVED, RDMA_CM_EVENT_ROUTE_RESOLVED, RDMA_CM_EVENT_ESTABLISHED, RDMA_CM_EVENT_DISCONNECTED}, rdma_resolve_route, ibv_alloc_pd, ibv_create_comp_channel, ibv_create_cq, ibv_req_notify_cq, ibv_qp_init_attr, ibv_qp_type::IBV_QPT_RC, rdma_create_qp, ibv_reg_mr, ibv_access_flags, rdma_conn_param, rdma_connect, rdma_destroy_qp, rdma_destroy_id, rdma_destroy_event_channel};
+use rdma_sys::{rdma_create_event_channel, rdma_cm_id, rdma_cm_event, rdma_create_id, rdma_port_space::RDMA_PS_TCP, rdma_resolve_addr, rdma_ack_cm_event, rdma_cm_event_type::{RDMA_CM_EVENT_ADDR_RESOLVED, RDMA_CM_EVENT_ROUTE_RESOLVED, RDMA_CM_EVENT_ESTABLISHED, RDMA_CM_EVENT_DISCONNECTED}, rdma_resolve_route, ibv_alloc_pd, ibv_create_comp_channel, ibv_create_cq, ibv_req_notify_cq, ibv_qp_init_attr, ibv_qp_type::IBV_QPT_RC, rdma_create_qp, ibv_reg_mr, ibv_access_flags, rdma_conn_param, rdma_connect, rdma_destroy_qp, rdma_destroy_id, rdma_destroy_event_channel, ibv_destroy_comp_channel, ibv_destroy_cq, ibv_dealloc_pd, ibv_dereg_mr};
 use crate::CHUNK_SIZE;
 
 use crate::{transfer::{Message, ReceiverContext, MessageType}, get_addr, process_rdma_cm_event, CQ_CAPACITY, MAX_WR, MAX_SGE, build_params, rdma::CQPoller, chunk_operation::ChunkOp};
@@ -109,6 +109,8 @@ pub(crate) fn recver_client(addr: &String, port: u16, op: ChunkOp) -> Result<i64
         process_rdma_cm_event(ec, RDMA_CM_EVENT_DISCONNECTED, &mut cm_event);
         rdma_ack_cm_event(cm_event);
 
+        ibv_dereg_mr(ctx.buffer_mr);
+
         rdma_destroy_qp(cm_id);
         rdma_destroy_id(cm_id);
 
@@ -116,7 +118,12 @@ pub(crate) fn recver_client(addr: &String, port: u16, op: ChunkOp) -> Result<i64
         libc::free(ctx.msg.cast());
 
         rdma_destroy_event_channel(ec);
+        let result = handle.join().unwrap();
 
-        return handle.join().unwrap();
+        ibv_dealloc_pd(pd);
+        ibv_destroy_cq(cq);
+        ibv_destroy_comp_channel(comp_channel);
+
+        return result;
     }
 }

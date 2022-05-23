@@ -2,12 +2,12 @@ use futures::{join, SinkExt, TryStreamExt};
 use grpcio::{Error, WriteFlags};
 use serde::Serialize;
 use sfs_global::global::util::serde_util::serialize;
-use sfs_rpc::proto::{
+use sfs_rpc::{proto::{
     server::{Post, PostResult},
     server_grpc::SfsHandleClient,
-};
+}, post};
 
-use sfs_global::global::network::post::{option2i, post, PostOption};
+use sfs_global::global::network::post::{option2i, PostOption};
 
 pub struct NetworkService {}
 impl NetworkService {
