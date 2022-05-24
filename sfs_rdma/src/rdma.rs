@@ -1,6 +1,6 @@
 use std::{ffi::CStr, ptr::null_mut, thread::JoinHandle};
 
-use libc::c_void;
+use libc::{c_void, calloc, memcpy};
 use rdma_sys::{
     ibv_ack_cq_events, ibv_comp_channel, ibv_context, ibv_cq, ibv_get_cq_event, ibv_pd,
     ibv_poll_cq, ibv_req_notify_cq, ibv_wc, ibv_wc_status::IBV_WC_SUCCESS, ibv_wc_status_str,
@@ -19,13 +19,13 @@ impl CQPoller {
         comp_channel: *mut ibv_comp_channel,
         pd: *mut ibv_pd,
         func: fn(*mut ibv_wc, *mut ibv_pd, op: &ChunkOp) -> Result<i64, i32>,
-        op: ChunkOp,
+        op: ChunkOp
     ) -> Self {
         CQPoller {
             comp_channel: comp_channel as u64,
             pd: pd as u64,
             on_completion: func,
-            op,
+            op
         }
     }
     pub fn poll(&self) -> Result<i64, i32> {
@@ -85,12 +85,18 @@ impl RDMA {
     pub fn comp_channel(&self) -> *mut ibv_comp_channel {
         self.comp_channel as *mut ibv_comp_channel
     }
-    pub fn sender_client(addr: &String, port: u16, task: ChunkTransferTask, op: ChunkOp) {
-        crate::sc_rs::sender_client::sender_client(addr, port, task, op);
+    pub fn sender_client(
+        addr: &String,
+        port: u16,
+        task: ChunkTransferTask,
+        op: ChunkOp,
+    ) -> Result<i64, i32> {
+        crate::sc_rs::sender_client::sender_client(addr, port, task, op)
     }
-    pub fn recver_server(addr: &String, op: ChunkOp) -> (u16,JoinHandle<Result<i64, i32>>) {
-        crate::sc_rs::receiver_server::recver_server(addr, op)
+    pub fn recver_server(addr: &String, op: ChunkOp, nthreads: u32) {
+        crate::sc_rs::receiver_server::recver_server(&addr, op, nthreads);
     }
+    /*
     pub fn sender_server(
         addr: &String,
         task: ChunkTransferTask,
@@ -100,5 +106,34 @@ impl RDMA {
     }
     pub fn recver_client(addr: &String, port: u16, op: ChunkOp) -> Result<i64, i32> {
         crate::rc_ss::receiver_client::recver_client(addr, port, op)
+    }
+    */
+}
+pub struct RDMAContext {
+    pub ctx: *mut ibv_context,
+    pub pd: *mut ibv_pd,
+    pub cq: *mut ibv_cq,
+    pub comp_channel: *mut ibv_comp_channel,
+
+    pub cq_poller: Option<JoinHandle<Result<i64, i32>>>,
+}
+impl RDMAContext {
+    pub fn new_ptr() -> *mut RDMAContext {
+        unsafe {
+            let init_ctx = RDMAContext {
+                ctx: null_mut(),
+                pd: null_mut(),
+                cq: null_mut(),
+                comp_channel: null_mut(),
+                cq_poller: None,
+            };
+            let ptr: *mut RDMAContext = calloc(1, std::mem::size_of::<RDMAContext>()).cast();
+            memcpy(
+                ptr.cast(),
+                (&init_ctx) as *const RDMAContext as *const c_void,
+                std::mem::size_of_val(&init_ctx),
+            );
+            return ptr;
+        }
     }
 }

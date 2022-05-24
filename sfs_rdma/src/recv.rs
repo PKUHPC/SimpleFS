@@ -1,5 +1,6 @@
 use std::ptr::null_mut;
 
+use libc::c_void;
 use rdma_sys::{
     ibv_pd, ibv_post_recv, ibv_post_send, ibv_recv_wr, ibv_send_flags, ibv_send_wr, ibv_sge,
     ibv_wc, ibv_wc_opcode::IBV_WC_RECV_RDMA_WITH_IMM, ibv_wr_opcode::IBV_WR_SEND, rdma_cm_id,
@@ -7,7 +8,7 @@ use rdma_sys::{
 
 use crate::{
     chunk_operation::{ChunkInfo, ChunkOp},
-    transfer::{MessageType, ReceiverContext},
+    transfer::{MessageType, ReceiverContext, TransferMetadata},
 };
 
 pub(crate) fn on_completion(wc: *mut ibv_wc, _pd: *mut ibv_pd, op: &ChunkOp) -> Result<i64, i32> {
@@ -21,15 +22,35 @@ pub(crate) fn on_completion(wc: *mut ibv_wc, _pd: *mut ibv_pd, op: &ChunkOp) -> 
                 (*(*ctx).msg).mtype = MessageType::MSG_DONE;
                 send_message(id);
                 return Ok(-1);
-            } else {
+            } else if (*ctx).metadata.size != 0 {
                 post_receive(id);
                 (*(*ctx).msg).mtype = MessageType::MSG_READY;
                 let ret = op.submit(ChunkInfo {
                     chunk_id: chunk_id as u64,
+                    metadata: (*ctx).metadata.clone(),
                     data: (*ctx).buffer,
                 });
                 send_message(id);
                 return ret;
+            } else {
+                let len = chunk_id;
+                let mut transfer_md = TransferMetadata::default();
+                libc::memcpy(
+                    (&mut transfer_md) as *mut TransferMetadata as *mut c_void,
+                    (*ctx).buffer.cast(),
+                    len as usize,
+                );
+                (*ctx).metadata.path =
+                    String::from_utf8(transfer_md.path[0..transfer_md.path_len as usize].to_vec())
+                        .unwrap();
+                (*ctx).metadata.chunk_start = transfer_md.chunk_start;
+                (*ctx).metadata.offset = transfer_md.offset;
+                (*ctx).metadata.size = transfer_md.size;
+
+                post_receive(id);
+                (*(*ctx).msg).mtype = MessageType::MSG_READY;
+                send_message(id);
+                return Ok(0);
             }
         }
         return Ok(0);

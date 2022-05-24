@@ -9,9 +9,10 @@ use futures::{future::join_all, TryStreamExt};
 use grpcio::Error;
 use libc::{c_char, c_void, memcpy, EBUSY};
 use sfs_global::global::util::serde_util::{deserialize, serialize};
+use sfs_rdma::RDMA_WRITE_PORT;
 use sfs_rdma::chunk_operation::ChunkOp;
 use sfs_rdma::rdma::RDMA;
-use sfs_rdma::transfer::ChunkTransferTask;
+use sfs_rdma::transfer::{ChunkTransferTask, ChunkMetadata};
 use sfs_rpc::post;
 use sfs_rpc::proto::server::PostResult;
 
@@ -24,7 +25,7 @@ use sfs_global::global::fsconfig::SFSConfig;
 use sfs_global::global::network::config::CHUNK_SIZE;
 use sfs_global::global::network::forward_data::{
     ChunkStat, CreateData, DecrData, DirentData, ReadData, ReadResult, TruncData,
-    UpdateMetadentryData, WriteData,
+    UpdateMetadentryData, //WriteData,
 };
 use sfs_global::global::network::post::{option2i, PostOption};
 use sfs_global::global::util::arith_util::{
@@ -383,7 +384,7 @@ pub async fn forward_write(
     let mut tot_write = 0;
     //let buf = unsafe { CStr::from_ptr(buf).to_string_lossy().into_owned() };
     //let buf = unsafe { slice::from_raw_parts(buf as *const u8, write_size as usize) };
-    let mut handles = Vec::new();
+    //let mut handles = Vec::new();
     let mut rdma_handles = Vec::new();
     for target in targets {
         let addr = buf as u64;
@@ -391,11 +392,20 @@ pub async fn forward_write(
         let op = ChunkOp::none();
         let chunk_transfer = ChunkTransferTask {
             chunk_id: chunk_ids,
-            chunk_start: chunk_start as u64,
-            offset: offset as u64 % CHUNK_SIZE,
+            metadata: ChunkMetadata{
+                path: path.to_string(),
+                chunk_start: chunk_start as u64,
+                offset: offset as u64 % CHUNK_SIZE,
+                size: write_size as u64,
+            },
             addr: addr,
-            size: write_size as u64,
         };
+        rdma_handles.push(
+            std::thread::spawn(move || {
+                RDMA::sender_client(&StaticContext::get_instance().get_hosts().get(target as usize).unwrap().addr, RDMA_WRITE_PORT, chunk_transfer, op)
+            })
+        )
+        /*
         let (rdma_port, handle) = RDMA::sender_server(
             StaticContext::get_instance().get_rdma_addr(),
             chunk_transfer,
@@ -424,8 +434,10 @@ pub async fn forward_write(
             }
             (0, deserialize::<i64>(&post_result.unwrap().data))
         }));
+        */
     }
     //let joins = join_all(handles).await;
+    /*
     for handle in handles {
         let post_result = handle.await.unwrap();
         if post_result.0 != 0 {
@@ -433,8 +445,13 @@ pub async fn forward_write(
         }
         tot_write += post_result.1;
     }
+    */
     for rdma in rdma_handles {
-        rdma.join().unwrap();
+        let res = rdma.join().unwrap();
+        if let Err(e) = res{
+            return (e, 0);
+        }
+        tot_write += res.unwrap();
     }
     return (0, tot_write);
 }

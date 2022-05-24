@@ -34,7 +34,7 @@ pub(crate) fn sender_server(
         let mut listener: *mut rdma_cm_id = null_mut();
         let ec = rdma_create_event_channel();
         rdma_create_id(ec, &mut listener, null_mut(), RDMA_PS_TCP);
-        
+
         for _i in 0..MAX_PORT_TRY {
             let mut server_sockaddr = sockaddr_in {
                 sin_family: AF_INET as u16,
@@ -71,9 +71,7 @@ pub(crate) fn sender_server(
                 let mut ctx: SenderContext = SenderContext::new();
                 ctx.addr = task.addr;
                 ctx.chunk_id = task.chunk_id;
-                ctx.chunk_start = task.chunk_start;
-                ctx.offset = task.offset;
-                ctx.size = task.size;
+                ctx.metadata = task.metadata;
 
                 let listener = listener_addr as *mut rdma_cm_id;
                 let ec = ec_addr as *mut rdma_event_channel;
@@ -112,7 +110,7 @@ pub(crate) fn sender_server(
 
                 // build sender context
                 ctx.buffer = ctx.addr as *mut u8;
-                let len = u64::min(CHUNK_SIZE, ctx.size);
+                let len = u64::min(CHUNK_SIZE, ctx.metadata.size);
                 ctx.buffer_mr = ibv_reg_mr(pd, ctx.buffer.cast(), len as usize, 0);
 
                 ctx.msg = calloc(1, std::mem::size_of::<Message>()).cast();

@@ -736,6 +736,7 @@ mod tests {
         for handle in handles {
             handle.join();
         }
+        /*
         sfs_lseek(fd, 0, SEEK_SET);
         let mut buf = vec![0 as u8; cnt * thread * CHUNK_SIZE as usize];
         let res = sfs_read(
@@ -749,6 +750,7 @@ mod tests {
         } else {
             println!("{} bytes read", res);
         }
+        */
     }
     #[test]
     #[allow(unused_must_use)]

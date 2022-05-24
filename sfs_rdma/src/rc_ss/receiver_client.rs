@@ -1,6 +1,6 @@
 use std::ptr::null_mut;
 
-use crate::CHUNK_SIZE;
+use crate::{transfer::TransferMetadata, CHUNK_SIZE};
 use libc::{calloc, in_addr, sockaddr, sockaddr_in, AF_INET, INADDR_LOOPBACK};
 use rdma_sys::{
     ibv_access_flags, ibv_alloc_pd, ibv_create_comp_channel, ibv_create_cq, ibv_dealloc_pd,
@@ -44,7 +44,15 @@ pub(crate) fn recver_client(addr: &String, port: u16, op: ChunkOp) -> Result<i64
         0
     );
     unsafe {
-        let mut ctx: ReceiverContext = std::mem::zeroed();
+        let mut ctx: ReceiverContext = ReceiverContext {
+            buffer: null_mut(),
+            buffer_mr: null_mut(),
+            msg: null_mut(),
+            msg_mr: null_mut(),
+
+            metadata: TransferMetadata::default(),
+            s_ctx: null_mut(),
+        };
 
         let ec = rdma_create_event_channel();
         let mut cm_id: *mut rdma_cm_id = null_mut();
@@ -96,7 +104,15 @@ pub(crate) fn recver_client(addr: &String, port: u16, op: ChunkOp) -> Result<i64
         let _qp = (*cm_id).qp;
 
         // prepare receiver context
-        let mut ctx: ReceiverContext = std::mem::zeroed();
+        let mut ctx: ReceiverContext = ReceiverContext {
+            buffer: null_mut(),
+            buffer_mr: null_mut(),
+            msg: null_mut(),
+            msg_mr: null_mut(),
+
+            metadata: TransferMetadata::default(),
+            s_ctx: null_mut(),
+        };
         (*cm_id).context = ((&mut ctx) as *mut ReceiverContext).cast();
 
         ctx.buffer = calloc(1, CHUNK_SIZE as usize).cast();

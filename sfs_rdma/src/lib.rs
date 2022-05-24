@@ -17,7 +17,7 @@ use rdma_sys::{
 //pub mod function;
 //pub mod memory_region;
 pub mod chunk_operation;
-mod rc_ss;
+//mod rc_ss;
 pub mod rdma;
 mod recv;
 mod sc_rs;
@@ -25,7 +25,6 @@ mod send;
 pub mod transfer;
 //pub mod work_request;
 
-static MAX_PORT_TRY: u32 = 10;
 pub static CQ_CAPACITY: i32 = 16;
 pub static MAX_SGE: u32 = 2;
 pub static MAX_WR: u32 = 8;
@@ -148,75 +147,38 @@ pub fn build_connection(id: *mut rdma_cm_id, s_ctx: *mut *mut RDMA) {
     }
 }
 static CHUNK_SIZE: u64 = sfs_global::global::network::config::CHUNK_SIZE;
+pub static RDMA_WRITE_PORT: u16 = 8084;
 
 #[cfg(test)]
 mod tests {
 
-    use crate::{chunk_operation::ChunkOp, rdma::RDMA, transfer::ChunkTransferTask, CHUNK_SIZE};
+    use crate::{
+        chunk_operation::ChunkOp,
+        rdma::RDMA,
+        transfer::{ChunkMetadata, ChunkTransferTask},
+        CHUNK_SIZE, RDMA_WRITE_PORT,
+    };
 
     #[test]
-    fn it_works() {
-        std::thread::spawn(|| {
-            let data = "hello, here is RDMA data transfer test!\0";
-            let chunks = (data.len() as u64 + CHUNK_SIZE - 1) / CHUNK_SIZE;
-            let chunk_ids: Vec<u64> = (0..chunks).into_iter().collect();
-            let task = ChunkTransferTask {
-                chunk_id: chunk_ids,
-                offset: 0,
-                addr: data.as_ptr() as u64,
-                size: data.len() as u64,
-                chunk_start: 0,
-            };
-            RDMA::sender_server(&"192.168.230.142".to_string(), task, ChunkOp::none())
-                .1
-                .join()
-                .unwrap();
-        });
-        std::thread::spawn(|| {
-            let data = "hello, here is RDMA data transfer test!\0";
-            let chunks = (data.len() as u64 + CHUNK_SIZE - 1) / CHUNK_SIZE;
-            let chunk_ids: Vec<u64> = (0..chunks).into_iter().collect();
-            let task = ChunkTransferTask {
-                chunk_id: chunk_ids,
-                offset: 0,
-                addr: data.as_ptr() as u64,
-                size: data.len() as u64,
-                chunk_start: 0,
-            };
-            RDMA::sender_server(&"192.168.230.142".to_string(), task, ChunkOp::none())
-                .1
-                .join()
-                .unwrap();
-        });
-        std::thread::sleep(std::time::Duration::from_secs(10));
-    }
+    fn it_works() {}
+    #[test]
+    fn test_port() {}
     pub fn show(
-        _file_path: &String,
+        file_path: &String,
         _chunk_id: u64,
         buf: *mut u8,
         size: u64,
         _offset: u64,
     ) -> Result<i64, i32> {
-        let str = unsafe {
-            std::ffi::CStr::from_ptr(buf.cast())
-                .to_string_lossy()
-                .into_owned()
-        };
-        println!("received {}", str);
+        let slice = unsafe { std::slice::from_raw_parts(buf, size as usize) };
+        let str = String::from_utf8(slice.to_vec()).unwrap();
+        println!("received '{}' of '{}' with length {}", str, file_path, size);
         return Ok(size as i64);
     }
     #[test]
     fn test_recv_server() {
-        let op = ChunkOp {
-            path: "".to_string(),
-            offset: 0,
-            chunk_start: 0,
-            size: "hello, here is RDMA data transfer test!\0".len() as u64,
-            op: show,
-        };
-        if let Ok(data) = RDMA::recver_server(&"192.168.230.142".to_string(), op).1.join().unwrap() {
-            println!("receiver result: {}", data);
-        }
+        let op = ChunkOp { op: show };
+        let _handles = RDMA::recver_server(&"192.168.230.142".to_string(), op, 4);
     }
     #[test]
     fn test_send_client() {
@@ -224,41 +186,33 @@ mod tests {
         let chunks = (data.len() as u64 + CHUNK_SIZE - 1) / CHUNK_SIZE;
         let chunk_ids: Vec<u64> = (0..chunks).into_iter().collect();
         let task = ChunkTransferTask {
+            metadata: ChunkMetadata {
+                path: "testfile".to_string(),
+                chunk_start: 0,
+                offset: 0,
+                size: 26 as u64,
+            },
             chunk_id: chunk_ids,
-            chunk_start: 0,
-            offset: 0,
             addr: data.as_ptr() as u64,
-            size: data.len() as u64,
         };
-        let op = ChunkOp {
-            path: "".to_string(),
-            offset: 0,
-            chunk_start: 0,
-            size: "hello, here is RDMA data transfer test!\0".len() as u64,
-            op: show,
-        };
-        RDMA::sender_client(&"192.168.230.142".to_string(), 20432, task, op);
+        let op = ChunkOp { op: show };
+        println!(
+            "send {} bytes",
+            RDMA::sender_client(&"192.168.230.142".to_string(), RDMA_WRITE_PORT, task, op).unwrap()
+        );
     }
-
+    /*
     #[test]
     fn test_send_server() {
         let data = "hello, here is RDMA data transfer test!\0";
         let chunks = (data.len() as u64 + CHUNK_SIZE - 1) / CHUNK_SIZE;
         let chunk_ids: Vec<u64> = (0..chunks).into_iter().collect();
         let task = ChunkTransferTask {
+            metadata: ChunkMetadata::default(),
             chunk_id: chunk_ids,
-            offset: 0,
             addr: data.as_ptr() as u64,
-            size: data.len() as u64,
-            chunk_start: 0,
         };
-        let op = ChunkOp {
-            path: "".to_string(),
-            offset: 0,
-            chunk_start: 0,
-            size: "hello, here is RDMA data transfer test!\0".len() as u64,
-            op: show,
-        };
+        let op = ChunkOp { op: show };
         RDMA::sender_server(&"192.168.230.142".to_string(), task, op)
             .1
             .join()
@@ -266,15 +220,10 @@ mod tests {
     }
     #[test]
     fn test_recv_client() {
-        let op = ChunkOp {
-            path: "".to_string(),
-            offset: 0,
-            chunk_start: 0,
-            size: "hello, here is RDMA data transfer test!\0".len() as u64,
-            op: show,
-        };
-        if let Ok(data) = RDMA::recver_client(&"192.168.230.142".to_string(), 20532, op) {
+        let op = ChunkOp { op: show };
+        if let Ok(data) = RDMA::recver_client(&"192.168.230.142".to_string(), RDMA_WRITE_PORT, op) {
             println!("receiver result: {}", data);
         }
     }
+    */
 }

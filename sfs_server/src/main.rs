@@ -21,7 +21,6 @@ use sfs_global::global::fsconfig::ENABLE_STUFFING;
 use sfs_global::global::network::forward_data::PreCreateData;
 use sfs_global::global::network::post::{i2option, PostOption};
 use sfs_global::global::util::serde_util::{deserialize, serialize};
-use sfs_global::global::util::arith_util::offset_to_chunk_id;
 use sfs_global::{
     global::network::post::PostOption::*,
     global::{
@@ -31,7 +30,6 @@ use sfs_global::{
             config::CHUNK_SIZE,
             forward_data::{
                 CreateData, DecrData, DirentData, ReadData, TruncData, UpdateMetadentryData,
-                WriteData,
             },
         },
         util::net_util::get_my_hostname,
@@ -215,6 +213,7 @@ fn handle_request(post: &Post) -> PostResult {
             handle_precreate(&data);
             return post_result(0, vec![0; 0], vec![0; 0]);
         }
+        /*
         Write => {
             let write_data: WriteData = deserialize::<WriteData>(&post.data);
             if StorageContext::get_instance().output() {
@@ -234,7 +233,7 @@ fn handle_request(post: &Post) -> PostResult {
             }
             let write_tot = result.unwrap();
             return post_result(0, serialize(write_tot), vec![0; 0]);
-        }
+        }*/
         _ => {
             println!("invalid option on 'handle': {:?}", option);
             return post_result(EINVAL, vec![0; 0], vec![0; 0]);
@@ -381,7 +380,7 @@ impl SfsHandle for ServerHandler {
 async fn init_server(addr: &String) -> Result<(), Error> {
     let server_addr: (Ipv4Addr, u16) = (addr.parse().unwrap(), 8082);
     println!("listening on {:?}", server_addr);
-    let env = Arc::new(Environment::new(48));
+    let env = Arc::new(Environment::new(8));
     let instance = ServerHandler {};
     let service = create_sfs_handle(instance);
     let mut server = ServerBuilder::new(env)
@@ -393,6 +392,8 @@ async fn init_server(addr: &String) -> Result<(), Error> {
     NetworkContext::get_instance();
 
     let (tx, rx) = oneshot::channel();
+    let addr = addr.clone();
+    RDMA::recver_server(&addr, ChunkOp{ op: ChunkStorage::write_chunk}, 8);
     thread::spawn(move || {
         println!("Press ENTER to exit...");
         let _ = std::io::stdin().read(&mut [0]).unwrap();

@@ -1,6 +1,6 @@
 use std::ptr::null_mut;
 
-use crate::CHUNK_SIZE;
+use crate::{transfer::TransferMetadata, CHUNK_SIZE};
 use libc::{calloc, in_addr, sockaddr, sockaddr_in, AF_INET, INADDR_LOOPBACK};
 use rdma_sys::{
     ibv_access_flags, ibv_alloc_pd, ibv_create_comp_channel, ibv_create_cq, ibv_dealloc_pd,
@@ -26,7 +26,12 @@ use crate::{
     CQ_CAPACITY, MAX_SGE, MAX_WR,
 };
 
-pub(crate) fn sender_client(addr: &String, port: u16, task: ChunkTransferTask, op: ChunkOp) {
+pub(crate) fn sender_client(
+    addr: &String,
+    port: u16,
+    task: ChunkTransferTask,
+    op: ChunkOp,
+) -> Result<i64, i32> {
     let mut server_sockaddr = sockaddr_in {
         sin_family: AF_INET as u16,
         sin_port: port,
@@ -47,9 +52,17 @@ pub(crate) fn sender_client(addr: &String, port: u16, task: ChunkTransferTask, o
         let mut ctx: SenderContext = SenderContext::new();
         ctx.addr = task.addr;
         ctx.chunk_id = task.chunk_id;
-        ctx.chunk_start = task.chunk_start;
-        ctx.offset = task.offset;
-        ctx.size = task.size;
+        let mut md = TransferMetadata::default();
+        md.size = task.metadata.size;
+        md.offset = task.metadata.offset;
+        md.chunk_start = task.metadata.chunk_start;
+        md.path_len = task.metadata.path.len();
+        libc::memcpy(
+            md.path.as_mut_ptr().cast(),
+            task.metadata.path.as_ptr().cast(),
+            task.metadata.path.len(),
+        );
+        ctx.metadata = md;
 
         let ec = rdma_create_event_channel();
         let mut cm_id: *mut rdma_cm_id = null_mut();
@@ -102,7 +115,7 @@ pub(crate) fn sender_client(addr: &String, port: u16, task: ChunkTransferTask, o
 
         // build client context buffer
         ctx.buffer = ctx.addr as *mut u8;
-        let len = u64::min(CHUNK_SIZE, ctx.size);
+        let len = u64::min(CHUNK_SIZE, ctx.metadata.size);
         ctx.buffer_mr = ibv_reg_mr(pd, ctx.buffer.cast(), len as usize, 0);
 
         ctx.msg = calloc(1, std::mem::size_of::<Message>()).cast();
@@ -135,9 +148,10 @@ pub(crate) fn sender_client(addr: &String, port: u16, task: ChunkTransferTask, o
 
         rdma_destroy_event_channel(ec);
 
-        handle.join().unwrap().unwrap();
+        let res = handle.join().unwrap();
         ibv_dealloc_pd(pd);
         ibv_destroy_cq(cq);
         ibv_destroy_comp_channel(comp_channel);
+        return res;
     }
 }
