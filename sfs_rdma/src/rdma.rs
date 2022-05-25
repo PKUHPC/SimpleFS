@@ -19,13 +19,13 @@ impl CQPoller {
         comp_channel: *mut ibv_comp_channel,
         pd: *mut ibv_pd,
         func: fn(*mut ibv_wc, *mut ibv_pd, op: &ChunkOp) -> Result<i64, i32>,
-        op: ChunkOp
+        op: ChunkOp,
     ) -> Self {
         CQPoller {
             comp_channel: comp_channel as u64,
             pd: pd as u64,
             on_completion: func,
-            op
+            op,
         }
     }
     pub fn poll(&self) -> Result<i64, i32> {
@@ -96,18 +96,17 @@ impl RDMA {
     pub fn recver_server(addr: &String, op: ChunkOp, nthreads: u32) {
         crate::sc_rs::receiver_server::recver_server(&addr, op, nthreads);
     }
-    /*
-    pub fn sender_server(
+    pub fn sender_server(addr: &String, op: ChunkOp, nthreads: u32) {
+        crate::rc_ss::sender_server::sender_server(addr, op, nthreads)
+    }
+    pub fn recver_client(
         addr: &String,
+        port: u16,
         task: ChunkTransferTask,
         op: ChunkOp,
-    ) -> (u16, JoinHandle<()>) {
-        crate::rc_ss::sender_server::sender_server(addr, task, op)
+    ) -> Result<i64, i32> {
+        crate::rc_ss::receiver_client::recver_client(addr, port, task, op)
     }
-    pub fn recver_client(addr: &String, port: u16, op: ChunkOp) -> Result<i64, i32> {
-        crate::rc_ss::receiver_client::recver_client(addr, port, op)
-    }
-    */
 }
 pub struct RDMAContext {
     pub ctx: *mut ibv_context,

@@ -14,36 +14,20 @@ use rdma_sys::{
     rdma_cm_event_type, rdma_cm_id, rdma_conn_param, rdma_create_qp, rdma_event_channel,
     rdma_event_str, rdma_get_cm_event,
 };
-//pub mod function;
-//pub mod memory_region;
 pub mod chunk_operation;
-//mod rc_ss;
+mod rc_ss;
 pub mod rdma;
-mod recv;
 mod sc_rs;
-mod send;
 pub mod transfer;
-//pub mod work_request;
 
 pub static CQ_CAPACITY: i32 = 16;
 pub static MAX_SGE: u32 = 2;
 pub static MAX_WR: u32 = 8;
-#[allow(non_camel_case_types)]
-pub enum stag {
-    LocalStag { key: u32 },
-    RemoteStag { key: u32 },
-}
-#[allow(non_camel_case_types)]
-pub struct rdma_buffer_attr {
-    pub address: u64,
-    pub length: usize,
-    pub stag: stag,
-}
-impl rdma_buffer_attr {
-    pub fn as_mut_ptr(&mut self) -> *mut rdma_buffer_attr {
-        self as *mut rdma_buffer_attr
-    }
-}
+
+static CHUNK_SIZE: u64 = sfs_global::global::network::config::CHUNK_SIZE;
+pub static RDMA_WRITE_PORT: u16 = 8084;
+pub static RDMA_READ_PORT: u16 = 8085;
+
 pub fn get_addr(addr: &String, port: u16, sockaddr: *mut sockaddr) -> i32 {
     unsafe {
         let fixed_addr = addr.clone() + "\0";
@@ -146,8 +130,6 @@ pub fn build_connection(id: *mut rdma_cm_id, s_ctx: *mut *mut RDMA) {
         rdma_create_qp(id, (*(*s_ctx)).pd(), &mut attr);
     }
 }
-static CHUNK_SIZE: u64 = sfs_global::global::network::config::CHUNK_SIZE;
-pub static RDMA_WRITE_PORT: u16 = 8084;
 
 #[cfg(test)]
 mod tests {

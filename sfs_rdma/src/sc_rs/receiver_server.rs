@@ -1,12 +1,21 @@
 use std::{ptr::null_mut, sync::Arc};
 
-use crate::{rdma::RDMAContext, CHUNK_SIZE, RDMA_WRITE_PORT, transfer::TransferMetadata};
-use libc::{calloc, in_addr, sockaddr, sockaddr_in, AF_INET, INADDR_LOOPBACK};
+use crate::{
+    chunk_operation::ChunkInfo,
+    rdma::RDMAContext,
+    transfer::{ChunkMetadata, TransferMetadata},
+    CHUNK_SIZE, RDMA_WRITE_PORT,
+};
+use libc::{c_void, calloc, in_addr, sockaddr, sockaddr_in, AF_INET, INADDR_LOOPBACK};
 use rdma_sys::{
     ibv_access_flags, ibv_alloc_pd, ibv_create_comp_channel, ibv_create_cq, ibv_dealloc_pd,
-    ibv_dereg_mr, ibv_destroy_comp_channel, ibv_destroy_cq, ibv_qp_init_attr,
+    ibv_dereg_mr, ibv_destroy_comp_channel, ibv_destroy_cq, ibv_mr, ibv_pd, ibv_post_recv,
+    ibv_post_send, ibv_qp_init_attr,
     ibv_qp_type::IBV_QPT_RC,
-    ibv_reg_mr, ibv_req_notify_cq, rdma_accept, rdma_ack_cm_event, rdma_bind_addr, rdma_cm_event,
+    ibv_recv_wr, ibv_reg_mr, ibv_req_notify_cq, ibv_send_flags, ibv_send_wr, ibv_sge, ibv_wc,
+    ibv_wc_opcode::IBV_WC_RECV_RDMA_WITH_IMM,
+    ibv_wr_opcode::IBV_WR_SEND,
+    rdma_accept, rdma_ack_cm_event, rdma_bind_addr, rdma_cm_event,
     rdma_cm_event_type::{
         RDMA_CM_EVENT_CONNECT_REQUEST, RDMA_CM_EVENT_DISCONNECTED, RDMA_CM_EVENT_ESTABLISHED,
     },
@@ -21,9 +30,20 @@ use crate::{
     chunk_operation::ChunkOp,
     get_addr,
     rdma::CQPoller,
-    transfer::{Message, MessageType, ReceiverContext},
+    transfer::{Message, MessageType},
     CQ_CAPACITY, MAX_SGE, MAX_WR,
 };
+
+struct ReceiverServerContext {
+    pub buffer: *mut u8,
+    pub buffer_mr: *mut ibv_mr,
+
+    pub msg: *mut Message,
+    pub msg_mr: *mut ibv_mr,
+
+    pub metadata: ChunkMetadata,
+    pub s_ctx: *mut RDMAContext,
+}
 pub(crate) fn recver_server(addr: &String, op: ChunkOp, nthreads: u32) {
     unsafe {
         let port = RDMA_WRITE_PORT; //portpicker::pick_unused_port().expect("no port available");
@@ -79,9 +99,10 @@ pub(crate) fn recver_server(addr: &String, op: ChunkOp, nthreads: u32) {
                     assert!(!cq.is_null());
                     assert_eq!(ibv_req_notify_cq(cq, 0), 0);
 
-                    let poll_cq =
-                        CQPoller::new(comp_channel, pd, crate::recv::on_completion, op.clone());
-                    workers.execute(move || {poll_cq.poll().unwrap();});
+                    let poll_cq = CQPoller::new(comp_channel, pd, on_completion, op.clone());
+                    workers.execute(move || {
+                        poll_cq.poll().unwrap();
+                    });
 
                     let mut attr: ibv_qp_init_attr = std::mem::zeroed();
                     attr.send_cq = cq;
@@ -102,12 +123,13 @@ pub(crate) fn recver_server(addr: &String, op: ChunkOp, nthreads: u32) {
                     //(*s_ctx).cq_poller = Some(handle);
 
                     // prepare receiver context
-                    let mut ctx: *mut ReceiverContext =
-                        calloc(1, std::mem::size_of::<ReceiverContext>()).cast();
+                    let mut ctx: *mut ReceiverServerContext =
+                        calloc(1, std::mem::size_of::<ReceiverServerContext>()).cast();
                     (*cm_id).context = ctx.cast();
                     (*ctx).s_ctx = s_ctx;
 
-                    let rdma_buffer_size = usize::max(CHUNK_SIZE as usize, std::mem::size_of::<TransferMetadata>());
+                    let rdma_buffer_size =
+                        usize::max(CHUNK_SIZE as usize, std::mem::size_of::<TransferMetadata>());
                     (*ctx).buffer = calloc(1, rdma_buffer_size).cast();
                     (*ctx).buffer_mr = ibv_reg_mr(
                         pd,
@@ -127,7 +149,7 @@ pub(crate) fn recver_server(addr: &String, op: ChunkOp, nthreads: u32) {
                         ibv_access_flags::IBV_ACCESS_LOCAL_WRITE.0 as i32,
                     );
                     // pre-post receive buffer
-                    crate::recv::post_receive(cm_id);
+                    post_receive(cm_id);
 
                     // accept connection
                     let mut cm_params: rdma_conn_param = std::mem::zeroed();
@@ -139,18 +161,18 @@ pub(crate) fn recver_server(addr: &String, op: ChunkOp, nthreads: u32) {
                     let cm_id = (*cm_event).id;
                     rdma_ack_cm_event(cm_event);
 
-                    let ctx: *mut ReceiverContext = (*cm_id).context.cast();
+                    let ctx: *mut ReceiverServerContext = (*cm_id).context.cast();
                     // send message to notify client local buffer
                     (*(*ctx).msg).mtype = MessageType::MSG_MR;
                     (*(*ctx).msg).addr = (*(*ctx).buffer_mr).addr as u64;
                     (*(*ctx).msg).rkey = (*(*ctx).buffer_mr).rkey;
 
-                    crate::recv::send_message(cm_id);
+                    send_message(cm_id);
                 }
                 RDMA_CM_EVENT_DISCONNECTED => {
                     let cm_id = (*cm_event).id;
                     rdma_ack_cm_event(cm_event);
-                    let ctx: *mut ReceiverContext = (*cm_id).context.cast();
+                    let ctx: *mut ReceiverServerContext = (*cm_id).context.cast();
                     let s_ctx: *mut RDMAContext = (*ctx).s_ctx;
 
                     ibv_dereg_mr((*ctx).buffer_mr);
@@ -186,5 +208,82 @@ pub(crate) fn recver_server(addr: &String, op: ChunkOp, nthreads: u32) {
         }
         rdma_destroy_id(listener);
         rdma_destroy_event_channel(ec);
+    }
+}
+
+fn on_completion(wc: *mut ibv_wc, _pd: *mut ibv_pd, op: &ChunkOp) -> Result<i64, i32> {
+    unsafe {
+        let id: *mut rdma_cm_id = (*wc).wr_id as *mut rdma_cm_id;
+        let ctx: *mut ReceiverServerContext = (*id).context.cast();
+
+        if (*wc).opcode == IBV_WC_RECV_RDMA_WITH_IMM {
+            let chunk_id = u32::from_be((*wc).imm_data_invalidated_rkey_union.imm_data);
+            if chunk_id == u32::MAX {
+                (*(*ctx).msg).mtype = MessageType::MSG_DONE;
+                send_message(id);
+                return Ok(-1);
+            } else if (*ctx).metadata.size != 0 {
+                post_receive(id);
+                (*(*ctx).msg).mtype = MessageType::MSG_READY;
+                let ret = op.submit(ChunkInfo {
+                    chunk_id: chunk_id as u64,
+                    metadata: (*ctx).metadata.clone(),
+                    data: (*ctx).buffer,
+                });
+                send_message(id);
+                return ret;
+            } else {
+                let len = chunk_id;
+                let mut transfer_md = TransferMetadata::default();
+                libc::memcpy(
+                    (&mut transfer_md) as *mut TransferMetadata as *mut c_void,
+                    (*ctx).buffer.cast(),
+                    len as usize,
+                );
+                (*ctx).metadata.path =
+                    String::from_utf8(transfer_md.path[0..transfer_md.path_len as usize].to_vec())
+                        .unwrap();
+                (*ctx).metadata.chunk_start = transfer_md.chunk_start;
+                (*ctx).metadata.offset = transfer_md.offset;
+                (*ctx).metadata.size = transfer_md.size;
+
+                post_receive(id);
+                (*(*ctx).msg).mtype = MessageType::MSG_READY;
+                send_message(id);
+                return Ok(0);
+            }
+        }
+        return Ok(0);
+    }
+}
+fn send_message(id: *mut rdma_cm_id) {
+    unsafe {
+        let ctx: *mut ReceiverServerContext = (*id).context.cast();
+        let mut wr: ibv_send_wr = std::mem::zeroed();
+        let mut bad_wr: *mut ibv_send_wr = null_mut();
+        let mut sge = ibv_sge {
+            addr: (*ctx).msg as u64,
+            length: std::mem::size_of_val(&(*(*ctx).msg)) as u32,
+            lkey: (*(*ctx).msg_mr).lkey,
+        };
+
+        wr.wr_id = id as u64;
+        wr.opcode = IBV_WR_SEND;
+        wr.sg_list = &mut sge;
+        wr.num_sge = 1;
+        wr.send_flags = ibv_send_flags::IBV_SEND_SIGNALED.0;
+
+        assert_eq!(ibv_post_send((*id).qp, &mut wr, &mut bad_wr), 0);
+    }
+}
+fn post_receive(id: *mut rdma_cm_id) {
+    unsafe {
+        let mut wr: ibv_recv_wr = std::mem::zeroed();
+        let mut bad_wr: *mut ibv_recv_wr = null_mut();
+        wr.wr_id = id as u64;
+        wr.sg_list = null_mut();
+        wr.num_sge = 0;
+
+        assert_eq!(ibv_post_recv((*id).qp, &mut wr, &mut bad_wr), 0);
     }
 }

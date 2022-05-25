@@ -32,7 +32,7 @@ impl ChunkOp {
         } else {
             0
         };
-        (self.op)(&&md.path, chunk.chunk_id, chunk.data, size, offset)
+        (self.op)(&md.path, chunk.chunk_id, chunk.data, size, offset)
     }
     pub fn none() -> Self {
         #[allow(unused)]
