@@ -43,6 +43,8 @@ struct ReceiverServerContext {
 
     pub metadata: ChunkMetadata,
     pub s_ctx: *mut RDMAContext,
+
+    pub data_receive: u64
 }
 pub(crate) fn recver_server(addr: &String, op: ChunkOp, nthreads: u32) {
     unsafe {
@@ -127,6 +129,7 @@ pub(crate) fn recver_server(addr: &String, op: ChunkOp, nthreads: u32) {
                         calloc(1, std::mem::size_of::<ReceiverServerContext>()).cast();
                     (*cm_id).context = ctx.cast();
                     (*ctx).s_ctx = s_ctx;
+                    (*ctx).data_receive = 0;
 
                     let rdma_buffer_size =
                         usize::max(CHUNK_SIZE as usize, std::mem::size_of::<TransferMetadata>());
@@ -220,6 +223,7 @@ fn on_completion(wc: *mut ibv_wc, _pd: *mut ibv_pd, op: &ChunkOp) -> Result<i64,
             let chunk_id = u32::from_be((*wc).imm_data_invalidated_rkey_union.imm_data);
             if chunk_id == u32::MAX {
                 (*(*ctx).msg).mtype = MessageType::MSG_DONE;
+                (*(*ctx).msg).data = (*ctx).data_receive;
                 send_message(id);
                 return Err(0);
             } else if (*ctx).metadata.size != 0 {
@@ -230,6 +234,7 @@ fn on_completion(wc: *mut ibv_wc, _pd: *mut ibv_pd, op: &ChunkOp) -> Result<i64,
                     metadata: (*ctx).metadata.clone(),
                     data: (*ctx).buffer,
                 });
+                (*ctx).data_receive += ret.unwrap() as u64;
                 send_message(id);
                 return ret;
             } else {

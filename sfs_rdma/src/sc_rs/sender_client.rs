@@ -135,9 +135,6 @@ pub(crate) fn sender_client(
         assert!(!cq.is_null());
         assert_eq!(ibv_req_notify_cq(cq, 0), 0);
 
-        let poll_cq = CQPoller::new(comp_channel, pd, on_completion, op);
-        let handle = std::thread::spawn(move || poll_cq.poll());
-
         let mut attr: ibv_qp_init_attr = std::mem::zeroed();
         attr.recv_cq = cq;
         attr.send_cq = cq;
@@ -185,6 +182,9 @@ pub(crate) fn sender_client(
         rdma_connect(cm_id, &mut cm_params);
         process_rdma_cm_event(ec, RDMA_CM_EVENT_ESTABLISHED, &mut cm_event);
         rdma_ack_cm_event(cm_event);
+        
+        let poll_cq = CQPoller::new(comp_channel, pd, on_completion, op);
+        let res = poll_cq.poll();
 
         process_rdma_cm_event(ec, RDMA_CM_EVENT_DISCONNECTED, &mut cm_event);
         rdma_ack_cm_event(cm_event);
@@ -198,7 +198,6 @@ pub(crate) fn sender_client(
 
         rdma_destroy_event_channel(ec);
 
-        let res = handle.join().unwrap();
         ibv_dealloc_pd(pd);
         ibv_destroy_cq(cq);
         ibv_destroy_comp_channel(comp_channel);
@@ -219,10 +218,13 @@ fn on_completion(wc: *mut ibv_wc, pd: *mut ibv_pd, _op: &ChunkOp) -> Result<i64,
                 send_metadata(id, pd);
             } else if matches!((*(*ctx).msg).mtype, MessageType::MSG_READY) {
                 post_receive(id);
-                return send_next_chunk(id, pd);
+                if let Err(e) = send_next_chunk(id, pd){
+                    return Err(e);
+                }
+                return Ok(0);
             } else if matches!((*(*ctx).msg).mtype, MessageType::MSG_DONE) {
                 sender_disconnect(id);
-                return Err(0);
+                return Err((*(*ctx).msg).data as i32);
             }
         }
         return Ok(0);

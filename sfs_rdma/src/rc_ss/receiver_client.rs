@@ -133,9 +133,6 @@ pub(crate) fn recver_client(
         assert!(!cq.is_null());
         assert_eq!(ibv_req_notify_cq(cq, 0), 0);
 
-        let poll_cq = CQPoller::new(comp_channel, pd, on_completion, op);
-        let handle = std::thread::spawn(move || poll_cq.poll());
-
         let mut attr: ibv_qp_init_attr = std::mem::zeroed();
         attr.recv_cq = cq;
         attr.send_cq = cq;
@@ -193,6 +190,9 @@ pub(crate) fn recver_client(
         process_rdma_cm_event(ec, RDMA_CM_EVENT_ESTABLISHED, &mut cm_event);
         rdma_ack_cm_event(cm_event);
 
+        let poll_cq = CQPoller::new(comp_channel, pd, on_completion, op);
+        let res = poll_cq.poll();
+
         process_rdma_cm_event(ec, RDMA_CM_EVENT_DISCONNECTED, &mut cm_event);
         rdma_ack_cm_event(cm_event);
 
@@ -205,7 +205,6 @@ pub(crate) fn recver_client(
 
         rdma_destroy_event_channel(ec);
 
-        let res = handle.join().unwrap();
         ibv_dealloc_pd(pd);
         ibv_destroy_cq(cq);
         ibv_destroy_comp_channel(comp_channel);
