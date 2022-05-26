@@ -24,7 +24,7 @@ pub static CQ_CAPACITY: i32 = 16;
 pub static MAX_SGE: u32 = 2;
 pub static MAX_WR: u32 = 8;
 
-static CHUNK_SIZE: u64 = sfs_global::global::network::config::CHUNK_SIZE;
+const CHUNK_SIZE: u64 = sfs_global::global::network::config::CHUNK_SIZE;
 pub static RDMA_WRITE_PORT: u16 = 8084;
 pub static RDMA_READ_PORT: u16 = 8085;
 
@@ -138,7 +138,7 @@ mod tests {
         chunk_operation::ChunkOp,
         rdma::RDMA,
         transfer::{ChunkMetadata, ChunkTransferTask},
-        CHUNK_SIZE, RDMA_WRITE_PORT,
+        CHUNK_SIZE, RDMA_READ_PORT, RDMA_WRITE_PORT,
     };
 
     #[test]
@@ -165,14 +165,17 @@ mod tests {
     #[test]
     fn test_send_client() {
         let data = "hello, here is RDMA data transfer test!\0";
-        let chunks = (data.len() as u64 + CHUNK_SIZE - 1) / CHUNK_SIZE;
-        let chunk_ids: Vec<u64> = (0..chunks).into_iter().collect();
+        let offset = 11;
+        let size = 24;
+        let chunk_start = offset / CHUNK_SIZE;
+        let chunks = ( offset + size) / CHUNK_SIZE;
+        let chunk_ids: Vec<u64> = (chunk_start..chunks + 1).into_iter().collect();
         let task = ChunkTransferTask {
             metadata: ChunkMetadata {
                 path: "testfile".to_string(),
-                chunk_start: 0,
-                offset: 0,
-                size: 26 as u64,
+                chunk_start,
+                offset: offset % CHUNK_SIZE,
+                size
             },
             chunk_id: chunk_ids,
             addr: data.as_ptr() as u64,
@@ -183,29 +186,59 @@ mod tests {
             RDMA::sender_client(&"192.168.230.142".to_string(), RDMA_WRITE_PORT, task, op).unwrap()
         );
     }
-    /*
+    pub fn read(
+        _file_path: &String,
+        chunk_id: u64,
+        buf: *mut u8,
+        size: u64,
+        offset: u64,
+    ) -> Result<i64, i32> {
+        let data = "hello, here is RDMA data transfer test!\0";
+        let start = chunk_id * CHUNK_SIZE + offset;
+        unsafe {
+            let ptr = data.as_ptr().offset(start as isize);
+            libc::memcpy(buf.cast(), ptr.cast(), size as usize);
+        }
+        return Ok(size as i64);
+    }
     #[test]
     fn test_send_server() {
-        let data = "hello, here is RDMA data transfer test!\0";
-        let chunks = (data.len() as u64 + CHUNK_SIZE - 1) / CHUNK_SIZE;
-        let chunk_ids: Vec<u64> = (0..chunks).into_iter().collect();
-        let task = ChunkTransferTask {
-            metadata: ChunkMetadata::default(),
-            chunk_id: chunk_ids,
-            addr: data.as_ptr() as u64,
-        };
-        let op = ChunkOp { op: show };
-        RDMA::sender_server(&"192.168.230.142".to_string(), task, op)
-            .1
-            .join()
-            .unwrap();
+        let op = ChunkOp { op: read };
+        RDMA::sender_server(&"192.168.230.142".to_string(), op, 4);
     }
     #[test]
     fn test_recv_client() {
+        let data = "hello, here is RDMA data transfer test!\0";
+        let offset = 8;
+        let size = 24 as u64;
+        let chunk_start = offset / CHUNK_SIZE;
+        let chunks = (size + offset) / CHUNK_SIZE;
+        let chunk_ids: Vec<u64> = (chunk_start..chunks + 1).into_iter().collect();
+        let buf = unsafe { libc::calloc(1, data.len() + 2) } as *mut u8;
+        let task = ChunkTransferTask {
+            metadata: ChunkMetadata {
+                path: "testfile".to_string(),
+                chunk_start,
+                offset: offset % CHUNK_SIZE,
+                size
+            },
+            chunk_id: chunk_ids,
+            addr: buf as u64,
+        };
         let op = ChunkOp { op: show };
-        if let Ok(data) = RDMA::recver_client(&"192.168.230.142".to_string(), RDMA_WRITE_PORT, op) {
-            println!("receiver result: {}", data);
+        if let Ok(len) =
+            RDMA::recver_client(&"192.168.230.142".to_string(), RDMA_READ_PORT, task, op)
+        {
+            println!(
+                "receiver result: '{}' with length {}",
+                unsafe {
+                    std::ffi::CStr::from_ptr(buf.cast())
+                        .to_string_lossy()
+                        .into_owned()
+                },
+                len
+            );
         }
+        unsafe { libc::free(buf.cast()) };
     }
-    */
 }

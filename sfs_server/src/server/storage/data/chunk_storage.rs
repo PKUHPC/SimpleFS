@@ -167,16 +167,17 @@ impl ChunkStorage {
     pub fn read_chunk(
         file_path: &String,
         chunk_id: u64,
-        buf: &mut Vec<u8>,
+        buf: *mut u8,
         size: u64,
         mut offset: u64,
-    ) -> Result<u64, i32> {
+    ) -> Result<i64, i32> {
         if size + offset > CNK.get_chunk_size() {
             error_msg(
                 "server::storage::chunk_storage::read_chunk".to_string(),
                 "beyond chunk storage range".to_string(),
             );
         }
+        /*
         if ENABLE_STUFFING && STUFF_WITH_ROCKSDB && chunk_id == 0 {
             if let Some(data) = StuffDB::get_instance().get(file_path) {
                 if offset as usize > data.len() {
@@ -192,7 +193,8 @@ impl ChunkStorage {
             } else {
                 return Err(-1);
             }
-        }
+        } 
+        */
         ChunkStorage::init_chunk_space(file_path);
         let chunk_path =
             ChunkStorage::absolute(&ChunkStorage::get_chunks_path(file_path, chunk_id));
@@ -206,8 +208,7 @@ impl ChunkStorage {
         }
         let f = open_res.unwrap();
         let mut read_tot: u64 = 0;
-        let tmp = buf;
-        let mut buf = &mut tmp[0..size as usize];
+        let mut buf = unsafe{std::slice::from_raw_parts_mut(buf, size as usize)};
         while !buf.is_empty() {
             match f.read_at(buf, offset) {
                 Ok(0) => break,
@@ -231,9 +232,9 @@ impl ChunkStorage {
                 "server::storage::chunk_storage::read_chunk".to_string(),
                 "unable to fill the buf because of reaching EOF".to_string(),
             );
-            Ok(read_tot as u64)
+            Ok(read_tot as i64)
         } else {
-            Ok(read_tot as u64)
+            Ok(read_tot as i64)
         }
     }
     pub fn trim_chunk_space(file_path: &String, chunk_start: u64) {

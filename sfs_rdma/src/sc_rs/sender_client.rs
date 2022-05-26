@@ -222,7 +222,7 @@ fn on_completion(wc: *mut ibv_wc, pd: *mut ibv_pd, _op: &ChunkOp) -> Result<i64,
                 return send_next_chunk(id, pd);
             } else if matches!((*(*ctx).msg).mtype, MessageType::MSG_DONE) {
                 sender_disconnect(id);
-                return Ok(-1);
+                return Err(0);
             }
         }
         return Ok(0);
@@ -273,7 +273,7 @@ fn write_remote(id: *mut rdma_cm_id, len: u32, op: WriteOp) -> Result<i64, i32> 
             (&mut bad_wr) as *mut *mut ibv_send_wr,
         );
         if ret != 0 {
-            return Err(errno().0);
+            return Err(- errno().0);
         }
         return Ok(len as i64);
     }

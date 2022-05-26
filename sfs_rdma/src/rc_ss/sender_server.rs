@@ -14,15 +14,16 @@ use rdma_sys::{
     ibv_qp_type::IBV_QPT_RC,
     ibv_recv_wr, ibv_reg_mr, ibv_req_notify_cq, ibv_send_flags, ibv_send_wr, ibv_sge, ibv_wc,
     ibv_wc_opcode::{IBV_WC_RECV, IBV_WC_RECV_RDMA_WITH_IMM},
-    ibv_wr_opcode::{IBV_WR_SEND, IBV_WR_RDMA_WRITE_WITH_IMM},
-    rdma_accept, rdma_ack_cm_event, rdma_bind_addr, rdma_cm_event,
+    ibv_wr_opcode::{IBV_WR_RDMA_WRITE_WITH_IMM, IBV_WR_SEND},
+    imm_data_invalidated_rkey_union_t, rdma_accept, rdma_ack_cm_event, rdma_bind_addr,
+    rdma_cm_event,
     rdma_cm_event_type::{
         RDMA_CM_EVENT_CONNECT_REQUEST, RDMA_CM_EVENT_DISCONNECTED, RDMA_CM_EVENT_ESTABLISHED,
     },
     rdma_cm_id, rdma_conn_param, rdma_create_event_channel, rdma_create_id, rdma_create_qp,
     rdma_destroy_event_channel, rdma_destroy_id, rdma_destroy_qp, rdma_event_str,
     rdma_get_cm_event, rdma_listen,
-    rdma_port_space::RDMA_PS_TCP, imm_data_invalidated_rkey_union_t,
+    rdma_port_space::RDMA_PS_TCP, rdma_disconnect,
 };
 
 use crate::{
@@ -231,6 +232,10 @@ fn on_completion(wc: *mut ibv_wc, _pd: *mut ibv_pd, op: &ChunkOp) -> Result<i64,
             send_message(id);
             return Ok(0);
         } else if (*wc).opcode & IBV_WC_RECV != 0 {
+            if matches!((*(*ctx).msg).mtype, MessageType::MSG_DONE){
+                rdma_disconnect(id);
+                return Err(0);
+            }
             let info = ChunkInfo {
                 chunk_id: (*(*ctx).msg).data,
                 metadata: (*ctx).metadata.clone(),
@@ -260,6 +265,7 @@ fn on_completion(wc: *mut ibv_wc, _pd: *mut ibv_pd, op: &ChunkOp) -> Result<i64,
                 wr.num_sge = 1;
             }
             let mut bad_wr: *mut ibv_send_wr = null_mut();
+            post_receive_msg(id);
             ibv_post_send(
                 (*id).qp,
                 (&mut wr) as *mut ibv_send_wr,

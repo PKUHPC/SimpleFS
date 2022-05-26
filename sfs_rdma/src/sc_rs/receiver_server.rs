@@ -221,7 +221,7 @@ fn on_completion(wc: *mut ibv_wc, _pd: *mut ibv_pd, op: &ChunkOp) -> Result<i64,
             if chunk_id == u32::MAX {
                 (*(*ctx).msg).mtype = MessageType::MSG_DONE;
                 send_message(id);
-                return Ok(-1);
+                return Err(0);
             } else if (*ctx).metadata.size != 0 {
                 post_receive(id);
                 (*(*ctx).msg).mtype = MessageType::MSG_READY;

@@ -257,7 +257,7 @@ mod tests {
             println!("read error ...");
             return;
         } else {
-            println!("read: {}", String::from_utf8(buf.to_vec()).unwrap());
+            println!("read {} bytes: {}", res, String::from_utf8(buf.to_vec()).unwrap());
         }
     }
     #[test]
@@ -514,7 +514,7 @@ mod tests {
             println!("read error ...");
             return;
         } else {
-            println!("read: {}", String::from_utf8(buf).unwrap());
+            println!("read {} bytes: {}", res, String::from_utf8(buf).unwrap());
         }
     }
     #[test]
@@ -736,7 +736,6 @@ mod tests {
         for handle in handles {
             handle.join();
         }
-        /*
         sfs_lseek(fd, 0, SEEK_SET);
         let mut buf = vec![0 as u8; cnt * thread * CHUNK_SIZE as usize];
         let res = sfs_read(
@@ -750,7 +749,6 @@ mod tests {
         } else {
             println!("{} bytes read", res);
         }
-        */
     }
     #[test]
     #[allow(unused_must_use)]

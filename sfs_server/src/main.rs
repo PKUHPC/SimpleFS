@@ -29,7 +29,7 @@ use sfs_global::{
         network::{
             config::CHUNK_SIZE,
             forward_data::{
-                CreateData, DecrData, DirentData, ReadData, TruncData, UpdateMetadentryData,
+                CreateData, DecrData, DirentData, TruncData, UpdateMetadentryData,
             },
         },
         util::net_util::get_my_hostname,
@@ -51,7 +51,7 @@ use std::{
     path::Path,
 };
 
-use crate::handle::{handle_read, handle_trunc};
+use crate::handle::{handle_trunc};
 
 #[allow(unused)]
 use std::time::Instant;
@@ -306,6 +306,7 @@ impl SfsHandle for ServerHandler {
             while let Some(post) = stream.try_next().await? {
                 let option = i2option(post.option);
                 match option {
+                    /*
                     Read => {
                         let read_args: ReadData = deserialize::<ReadData>(&post.data);
                         if StorageContext::get_instance().output() {
@@ -313,7 +314,7 @@ impl SfsHandle for ServerHandler {
                         }
                         sink.send((handle_read(&read_args), WriteFlags::default()))
                             .await?;
-                    }
+                    }*/
                     _ => {
                         println!("invalid option on 'handle_stream': {:?}", option);
                         sink.send((
@@ -392,8 +393,10 @@ async fn init_server(addr: &String) -> Result<(), Error> {
     NetworkContext::get_instance();
 
     let (tx, rx) = oneshot::channel();
-    let addr = addr.clone();
-    RDMA::recver_server(&addr, ChunkOp{ op: ChunkStorage::write_chunk}, 8);
+    let addr_clone = addr.clone();
+    thread::spawn(move || RDMA::recver_server(&addr_clone, ChunkOp{ op: ChunkStorage::write_chunk}, 8));
+    let addr_clone = addr.clone();
+    thread::spawn(move || RDMA::sender_server(&addr_clone, ChunkOp{ op: ChunkStorage::read_chunk}, 8));
     thread::spawn(move || {
         println!("Press ENTER to exit...");
         let _ = std::io::stdin().read(&mut [0]).unwrap();

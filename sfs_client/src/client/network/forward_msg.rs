@@ -5,11 +5,11 @@ use std::sync::{Arc, Mutex};
 #[allow(unused)]
 use std::time::Instant;
 
-use futures::{future::join_all, TryStreamExt};
+use futures::{TryStreamExt};
 use grpcio::Error;
-use libc::{c_char, c_void, memcpy, EBUSY};
+use libc::{c_char, EBUSY};
 use sfs_global::global::util::serde_util::{deserialize, serialize};
-use sfs_rdma::RDMA_WRITE_PORT;
+use sfs_rdma::{RDMA_WRITE_PORT, RDMA_READ_PORT};
 use sfs_rdma::chunk_operation::ChunkOp;
 use sfs_rdma::rdma::RDMA;
 use sfs_rdma::transfer::{ChunkTransferTask, ChunkMetadata};
@@ -24,12 +24,12 @@ use sfs_global::global::error_msg::error_msg;
 use sfs_global::global::fsconfig::SFSConfig;
 use sfs_global::global::network::config::CHUNK_SIZE;
 use sfs_global::global::network::forward_data::{
-    ChunkStat, CreateData, DecrData, DirentData, ReadData, ReadResult, TruncData,
+    ChunkStat, CreateData, DecrData, DirentData, TruncData,
     UpdateMetadentryData, //WriteData,
 };
 use sfs_global::global::network::post::{option2i, PostOption};
 use sfs_global::global::util::arith_util::{
-    block_index, chunk_lpad, chunk_rpad, offset_to_chunk_id,
+    block_index, offset_to_chunk_id,
 };
 
 use super::network_service::NetworkService;
@@ -405,47 +405,7 @@ pub async fn forward_write(
                 RDMA::sender_client(&StaticContext::get_instance().get_hosts().get(target as usize).unwrap().addr, RDMA_WRITE_PORT, chunk_transfer, op)
             })
         )
-        /*
-        let (rdma_port, handle) = RDMA::sender_server(
-            StaticContext::get_instance().get_rdma_addr(),
-            chunk_transfer,
-            op,
-        );
-        rdma_handles.push(handle);
-        let data = WriteData {
-            path: path.as_str(),
-            offset: in_offset,
-            write_size: write_size as u64,
-            rdma_addr: StaticContext::get_instance().rdma_addr.as_str(),
-            rdma_port,
-        };
-        let serialized_data = serialize(data);
-        handles.push(tokio::spawn(async move {
-            let post_result = NetworkService::post_serialized(
-                StaticContext::get_instance()
-                    .get_clients()
-                    .get(target as usize)
-                    .unwrap(),
-                serialized_data,
-                PostOption::Write,
-            );
-            if let Err(_e) = post_result {
-                return (EBUSY, 0);
-            }
-            (0, deserialize::<i64>(&post_result.unwrap().data))
-        }));
-        */
     }
-    //let joins = join_all(handles).await;
-    /*
-    for handle in handles {
-        let post_result = handle.await.unwrap();
-        if post_result.0 != 0 {
-            return (post_result.0, tot_write);
-        }
-        tot_write += post_result.1;
-    }
-    */
     for rdma in rdma_handles {
         let res = rdma.join().unwrap();
         if let Err(e) = res{
@@ -479,83 +439,35 @@ pub async fn forward_read(
         }
     }
     let mut tot_read = 0;
-    let mut handles = Vec::new();
+    let mut rdma_handles = Vec::new();
     for target in targets {
-        let mut read_datas: Vec<ReadData> = Vec::new();
-        for chunk in target_chunks.get(&target).unwrap() {
-            let total_size = if *chunk == chunk_start {
-                if *chunk == chunk_end {
-                    read_size as u64
-                } else {
-                    chunk_rpad(offset, CHUNK_SIZE)
-                }
-            } else if *chunk == chunk_end {
-                let pad = chunk_lpad(offset + read_size, CHUNK_SIZE);
-                if pad == 0 {
-                    CHUNK_SIZE
-                } else {
-                    pad
-                }
-            } else {
-                CHUNK_SIZE
-            };
-            read_datas.push(ReadData {
-                path: path.as_str(),
-                offset: if *chunk == chunk_start {
-                    chunk_lpad(offset, CHUNK_SIZE) as i64
-                } else {
-                    0
-                },
-                chunk_id: *chunk,
-                read_size: total_size,
+        let addr = buf as u64;
+        let chunk_ids = target_chunks.remove(&target).unwrap();
+        let op = ChunkOp::none();
+        let chunk_transfer = ChunkTransferTask {
+            chunk_id: chunk_ids,
+            metadata: ChunkMetadata{
+                path: path.to_string(),
+                chunk_start: chunk_start as u64,
+                offset: offset as u64 % CHUNK_SIZE,
+                size: read_size as u64,
+            },
+            addr: addr,
+        };
+        rdma_handles.push(
+            std::thread::spawn(move || {
+                RDMA::recver_client(&StaticContext::get_instance().get_hosts().get(target as usize).unwrap().addr, RDMA_READ_PORT, chunk_transfer, op)
             })
-        }
-        let posts = read_datas
-            .iter()
-            .map(|x| post(option2i(&PostOption::Read), serialize(&x), vec![0; 0]))
-            .collect::<Vec<_>>();
-        handles.push(tokio::spawn(async move {
-            NetworkService::post_stream(
-                StaticContext::get_instance()
-                    .get_clients()
-                    .get(target as usize)
-                    .unwrap(),
-                posts,
-            )
-            .await
-        }));
+        )
     }
-    let joins = join_all(handles).await;
-    for join in joins {
-        let post_result = join.unwrap();
-        if let Err(_e) = post_result {
-            //println!("{}({} - {}) {:?}", path, chunk_start, chunk_end, _e);
-            return (EBUSY, tot_read);
+    for rdma in rdma_handles {
+        let res = rdma.join().unwrap();
+        if let Err(e) = res{
+            return (e, 0);
         }
-        let response = post_result.unwrap();
-        for res in response {
-            if res.err != 0 {
-                return (res.err, tot_read);
-            }
-            let read_res: ReadResult = deserialize::<ReadResult>(&res.data);
-            tot_read += read_res.nreads;
-            let data = res.extra;
-            let local_offset = if read_res.chunk_id == chunk_start {
-                0
-            } else {
-                (read_res.chunk_id - chunk_start) * CHUNK_SIZE - (offset as u64 % CHUNK_SIZE)
-            };
-            //println!("{}/{}: {}, {}", tot_read, read_size, data.len(), read_res.nreads);
-            unsafe {
-                memcpy(
-                    buf.offset(local_offset as isize) as *mut c_void,
-                    data.as_ptr() as *const c_void,
-                    data.len() as usize,
-                );
-            }
-        }
+        tot_read += res.unwrap();
     }
-    return (0, tot_read);
+    return (0, tot_read as u64);
 }
 pub async fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>) {
     let targets = StaticContext::get_instance()

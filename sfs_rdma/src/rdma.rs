@@ -53,12 +53,15 @@ impl CQPoller {
                     }
                     let ret = (self.on_completion)(&mut wc, pd, &self.op);
                     if let Err(e) = ret {
-                        return Err(e);
+                        if e >= 0{
+                            result += e as i64;
+                            return Ok(result);
+                        }
+                        else{
+                            return Err(e);
+                        }
                     }
                     let ok = ret.unwrap();
-                    if ok < 0 {
-                        return Ok(result);
-                    }
                     result += ok;
                 }
             }

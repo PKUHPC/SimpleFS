@@ -219,11 +219,11 @@ fn on_completion(wc: *mut ibv_wc, pd: *mut ibv_pd, _op: &ChunkOp) -> Result<i64,
         let ctx: *mut ReceiverClientContext = (*id).context.cast();
 
         if (*wc).opcode == IBV_WC_RECV_RDMA_WITH_IMM {
-            let _write_len = u32::from_be((*wc).imm_data_invalidated_rkey_union.imm_data);
+            let read_len = u32::from_be((*wc).imm_data_invalidated_rkey_union.imm_data);
             if (*ctx).chunk_id.len() == 0 {
                 (*(*ctx).msg).mtype = MessageType::MSG_DONE;
                 send_message(id);
-                return Ok(-1);
+                return Err(read_len as i32);
             } else {
                 post_receive_data(id);
                 ibv_dereg_mr((*ctx).buffer_mr);
@@ -257,7 +257,7 @@ fn on_completion(wc: *mut ibv_wc, pd: *mut ibv_pd, _op: &ChunkOp) -> Result<i64,
 
                 send_message(id);
                 (*ctx).chunk_id.remove(0);
-                return Ok(len as i64);
+                return Ok(read_len as i64);
             }
         } else if (*wc).opcode & IBV_WC_RECV != 0 {
             if matches!((*(*ctx).msg).mtype, MessageType::MSG_MR) {
@@ -298,7 +298,7 @@ fn on_completion(wc: *mut ibv_wc, pd: *mut ibv_pd, _op: &ChunkOp) -> Result<i64,
 
                 (*ctx).chunk_id.remove(0);
                 send_message(id);
-                return Ok(len as i64);
+                return Ok(0);
             }
             return Ok(0);
         }

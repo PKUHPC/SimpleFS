@@ -31,6 +31,7 @@ pub fn handle_write(input: &WriteData, data: &[u8]) -> PostResult {
     return post_res;
 }
 */
+/*
 
 #[allow(unused_variables)]
 #[allow(unused_assignments)]
@@ -63,6 +64,7 @@ fn read_file(args: &ReadData<'_>) -> (u64, u64, Vec<u8>) {
         (args.chunk_id, 0, vec![0; 1])
     }
 }
+*/
 
 pub fn handle_trunc(input: TruncData<'_>) -> PostResult {
     let path = input.path;
