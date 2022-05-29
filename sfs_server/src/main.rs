@@ -381,7 +381,7 @@ impl SfsHandle for ServerHandler {
 async fn init_server(addr: &String) -> Result<(), Error> {
     let server_addr: (Ipv4Addr, u16) = (addr.parse().unwrap(), 8082);
     println!("listening on {:?}", server_addr);
-    let env = Arc::new(Environment::new(8));
+    let env = Arc::new(Environment::new(16));
     let instance = ServerHandler {};
     let service = create_sfs_handle(instance);
     let mut server = ServerBuilder::new(env)
@@ -394,9 +394,9 @@ async fn init_server(addr: &String) -> Result<(), Error> {
 
     let (tx, rx) = oneshot::channel();
     let addr_clone = addr.clone();
-    thread::spawn(move || RDMA::recver_server(&addr_clone, ChunkOp{ op: ChunkStorage::write_chunk}, 8));
+    thread::spawn(move || RDMA::recver_server(&addr_clone, ChunkOp{ op: ChunkStorage::write_chunk}, 10));
     let addr_clone = addr.clone();
-    thread::spawn(move || RDMA::sender_server(&addr_clone, ChunkOp{ op: ChunkStorage::read_chunk}, 8));
+    thread::spawn(move || RDMA::sender_server(&addr_clone, ChunkOp{ op: ChunkStorage::read_chunk}, 10));
     thread::spawn(move || {
         println!("Press ENTER to exit...");
         let _ = std::io::stdin().read(&mut [0]).unwrap();

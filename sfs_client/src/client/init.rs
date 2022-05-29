@@ -8,6 +8,7 @@ use std::{
 };
 
 use grpcio::{ChannelBuilder, Environment};
+use rdma_sys::rdma_create_event_channel;
 use regex::Regex;
 
 use sfs_global::global::{
@@ -28,7 +29,7 @@ use sfs_rpc::{post, proto::server_grpc::SfsHandleClient};
 
 use super::{
     context::{DynamicContext, StaticContext},
-    network::forward_msg::forward_get_fs_config,
+    network::{forward_msg::forward_get_fs_config, rdmacm::process_cm_event},
 };
 
 fn extract_protocol(_uri: &String) {}
@@ -70,7 +71,7 @@ fn lookup_endpoint(
     for i in 0..max_retries {
         let serialized_data = serialize(&host_id);
         let post = post(option2i(&PostOption::Lookup), serialized_data, vec![0; 0]);
-        let env = Arc::new(Environment::new(12));
+        let env = Arc::new(Environment::new(4));
         let channel = ChannelBuilder::new(env)
             .max_receive_message_len(128 * 1024 * 1024)
             .max_send_message_len(128 * 1024 * 1024)
@@ -186,5 +187,9 @@ pub fn init_environment() -> StaticContext {
     context.rdma_addr = config.addr;
 
     context.init_flag = true;
+    context.event_channel = unsafe{rdma_create_event_channel() as u64};
+    let ec = context.event_channel;
+    context.handle = Some(std::thread::spawn(move || {process_cm_event(ec)}));
+
     return context;
 }

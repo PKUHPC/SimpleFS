@@ -983,6 +983,7 @@ dependencies = [
  "nix",
  "portpicker",
  "prost",
+ "rdma-sys",
  "regex",
  "serde",
  "serde_json",

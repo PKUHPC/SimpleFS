@@ -1,9 +1,12 @@
 use lazy_static::*;
+use rdma_sys::rdma_event_channel;
 use sfs_global::global::endpoint::SFSEndpoint;
 use sfs_rpc::proto::server_grpc::SfsHandleClient;
 use tokio::runtime::{Builder, Runtime};
 
+use std::ptr::null_mut;
 use std::sync::{Arc, Mutex, MutexGuard};
+use std::thread::JoinHandle;
 
 use bit_vec::*;
 
@@ -299,6 +302,9 @@ pub struct StaticContext {
 
     pub rdma_addr: String,
 
+    pub event_channel: u64,
+    pub handle: Option<JoinHandle<()>>,
+
     pub init_flag: bool,
 }
 lazy_static! {
@@ -331,6 +337,9 @@ impl StaticContext {
                     .build()
                     .unwrap(),
             ),
+            event_channel: null_mut() as *mut rdma_event_channel as u64,
+            handle: None
+            
         }
     }
     pub fn set_mountdir(&mut self, mut path: String) {
@@ -411,6 +420,9 @@ impl StaticContext {
     }
     pub fn get_rdma_addr(&self) -> &String {
         &self.rdma_addr
+    }
+    pub fn get_event_channel(&self) -> *mut rdma_event_channel{
+        self.event_channel as *mut rdma_event_channel
     }
     pub fn protect_user_fds() {}
     pub fn unprotect_user_fds() {}

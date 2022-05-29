@@ -11,7 +11,6 @@ use libc::{c_char, EBUSY};
 use sfs_global::global::util::serde_util::{deserialize, serialize};
 use sfs_rdma::{RDMA_WRITE_PORT, RDMA_READ_PORT};
 use sfs_rdma::chunk_operation::ChunkOp;
-use sfs_rdma::rdma::RDMA;
 use sfs_rdma::transfer::{ChunkTransferTask, ChunkMetadata};
 use sfs_rpc::post;
 use sfs_rpc::proto::server::PostResult;
@@ -33,6 +32,8 @@ use sfs_global::global::util::arith_util::{
 };
 
 use super::network_service::NetworkService;
+use super::rdma_read::recver_client;
+use super::rdma_write::sender_client;
 
 pub fn forward_stat(path: &String) -> Result<Vec<u8>, i32> {
     let endp_id = StaticContext::get_instance()
@@ -401,13 +402,11 @@ pub async fn forward_write(
             addr: addr,
         };
         rdma_handles.push(
-            std::thread::spawn(move || {
-                RDMA::sender_client(&StaticContext::get_instance().get_hosts().get(target as usize).unwrap().addr, RDMA_WRITE_PORT, chunk_transfer, op)
-            })
+                sender_client(&StaticContext::get_instance().get_hosts().get(target as usize).unwrap().addr, RDMA_WRITE_PORT, chunk_transfer, op).await
         )
     }
     for rdma in rdma_handles {
-        let res = rdma.join().unwrap();
+        let res = rdma.await.unwrap();
         if let Err(e) = res{
             return (e, 0);
         }
@@ -455,13 +454,11 @@ pub async fn forward_read(
             addr: addr,
         };
         rdma_handles.push(
-            std::thread::spawn(move || {
-                RDMA::recver_client(&StaticContext::get_instance().get_hosts().get(target as usize).unwrap().addr, RDMA_READ_PORT, chunk_transfer, op)
-            })
+            recver_client(&StaticContext::get_instance().get_hosts().get(target as usize).unwrap().addr, RDMA_READ_PORT, chunk_transfer, op).await
         )
     }
     for rdma in rdma_handles {
-        let res = rdma.join().unwrap();
+        let res = rdma.await.unwrap();
         if let Err(e) = res{
             return (e, 0);
         }
