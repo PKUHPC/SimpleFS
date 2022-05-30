@@ -86,12 +86,12 @@ pub(crate) fn recver_server(addr: &String, op: ChunkOp, _nthreads: usize) {
             let ret = (*cm_event).status;
             if ret != 0 {
                 println!("CM event {} has non zero status: {}", std::ffi::CStr::from_ptr(rdma_sys::rdma_event_str((*cm_event).event)).to_string_lossy().into_owned(), ret);
-                rdma_ack_cm_event(cm_event);
-                break;
+                continue;
             }
             match (*cm_event).event {
                 RDMA_CM_EVENT_CONNECT_REQUEST => {
                     let cm_id = (*cm_event).id;
+                    println!("connecting: {}", cm_id as u64);
                     rdma_ack_cm_event(cm_event);
 
                     let mut s_ctx: *mut RDMAContext = RDMAContext::new_ptr();
@@ -178,6 +178,7 @@ pub(crate) fn recver_server(addr: &String, op: ChunkOp, _nthreads: usize) {
                 }
                 RDMA_CM_EVENT_DISCONNECTED => {
                     let cm_id = (*cm_event).id;
+                    println!("disconnected: {}", cm_id as u64);
                     let handle = handles.remove(&(cm_id as u64)).unwrap();
                     handle.abort();
 

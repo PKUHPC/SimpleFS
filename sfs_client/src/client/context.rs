@@ -1,5 +1,5 @@
 use lazy_static::*;
-use rdma_sys::{rdma_event_channel, rdma_cm_id, rdma_disconnect};
+use rdma_sys::{rdma_event_channel, rdma_cm_id, rdma_disconnect, rdma_destroy_event_channel};
 use sfs_global::global::endpoint::SFSEndpoint;
 use sfs_global::global::network::config::CLIENT_CM_IDS;
 use sfs_rpc::proto::server_grpc::SfsHandleClient;
@@ -474,8 +474,11 @@ impl StaticContext {
 }
 impl Drop for StaticContext{
     fn drop(&mut self) {
+        unsafe{
+            rdma_destroy_event_channel(self.event_channel as *mut rdma_event_channel);
+        }
         let handle = self.handle.take().unwrap();
-        drop(handle);
+        handle.join().unwrap();
         for (_host_id, cm_ids) in self.write_cm_ids.iter(){
             for lock in cm_ids{
                 let cm_id = *lock.lock().unwrap() as *mut rdma_cm_id;
