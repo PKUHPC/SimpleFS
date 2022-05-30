@@ -8,8 +8,8 @@ use std::time::Instant;
 use futures::{TryStreamExt};
 use grpcio::Error;
 use libc::{c_char, EBUSY};
+use rdma_sys::rdma_cm_id;
 use sfs_global::global::util::serde_util::{deserialize, serialize};
-use sfs_rdma::{RDMA_WRITE_PORT, RDMA_READ_PORT};
 use sfs_rdma::chunk_operation::ChunkOp;
 use sfs_rdma::transfer::{ChunkTransferTask, ChunkMetadata};
 use sfs_rpc::post;
@@ -32,8 +32,8 @@ use sfs_global::global::util::arith_util::{
 };
 
 use super::network_service::NetworkService;
-use super::rdma_read::recver_client;
-use super::rdma_write::sender_client;
+use super::rdma_read::recver_client_on_id;
+use super::rdma_write::sender_client_on_id;
 
 pub fn forward_stat(path: &String) -> Result<Vec<u8>, i32> {
     let endp_id = StaticContext::get_instance()
@@ -387,6 +387,7 @@ pub async fn forward_write(
     //let buf = unsafe { slice::from_raw_parts(buf as *const u8, write_size as usize) };
     //let mut handles = Vec::new();
     let mut rdma_handles = Vec::new();
+    let mut cm_id_mtx = Vec::new();
     for target in targets {
         let addr = buf as u64;
         let chunk_ids = target_chunks.remove(&target).unwrap();
@@ -401,9 +402,17 @@ pub async fn forward_write(
             },
             addr: addr,
         };
-        rdma_handles.push(
-                sender_client(&StaticContext::get_instance().get_hosts().get(target as usize).unwrap().addr, RDMA_WRITE_PORT, chunk_transfer, op).await
-        )
+        if let Some(guard) = StaticContext::get_instance().get_write_cm_id(target){
+            let cm_id = *guard as *mut rdma_cm_id;
+            cm_id_mtx.push(guard);
+            rdma_handles.push(
+                sender_client_on_id(cm_id, chunk_transfer, op).await
+            );
+        }
+        else{
+            println!("no available pre-created cm id");
+            return (EBUSY, 0);
+        }
     }
     for rdma in rdma_handles {
         let res = rdma.await.unwrap();
@@ -439,6 +448,7 @@ pub async fn forward_read(
     }
     let mut tot_read = 0;
     let mut rdma_handles = Vec::new();
+    let mut cm_id_mtx = Vec::new();
     for target in targets {
         let addr = buf as u64;
         let chunk_ids = target_chunks.remove(&target).unwrap();
@@ -453,9 +463,17 @@ pub async fn forward_read(
             },
             addr: addr,
         };
-        rdma_handles.push(
-            recver_client(&StaticContext::get_instance().get_hosts().get(target as usize).unwrap().addr, RDMA_READ_PORT, chunk_transfer, op).await
-        )
+        if let Some(guard) = StaticContext::get_instance().get_read_cm_id(target){
+            let cm_id = *guard as *mut rdma_cm_id;
+            cm_id_mtx.push(guard);
+            rdma_handles.push(
+                recver_client_on_id(cm_id, chunk_transfer, op).await
+            )
+        }
+        else{
+            println!("no available pre-created cm id");
+            return (EBUSY, 0);
+        }
     }
     for rdma in rdma_handles {
         let res = rdma.await.unwrap();
@@ -488,47 +506,51 @@ pub async fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>) {
             ),
         ));
     }
-    let post_results: Result<Vec<PostResult>, Error> = {
-        let mut post_results = Vec::new();
-        for (client, post) in posts {
+    let mut handles = Vec::new();
+    for (client, post) in posts {
+        handles.push(tokio::spawn(async move {
+            let mut post_results = Vec::new();
             let mut receiver = client.handle_dirents(&post).unwrap();
             while let Some(res) = receiver.try_next().await.unwrap() {
                 post_results.push(res);
             }
-        }
-        Ok(post_results)
-    };
-    if let Err(_e) = post_results {
-        println!("fail to get dirents: {} {:?}", path, _e);
-        return (
-            EBUSY,
-            Arc::new(Mutex::new(OpenFile::new(
-                &"".to_string(),
-                0,
-                crate::client::openfile::FileType::SFS_REGULAR,
-            ))),
-        );
+            Ok(post_results) as Result<Vec<PostResult>, i32>
+        }));
     }
-    let results: Vec<PostResult> = post_results.unwrap();
     let mut open_dir = OpenFile::new(
         path,
         O_RDONLY,
         crate::client::openfile::FileType::SFS_DIRECTORY,
     );
-
-    for result in results {
-        let entry: (String, bool) = deserialize::<(String, bool)>(&result.data);
-        open_dir.add(
-            entry.0,
-            if entry.1 {
-                FileType::SFS_DIRECTORY
-            } else {
-                FileType::SFS_REGULAR
-            },
-        );
+    for handle in handles{
+        let post_results = handle.await.unwrap();
+        if let Err(_e) = post_results {
+            println!("fail to get dirents: {} {:?}", path, _e);
+            return (
+                EBUSY,
+                Arc::new(Mutex::new(OpenFile::new(
+                    &"".to_string(),
+                    0,
+                    crate::client::openfile::FileType::SFS_REGULAR,
+                ))),
+            );
+        }
+        let results = post_results.unwrap();
+        for result in results {
+            let entry: (String, bool) = deserialize::<(String, bool)>(&result.data);
+            open_dir.add(
+                entry.0,
+                if entry.1 {
+                    FileType::SFS_DIRECTORY
+                } else {
+                    FileType::SFS_REGULAR
+                },
+            );
+        }
     }
     (0, Arc::new(Mutex::new(open_dir)))
 }
+
 pub fn forward_get_fs_config(context: &mut StaticContext) -> bool {
     let host_id = context.get_local_host_id();
     let post = post(option2i(&PostOption::FsConfig), vec![0; 0], vec![0; 0]);

@@ -41,10 +41,12 @@ impl CQPoller {
                 ibv_ack_cq_events(cq, 1);
                 assert_eq!(ibv_req_notify_cq(cq, 0), 0);
 
+                let mut done: Option<Result<i64, i32>> = None;
                 while ibv_poll_cq(cq, 1, &mut wc) != 0 {
                     if wc.status != IBV_WC_SUCCESS {
                         println!(
-                            "work completion has error status '{}'",
+                            "work completion {} has error status '{}'",
+                            wc.opcode,
                             CStr::from_ptr(ibv_wc_status_str(wc.status))
                                 .to_string_lossy()
                                 .into_owned()
@@ -55,14 +57,18 @@ impl CQPoller {
                     if let Err(e) = ret {
                         if e >= 0{
                             result += e as i64;
-                            return Ok(result);
+                            done = Some(Ok(result));
                         }
                         else{
-                            return Err(e);
+                            done = Some(Err(e));
                         }
+                        continue;
                     }
                     let ok = ret.unwrap();
                     result += ok;
+                }
+                if let Some(res) = done{
+                    return res;
                 }
             }
         }

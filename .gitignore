@@ -26,13 +26,8 @@
 /sfs_2.tar
 /sfs_3.tar
 
-/sfs_client/.cargo
 /sfs_client/vendor
-/sfs_server/.cargo
 /sfs_server/vendor
-/sfs_global/.cargo
 /sfs_global/vendor
-/sfs_rpc/.cargo
 /sfs_rpc/vendor
-/sfs_rdma/.cargo
 /sfs_rdma/vendor

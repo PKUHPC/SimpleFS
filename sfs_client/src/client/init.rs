@@ -3,12 +3,12 @@ use std::{
     fs::OpenOptions,
     io::{BufRead, BufReader, Error, Read},
     path::Path,
-    sync::Arc,
+    sync::{Arc, Mutex},
     thread,
 };
 
 use grpcio::{ChannelBuilder, Environment};
-use rdma_sys::rdma_create_event_channel;
+use rdma_sys::{rdma_create_event_channel, rdma_event_channel};
 use regex::Regex;
 
 use sfs_global::global::{
@@ -17,7 +17,7 @@ use sfs_global::global::{
     error_msg::error_msg,
     fsconfig::{ENABLE_OUTPUT, HOSTFILE_PATH},
     network::{
-        config::RDMAConfig,
+        config::{RDMAConfig, CLIENT_CM_IDS},
         post::{option2i, PostOption},
     },
     util::{
@@ -29,7 +29,7 @@ use sfs_rpc::{post, proto::server_grpc::SfsHandleClient};
 
 use super::{
     context::{DynamicContext, StaticContext},
-    network::{forward_msg::forward_get_fs_config, rdmacm::process_cm_event},
+    network::{forward_msg::forward_get_fs_config, rdmacm::process_cm_event, rdma_write::new_write_cm_id, rdma_read::new_read_cm_id},
 };
 
 fn extract_protocol(_uri: &String) {}
@@ -100,7 +100,8 @@ fn lookup_endpoint(
         "fail to connect to target host",
     ))
 }
-fn connect_hosts(hosts: &mut Vec<(String, String)>, context: &mut StaticContext) -> u64 {
+#[tokio::main]
+async fn connect_hosts(hosts: &mut Vec<(String, String)>, context: &mut StaticContext) -> u64 {
     let local_hostname = get_hostname(true);
     if ENABLE_OUTPUT {
         println!("localhost name: {}", local_hostname);
@@ -125,6 +126,19 @@ fn connect_hosts(hosts: &mut Vec<(String, String)>, context: &mut StaticContext)
             let res = lookup.unwrap();
             addrs.push(res.0);
             clients.push(res.1);
+
+            let mut cm_ids = Vec::new();
+            for _i in 0..CLIENT_CM_IDS{
+                cm_ids.push(Mutex::new(new_write_cm_id(context.event_channel as *mut rdma_event_channel, uri).await));
+            }
+            context.write_cm_ids.insert(id, cm_ids);
+            
+            let mut cm_ids = Vec::new();
+            for _i in 0..CLIENT_CM_IDS{
+                cm_ids.push(Mutex::new(new_read_cm_id(context.event_channel as *mut rdma_event_channel, uri).await));
+            }
+            context.read_cm_ids.insert(id, cm_ids);
+
         }
         if !local_host_found && hostname.eq(&local_hostname) {
             context.set_local_host_id(id);
@@ -161,6 +175,10 @@ pub fn init_environment() -> StaticContext {
     if ENABLE_OUTPUT {
         println!("found hosts: {:?}", hosts);
     }
+    context.event_channel = unsafe{rdma_create_event_channel() as u64};
+    let ec = context.event_channel;
+    context.handle = Some(std::thread::spawn(move || {process_cm_event(ec)}));
+
     let host_len = connect_hosts(&mut hosts, &mut context);
     if host_len == 0 {
         return context;
@@ -187,9 +205,6 @@ pub fn init_environment() -> StaticContext {
     context.rdma_addr = config.addr;
 
     context.init_flag = true;
-    context.event_channel = unsafe{rdma_create_event_channel() as u64};
-    let ec = context.event_channel;
-    context.handle = Some(std::thread::spawn(move || {process_cm_event(ec)}));
 
     return context;
 }

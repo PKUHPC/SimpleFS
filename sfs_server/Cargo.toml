@@ -19,6 +19,7 @@ sfs_rpc = {path = "../sfs_rpc"}
 sfs_rdma = {path = "../sfs_rdma"}
 tokio-stream = "0.1.8"
 flexbuffers = "2.0.0"
+rdma-sys = "0.1.0"
 
 rocksdb = '*'
 nix = '0.23.0'

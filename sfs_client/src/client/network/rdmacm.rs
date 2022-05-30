@@ -1,12 +1,17 @@
 use std::ptr::null_mut;
 use rdma_sys::{rdma_event_channel, rdma_cm_event, rdma_get_cm_event, rdma_ack_cm_event, rdma_event_str, rdma_destroy_event_channel, rdma_cm_event_type::{RDMA_CM_EVENT_ESTABLISHED, RDMA_CM_EVENT_DISCONNECTED, RDMA_CM_EVENT_ADDR_RESOLVED, RDMA_CM_EVENT_ROUTE_RESOLVED}, rdma_resolve_route, rdma_conn_param, rdma_connect, rdma_cm_id};
-use sfs_rdma::build_params;
+use sfs_rdma::{build_params, rdma::RDMAContext};
+use tokio::sync::oneshot::{Sender};
+
 
 pub struct RDMACMContext{
     pub ctx: u64,
+    pub s_ctx: *mut RDMAContext,
     pub on_route_resolved: fn(*mut rdma_cm_id),
     pub on_established: fn(*mut rdma_cm_id),
-    pub on_disconnect: fn(*mut rdma_cm_id)
+    pub on_disconnect: fn(*mut rdma_cm_id),
+    
+    pub tx: Option<Sender<u64>>
 }
 pub fn process_cm_event(ec: u64){
     unsafe{
@@ -16,7 +21,7 @@ pub fn process_cm_event(ec: u64){
         while rdma_get_cm_event(ec, &mut cm_event) == 0 {
             let ret = (*cm_event).status;
             if ret != 0 {
-                println!("CM event has non zero status: {}", ret);
+                println!("CM event {} has non zero status: {}", std::ffi::CStr::from_ptr(rdma_event_str((*cm_event).event)).to_string_lossy().into_owned(), ret);
                 rdma_ack_cm_event(cm_event);
                 break;
             }
@@ -65,5 +70,4 @@ pub fn process_cm_event(ec: u64){
         }
         rdma_destroy_event_channel(ec);
     }
-
 }

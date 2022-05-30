@@ -2,6 +2,9 @@ pub mod config;
 pub mod error_msg;
 pub mod handle;
 pub mod server;
+pub mod rdma;
+use crate::rdma::read_server::sender_server;
+use crate::rdma::write_server::recver_server;
 use crate::server::{config::IGNORE_IF_EXISTS, network::network_context::NetworkContext};
 use crate::server::{
     filesystem::storage_context::StorageContext, storage::data::chunk_storage::*,
@@ -36,7 +39,6 @@ use sfs_global::{
     },
 };
 use sfs_rdma::chunk_operation::ChunkOp;
-use sfs_rdma::rdma::RDMA;
 use sfs_rpc::post_result;
 use sfs_rpc::proto::server::{Post, PostResult};
 use sfs_rpc::proto::server_grpc::{create_sfs_handle, SfsHandle};
@@ -394,9 +396,9 @@ async fn init_server(addr: &String) -> Result<(), Error> {
 
     let (tx, rx) = oneshot::channel();
     let addr_clone = addr.clone();
-    thread::spawn(move || RDMA::recver_server(&addr_clone, ChunkOp{ op: ChunkStorage::write_chunk}, 10));
+    thread::spawn(move || recver_server(&addr_clone, ChunkOp{ op: ChunkStorage::write_chunk}, 10));
     let addr_clone = addr.clone();
-    thread::spawn(move || RDMA::sender_server(&addr_clone, ChunkOp{ op: ChunkStorage::read_chunk}, 10));
+    thread::spawn(move || sender_server(&addr_clone, ChunkOp{ op: ChunkStorage::read_chunk}, 10));
     thread::spawn(move || {
         println!("Press ENTER to exit...");
         let _ = std::io::stdin().read(&mut [0]).unwrap();

@@ -657,7 +657,7 @@ mod tests {
     }
     #[test]
     pub fn test_bigdata() {
-        let cnt = 1200;
+        let cnt = 3000;
 
         let path = "/file1\0".to_string();
         let fd = sfs_open(
@@ -736,18 +736,20 @@ mod tests {
         for handle in handles {
             handle.join();
         }
-        sfs_lseek(fd, 0, SEEK_SET);
-        let mut buf = vec![0 as u8; cnt * thread * CHUNK_SIZE as usize];
-        let res = sfs_read(
-            fd,
-            buf.as_mut_ptr() as *mut i8,
-            cnt as i64 * thread as i64 * CHUNK_SIZE as i64,
-        );
-        if res <= 0 {
-            println!("read error ...");
-            return;
-        } else {
-            println!("{} bytes read", res);
+        for _i in 0..10{
+            sfs_lseek(fd, 0, SEEK_SET);
+            let mut buf = vec![0 as u8; cnt * thread * CHUNK_SIZE as usize];
+            let res = sfs_read(
+                fd,
+                buf.as_mut_ptr() as *mut i8,
+                cnt as i64 * thread as i64 * CHUNK_SIZE as i64,
+            );
+            if res <= 0 {
+                println!("read error ...");
+                return;
+            } else {
+                println!("{} bytes read", res);
+            }
         }
     }
     #[test]

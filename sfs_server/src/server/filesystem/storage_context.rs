@@ -2,6 +2,7 @@
 use futures::Future;
 #[allow(unused)]
 use lazy_static::*;
+use tokio::runtime::{Runtime, Builder};
 #[allow(unused)]
 use std::{
     collections::HashMap,
@@ -88,6 +89,8 @@ pub struct StorageContext {
     link_count_state_: bool,
     blocks_state_: bool,
 
+    rdma_runtime: Runtime,
+
     output: bool,
 }
 lazy_static! {
@@ -115,6 +118,12 @@ impl StorageContext {
             link_count_state_: true,
             blocks_state_: true,
 
+            rdma_runtime: Builder::new_multi_thread()
+                .worker_threads(16)
+                .enable_all()
+                .thread_stack_size(12 * 1024 * 1024)
+                .build()
+                .unwrap(),
             output: false
         }
     }
@@ -208,6 +217,9 @@ impl StorageContext {
     }
     pub fn output(&self) -> bool{
         self.output
+    }
+    pub fn get_runtime(&self) -> &Runtime{
+        &self.rdma_runtime
     }
 }
 /*

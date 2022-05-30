@@ -1,10 +1,11 @@
-use std::{ptr::null_mut, sync::Arc};
+use std::{ptr::null_mut, collections::HashMap};
 
-use crate::{
+use sfs_global::global::network::config::CHUNK_SIZE;
+use sfs_rdma::{
     chunk_operation::ChunkInfo,
     rdma::RDMAContext,
-    transfer::{ChunkMetadata, MessageType, TransferMetadata},
-    CHUNK_SIZE, RDMA_READ_PORT,
+    transfer::{ChunkMetadata, TransferMetadata},
+    RDMA_WRITE_PORT,
 };
 use libc::{c_void, calloc, in_addr, sockaddr, sockaddr_in, AF_INET, INADDR_LOOPBACK};
 use rdma_sys::{
@@ -13,25 +14,30 @@ use rdma_sys::{
     ibv_post_send, ibv_qp_init_attr,
     ibv_qp_type::IBV_QPT_RC,
     ibv_recv_wr, ibv_reg_mr, ibv_req_notify_cq, ibv_send_flags, ibv_send_wr, ibv_sge, ibv_wc,
-    ibv_wc_opcode::{IBV_WC_RECV, IBV_WC_RECV_RDMA_WITH_IMM},
-    ibv_wr_opcode::{IBV_WR_RDMA_WRITE_WITH_IMM, IBV_WR_SEND},
-    imm_data_invalidated_rkey_union_t, rdma_accept, rdma_ack_cm_event, rdma_bind_addr,
-    rdma_cm_event,
+    ibv_wc_opcode::IBV_WC_RECV_RDMA_WITH_IMM,
+    ibv_wr_opcode::IBV_WR_SEND,
+    rdma_accept, rdma_ack_cm_event, rdma_bind_addr, rdma_cm_event,
     rdma_cm_event_type::{
         RDMA_CM_EVENT_CONNECT_REQUEST, RDMA_CM_EVENT_DISCONNECTED, RDMA_CM_EVENT_ESTABLISHED,
     },
     rdma_cm_id, rdma_conn_param, rdma_create_event_channel, rdma_create_id, rdma_create_qp,
     rdma_destroy_event_channel, rdma_destroy_id, rdma_destroy_qp, rdma_event_str,
     rdma_get_cm_event, rdma_listen,
-    rdma_port_space::RDMA_PS_TCP, rdma_disconnect,
+    rdma_port_space::RDMA_PS_TCP,
 };
 
-use crate::{
-    build_params, chunk_operation::ChunkOp, get_addr, rdma::CQPoller, transfer::Message,
+use sfs_rdma::{
+    build_params,
+    chunk_operation::ChunkOp,
+    get_addr,
+    rdma::CQPoller,
+    transfer::{Message, MessageType},
     CQ_CAPACITY, MAX_SGE, MAX_WR,
 };
 
-struct SenderServerContext {
+use crate::server::filesystem::storage_context::StorageContext;
+
+struct ReceiverServerContext {
     pub buffer: *mut u8,
     pub buffer_mr: *mut ibv_mr,
 
@@ -40,14 +46,17 @@ struct SenderServerContext {
 
     pub metadata: ChunkMetadata,
     pub s_ctx: *mut RDMAContext,
+
+    pub data_receive: u64
 }
-pub(crate) fn sender_server(addr: &String, op: ChunkOp, nthreads: u32) {
+pub(crate) fn recver_server(addr: &String, op: ChunkOp, _nthreads: usize) {
     unsafe {
-        let port = RDMA_READ_PORT; //portpicker::pick_unused_port().expect("no port available");
+        let port = RDMA_WRITE_PORT; //portpicker::pick_unused_port().expect("no port available");
         let mut listener: *mut rdma_cm_id = null_mut();
         let ec = rdma_create_event_channel();
         rdma_create_id(ec, &mut listener, null_mut(), RDMA_PS_TCP);
-        let workers = Arc::new(threadpool::ThreadPool::new(nthreads as usize));
+        let runtime = StorageContext::get_instance().get_runtime();
+        let mut handles = HashMap::new();
 
         let mut server_sockaddr = sockaddr_in {
             sin_family: AF_INET as u16,
@@ -76,7 +85,7 @@ pub(crate) fn sender_server(addr: &String, op: ChunkOp, nthreads: u32) {
         while rdma_get_cm_event(ec, &mut cm_event) == 0 {
             let ret = (*cm_event).status;
             if ret != 0 {
-                println!("CM event has non zero status: {}", ret);
+                println!("CM event {} has non zero status: {}", std::ffi::CStr::from_ptr(rdma_sys::rdma_event_str((*cm_event).event)).to_string_lossy().into_owned(), ret);
                 rdma_ack_cm_event(cm_event);
                 break;
             }
@@ -97,9 +106,9 @@ pub(crate) fn sender_server(addr: &String, op: ChunkOp, nthreads: u32) {
                     assert_eq!(ibv_req_notify_cq(cq, 0), 0);
 
                     let poll_cq = CQPoller::new(comp_channel, pd, on_completion, op.clone());
-                    workers.execute(move || {
+                    handles.insert(cm_id as u64, runtime.spawn_blocking(move || {
                         poll_cq.poll().unwrap();
-                    });
+                    }));
 
                     let mut attr: ibv_qp_init_attr = std::mem::zeroed();
                     attr.send_cq = cq;
@@ -120,10 +129,11 @@ pub(crate) fn sender_server(addr: &String, op: ChunkOp, nthreads: u32) {
                     //(*s_ctx).cq_poller = Some(handle);
 
                     // prepare receiver context
-                    let mut ctx: *mut SenderServerContext =
-                        calloc(1, std::mem::size_of::<SenderServerContext>()).cast();
+                    let mut ctx: *mut ReceiverServerContext =
+                        calloc(1, std::mem::size_of::<ReceiverServerContext>()).cast();
                     (*cm_id).context = ctx.cast();
                     (*ctx).s_ctx = s_ctx;
+                    (*ctx).data_receive = 0;
 
                     let rdma_buffer_size =
                         usize::max(CHUNK_SIZE as usize, std::mem::size_of::<TransferMetadata>());
@@ -146,7 +156,7 @@ pub(crate) fn sender_server(addr: &String, op: ChunkOp, nthreads: u32) {
                         ibv_access_flags::IBV_ACCESS_LOCAL_WRITE.0 as i32,
                     );
                     // pre-post receive buffer
-                    post_receive_meta(cm_id);
+                    post_receive(cm_id);
 
                     // accept connection
                     let mut cm_params: rdma_conn_param = std::mem::zeroed();
@@ -158,7 +168,7 @@ pub(crate) fn sender_server(addr: &String, op: ChunkOp, nthreads: u32) {
                     let cm_id = (*cm_event).id;
                     rdma_ack_cm_event(cm_event);
 
-                    let ctx: *mut SenderServerContext = (*cm_id).context.cast();
+                    let ctx: *mut ReceiverServerContext = (*cm_id).context.cast();
                     // send message to notify client local buffer
                     (*(*ctx).msg).mtype = MessageType::MSG_MR;
                     (*(*ctx).msg).addr = (*(*ctx).buffer_mr).addr as u64;
@@ -168,8 +178,11 @@ pub(crate) fn sender_server(addr: &String, op: ChunkOp, nthreads: u32) {
                 }
                 RDMA_CM_EVENT_DISCONNECTED => {
                     let cm_id = (*cm_event).id;
+                    let handle = handles.remove(&(cm_id as u64)).unwrap();
+                    handle.abort();
+
                     rdma_ack_cm_event(cm_event);
-                    let ctx: *mut SenderServerContext = (*cm_id).context.cast();
+                    let ctx: *mut ReceiverServerContext = (*cm_id).context.cast();
                     let s_ctx: *mut RDMAContext = (*ctx).s_ctx;
 
                     ibv_dereg_mr((*ctx).buffer_mr);
@@ -207,78 +220,60 @@ pub(crate) fn sender_server(addr: &String, op: ChunkOp, nthreads: u32) {
         rdma_destroy_event_channel(ec);
     }
 }
+
 fn on_completion(wc: *mut ibv_wc, _pd: *mut ibv_pd, op: &ChunkOp) -> Result<i64, i32> {
     unsafe {
         let id: *mut rdma_cm_id = (*wc).wr_id as *mut rdma_cm_id;
-        let ctx: *mut SenderServerContext = (*id).context.cast();
+        let ctx: *mut ReceiverServerContext = (*id).context.cast();
 
         if (*wc).opcode == IBV_WC_RECV_RDMA_WITH_IMM {
-            let len = u32::from_be((*wc).imm_data_invalidated_rkey_union.imm_data);
-            let mut transfer_md = TransferMetadata::default();
-            libc::memcpy(
-                (&mut transfer_md) as *mut TransferMetadata as *mut c_void,
-                (*ctx).buffer.cast(),
-                len as usize,
-            );
-            (*ctx).metadata.path =
-                String::from_utf8(transfer_md.path[0..transfer_md.path_len as usize].to_vec())
-                    .unwrap();
-            (*ctx).metadata.chunk_start = transfer_md.chunk_start;
-            (*ctx).metadata.offset = transfer_md.offset;
-            (*ctx).metadata.size = transfer_md.size;
+            let chunk_id = u32::from_be((*wc).imm_data_invalidated_rkey_union.imm_data);
+            if chunk_id == u32::MAX {
+                (*ctx).metadata = ChunkMetadata::default();
+                post_receive(id);
+                (*(*ctx).msg).mtype = MessageType::MSG_DONE;
+                (*(*ctx).msg).data = (*ctx).data_receive;
+                (*ctx).data_receive = 0;
+                send_message(id);
+                return Ok(0);
+            } else if (*ctx).metadata.size != 0 {
+                post_receive(id);
+                (*(*ctx).msg).mtype = MessageType::MSG_READY;
+                let ret = op.submit(ChunkInfo {
+                    chunk_id: chunk_id as u64,
+                    metadata: (*ctx).metadata.clone(),
+                    data: (*ctx).buffer,
+                });
+                (*ctx).data_receive += ret.unwrap() as u64;
+                send_message(id);
+                return ret;
+            } else {
+                post_receive(id);
+                let len = chunk_id;
+                let mut transfer_md = TransferMetadata::default();
+                libc::memcpy(
+                    (&mut transfer_md) as *mut TransferMetadata as *mut c_void,
+                    (*ctx).buffer.cast(),
+                    len as usize,
+                );
+                (*ctx).metadata.path =
+                    String::from_utf8(transfer_md.path[0..transfer_md.path_len as usize].to_vec())
+                        .unwrap();
+                (*ctx).metadata.chunk_start = transfer_md.chunk_start;
+                (*ctx).metadata.offset = transfer_md.offset;
+                (*ctx).metadata.size = transfer_md.size;
 
-            post_receive_msg(id);
-            (*(*ctx).msg).mtype = MessageType::MSG_READY;
-            send_message(id);
-            return Ok(0);
-        } else if (*wc).opcode & IBV_WC_RECV != 0 {
-            if matches!((*(*ctx).msg).mtype, MessageType::MSG_DONE){
-                rdma_disconnect(id);
-                //post_receive_meta(id);
-                return Err(0);
+                (*(*ctx).msg).mtype = MessageType::MSG_READY;
+                send_message(id);
+                return Ok(0);
             }
-            let info = ChunkInfo {
-                chunk_id: (*(*ctx).msg).data,
-                metadata: (*ctx).metadata.clone(),
-                data: (*ctx).buffer,
-            };
-            // read chunk
-            let len = op.submit(info).unwrap();
-
-            // send to receiver client
-            let mut wr: ibv_send_wr = std::mem::zeroed();
-            wr.wr_id = id as u64;
-            wr.opcode = IBV_WR_RDMA_WRITE_WITH_IMM;
-            wr.send_flags = ibv_send_flags::IBV_SEND_SIGNALED.0;
-            wr.imm_data_invalidated_rkey_union = imm_data_invalidated_rkey_union_t {
-                imm_data: (len as u32).to_be(),
-            };
-            wr.wr.rdma.remote_addr = (*(*ctx).msg).addr;
-            wr.wr.rdma.rkey = (*(*ctx).msg).rkey;
-
-            let mut sge = ibv_sge {
-                addr: (*ctx).buffer as u64,
-                length: len as u32,
-                lkey: (*(*ctx).buffer_mr).lkey,
-            };
-            if len > 0 {
-                wr.sg_list = (&mut sge) as *mut ibv_sge;
-                wr.num_sge = 1;
-            }
-            let mut bad_wr: *mut ibv_send_wr = null_mut();
-            post_receive_msg(id);
-            ibv_post_send(
-                (*id).qp,
-                (&mut wr) as *mut ibv_send_wr,
-                (&mut bad_wr) as *mut *mut ibv_send_wr,
-            );
         }
         return Ok(0);
     }
 }
 fn send_message(id: *mut rdma_cm_id) {
     unsafe {
-        let ctx: *mut SenderServerContext = (*id).context.cast();
+        let ctx: *mut ReceiverServerContext = (*id).context.cast();
         let mut wr: ibv_send_wr = std::mem::zeroed();
         let mut bad_wr: *mut ibv_send_wr = null_mut();
         let mut sge = ibv_sge {
@@ -296,31 +291,13 @@ fn send_message(id: *mut rdma_cm_id) {
         assert_eq!(ibv_post_send((*id).qp, &mut wr, &mut bad_wr), 0);
     }
 }
-fn post_receive_meta(id: *mut rdma_cm_id) {
+fn post_receive(id: *mut rdma_cm_id) {
     unsafe {
         let mut wr: ibv_recv_wr = std::mem::zeroed();
         let mut bad_wr: *mut ibv_recv_wr = null_mut();
         wr.wr_id = id as u64;
         wr.sg_list = null_mut();
         wr.num_sge = 0;
-
-        assert_eq!(ibv_post_recv((*id).qp, &mut wr, &mut bad_wr), 0);
-    }
-}
-fn post_receive_msg(id: *mut rdma_cm_id) {
-    unsafe {
-        let ctx: *mut SenderServerContext = (*id).context.cast();
-
-        let mut wr: ibv_recv_wr = std::mem::zeroed();
-        let mut bad_wr: *mut ibv_recv_wr = null_mut();
-        let mut sge = ibv_sge {
-            addr: (*(*ctx).msg_mr).addr as u64,
-            length: (*(*ctx).msg_mr).length as u32,
-            lkey: (*(*ctx).msg_mr).lkey,
-        };
-        wr.wr_id = id as u64;
-        wr.sg_list = &mut sge;
-        wr.num_sge = 1;
 
         assert_eq!(ibv_post_recv((*id).qp, &mut wr, &mut bad_wr), 0);
     }

@@ -3,7 +3,7 @@ use std::ptr::null_mut;
 
 use sfs_global::global::network::config::CHUNK_SIZE;
 use sfs_rdma::{
-    transfer::{ChunkTransferTask, TransferMetadata}, rdma::RDMAContext,
+    transfer::{ChunkTransferTask, TransferMetadata}, rdma::RDMAContext, RDMA_READ_PORT,
 };
 use libc::{calloc, in_addr, sockaddr, sockaddr_in, AF_INET, INADDR_LOOPBACK, c_void};
 use rdma_sys::{
@@ -18,7 +18,7 @@ use rdma_sys::{
     rdma_cm_id, rdma_create_id,
     rdma_create_qp, rdma_destroy_id, rdma_destroy_qp,
     rdma_port_space::RDMA_PS_TCP,
-    rdma_resolve_addr,
+    rdma_resolve_addr, rdma_event_channel,
 };
 
 use sfs_rdma::{
@@ -28,7 +28,7 @@ use sfs_rdma::{
     transfer::{Message, MessageType},
     CQ_CAPACITY, MAX_SGE, MAX_WR,
 };
-use tokio::{task::JoinHandle, sync::oneshot::{self, Sender}};
+use tokio::{task::JoinHandle, sync::oneshot::{self}};
 
 use crate::client::{network::rdmacm::RDMACMContext, context::StaticContext};
 
@@ -45,9 +45,6 @@ struct ReceiverClientContext {
 
     pub peer_addr: u64,
     pub peer_rkey: u32,
-    
-    pub s_ctx: *mut RDMAContext,
-    pub tx: Option<Sender<u64>>
 }
 impl ReceiverClientContext {
     pub fn new() -> Self {
@@ -61,11 +58,12 @@ impl ReceiverClientContext {
             msg_mr: null_mut(),
             peer_addr: 0,
             peer_rkey: 0,
-            s_ctx: null_mut(),
-            tx: None
         }
     }
 }
+
+#[allow(unused)]
+// this method is not capatible with new system, should be discarded and replaced by recver_client_on_id
 pub(crate) async fn recver_client(
     addr: &String,
     port: u16,
@@ -113,6 +111,8 @@ pub(crate) async fn recver_client(
             on_route_resolved,
             on_established,
             on_disconnect,
+            s_ctx: null_mut(),
+            tx: None
         };
         libc::memcpy(
             cm_ctx.cast(),
@@ -124,7 +124,7 @@ pub(crate) async fn recver_client(
         (*cm_id).context = cm_ctx.cast();
 
         let (tx, rx) = oneshot::channel();
-        (*ctx).tx = Some(tx);
+        (*cm_ctx).tx = Some(tx);
         // resolve addr
         assert_eq!(
             rdma_resolve_addr(
@@ -137,10 +137,10 @@ pub(crate) async fn recver_client(
         );
 
         let _msg = rx.await.unwrap();
-        let ctx_addr = ctx as u64;
+        let cm_ctx_addr = cm_ctx as u64;
         let handle = tokio::spawn(async move {
-                let ctx: *mut ReceiverClientContext = ctx_addr as *mut ReceiverClientContext;
-                let s_ctx = (*ctx).s_ctx;
+                let cm_ctx = cm_ctx_addr as *mut RDMACMContext;
+                let s_ctx = (*cm_ctx).s_ctx;
                 let pd = (*s_ctx).pd;
                 let comp_channel = (*s_ctx).comp_channel;
 
@@ -162,6 +162,7 @@ fn on_completion(wc: *mut ibv_wc, pd: *mut ibv_pd, _op: &ChunkOp) -> Result<i64,
         if (*wc).opcode == IBV_WC_RECV_RDMA_WITH_IMM {
             let read_len = u32::from_be((*wc).imm_data_invalidated_rkey_union.imm_data);
             if (*ctx).chunk_id.len() == 0 {
+                post_receive_msg(id);
                 (*(*ctx).msg).mtype = MessageType::MSG_DONE;
                 send_message(id);
                 return Err(read_len as i32);
@@ -205,9 +206,8 @@ fn on_completion(wc: *mut ibv_wc, pd: *mut ibv_pd, _op: &ChunkOp) -> Result<i64,
                 post_receive_msg(id);
                 (*ctx).peer_addr = (*(*ctx).msg).addr;
                 (*ctx).peer_rkey = (*(*ctx).msg).rkey;
-                let cq_id = (*(*ctx).msg).data;
                 send_metadata(id, pd);
-                return Ok(cq_id as i64);
+                return Ok(0);
             } else if matches!((*(*ctx).msg).mtype, MessageType::MSG_READY) {
                 post_receive_data(id);
                 ibv_dereg_mr((*ctx).buffer_mr);
@@ -364,6 +364,7 @@ pub fn on_route_resolved(cm_id: *mut rdma_cm_id){
         let _qp = (*cm_id).qp;
 
         // build client context buffer
+        /* 
         (*ctx).buffer = (*ctx).addr as *mut u8;
 
         let offset = if (*ctx).chunk_id[0] == (*ctx).metadata.chunk_start {
@@ -387,9 +388,18 @@ pub fn on_route_resolved(cm_id: *mut rdma_cm_id){
                 | ibv_access_flags::IBV_ACCESS_LOCAL_WRITE)
                 .0 as i32,
         );
+        */
 
         (*ctx).msg = calloc(1, std::mem::size_of::<Message>()).cast();
         (*ctx).msg_mr = ibv_reg_mr(
+            pd,
+            (*ctx).msg.cast(),
+            std::mem::size_of::<Message>(),
+            ibv_access_flags::IBV_ACCESS_LOCAL_WRITE.0 as i32,
+        );
+        
+        // this mr register is temporary, without this send_metadata will fail when dereg mr!
+        (*ctx).buffer_mr = ibv_reg_mr(
             pd,
             (*ctx).msg.cast(),
             std::mem::size_of::<Message>(),
@@ -405,11 +415,11 @@ pub fn on_route_resolved(cm_id: *mut rdma_cm_id){
             cq_poller: None,
         };
         libc::memcpy(s_ctx.cast(), (&init_ctx) as *const RDMAContext as *const c_void, std::mem::size_of::<RDMAContext>());
-        (*ctx).s_ctx = s_ctx;
+        (*cm_ctx).s_ctx = s_ctx;
 
         // pre-post receive buffer
         post_receive_msg(cm_id);
-        (*ctx).tx.take().unwrap().send(1).unwrap();
+        (*cm_ctx).tx.take().unwrap().send(1).unwrap();
     }
 
 }
@@ -419,7 +429,7 @@ pub fn on_disconnect(cm_id: *mut rdma_cm_id){
     unsafe{
         let cm_ctx = (*cm_id).context as *mut RDMACMContext;
         let ctx = (*cm_ctx).ctx as *mut ReceiverClientContext;
-        let s_ctx = (*ctx).s_ctx;
+        let s_ctx = (*cm_ctx).s_ctx;
         let pd = (*s_ctx).pd;
         let comp_channel = (*s_ctx).comp_channel;
         let cq = (*s_ctx).cq;
@@ -438,5 +448,122 @@ pub fn on_disconnect(cm_id: *mut rdma_cm_id){
         libc::free(s_ctx.cast());
         libc::free(ctx.cast());
         libc::free(cm_ctx.cast());
+    }
+}
+
+pub async fn new_read_cm_id(
+    ec: *mut rdma_event_channel,
+    addr: &String
+) -> u64
+{
+    let mut server_sockaddr = sockaddr_in {
+        sin_family: AF_INET as u16,
+        sin_port: RDMA_READ_PORT,
+        sin_addr: in_addr {
+            s_addr: INADDR_LOOPBACK,
+        },
+        sin_zero: [0; 8],
+    };
+    assert_eq!(
+        get_addr(
+            addr,
+            RDMA_READ_PORT,
+            (&mut server_sockaddr) as *mut sockaddr_in as *mut sockaddr,
+        ),
+        0
+    );
+    unsafe{
+        let ctx: *mut ReceiverClientContext =
+            libc::calloc(1, std::mem::size_of::<ReceiverClientContext>()).cast();
+        let init_ctx = ReceiverClientContext::new();
+        libc::memcpy(
+            ctx.cast(),
+            (&init_ctx) as *const ReceiverClientContext as *const c_void,
+            std::mem::size_of::<ReceiverClientContext>(),
+        );
+
+        let cm_ctx: *mut RDMACMContext = 
+            libc::calloc(1, std::mem::size_of::<RDMACMContext>()).cast();
+        let init_ctx = RDMACMContext{
+            ctx: ctx as u64,
+            on_route_resolved,
+            on_established,
+            on_disconnect,
+            s_ctx: null_mut(),
+            tx: None
+        };
+        libc::memcpy(
+            cm_ctx.cast(),
+            (&init_ctx) as *const RDMACMContext as *const c_void,
+            std::mem::size_of::<RDMACMContext>(),
+        );
+
+        let mut cm_id: *mut rdma_cm_id = null_mut();
+        assert_eq!(rdma_create_id(ec, &mut cm_id, null_mut(), RDMA_PS_TCP), 0);
+        (*cm_id).context = cm_ctx.cast();
+
+        let (tx, rx) = oneshot::channel();
+        (*cm_ctx).tx = Some(tx);
+        // resolve addr
+        assert_eq!(
+            rdma_resolve_addr(
+                cm_id,
+                null_mut(),
+                (&mut server_sockaddr) as *mut sockaddr_in as *mut sockaddr,
+                2000,
+            ),
+            0
+        );
+
+        let _msg = rx.await.unwrap();
+        return cm_id as u64;
+    }   
+}
+
+pub(crate) async fn recver_client_on_id(
+    cm_id: *mut rdma_cm_id,
+    task: ChunkTransferTask,
+    op: ChunkOp,
+) -> JoinHandle<Result<i64, i32>> {
+    unsafe {
+        let cm_ctx = (*cm_id).context as *mut RDMACMContext;
+        let mut ctx = (*cm_ctx).ctx as *mut ReceiverClientContext;
+        (*ctx).addr = task.addr;
+        (*ctx).chunk_id = task.chunk_id;
+        let mut md = TransferMetadata::default();
+        md.size = task.metadata.size;
+        md.offset = task.metadata.offset;
+        md.chunk_start = task.metadata.chunk_start;
+        md.path_len = task.metadata.path.len();
+        libc::memcpy(
+            md.path.as_mut_ptr().cast(),
+            task.metadata.path.as_ptr().cast(),
+            task.metadata.path.len(),
+        );
+        (*ctx).metadata = md;
+
+        let cm_ctx_addr = cm_ctx as u64;
+        let cm_id_addr = cm_id as u64;
+        let handle = tokio::spawn(async move {
+                let cm_ctx = cm_ctx_addr as *mut RDMACMContext;
+                let ctx = (*cm_ctx).ctx as *mut ReceiverClientContext;
+                let s_ctx = (*cm_ctx).s_ctx;
+                let pd = (*s_ctx).pd;
+                let comp_channel = (*s_ctx).comp_channel;
+                
+                let cm_id = cm_id_addr as *mut rdma_cm_id;
+
+                if !matches!((*(*ctx).msg).mtype, MessageType::MSG_MR){
+                    send_metadata(cm_id, pd);
+                }
+
+                let poll_cq = CQPoller::new(comp_channel, pd, on_completion, op);
+                let result = poll_cq.poll();
+                
+                return result;
+            }
+            
+        );
+        return handle;
     }
 }

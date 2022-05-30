@@ -1,9 +1,11 @@
 use lazy_static::*;
-use rdma_sys::rdma_event_channel;
+use rdma_sys::{rdma_event_channel, rdma_cm_id, rdma_disconnect};
 use sfs_global::global::endpoint::SFSEndpoint;
+use sfs_global::global::network::config::CLIENT_CM_IDS;
 use sfs_rpc::proto::server_grpc::SfsHandleClient;
 use tokio::runtime::{Builder, Runtime};
 
+use std::collections::HashMap;
 use std::ptr::null_mut;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::thread::JoinHandle;
@@ -19,6 +21,7 @@ use sfs_global::global::util::path_util::{
     has_trailing_slash, is_absolute, is_relative, split_path,
 };
 
+use super::network::rdmacm::RDMACMContext;
 use super::path::resolve;
 
 /*
@@ -305,6 +308,12 @@ pub struct StaticContext {
     pub event_channel: u64,
     pub handle: Option<JoinHandle<()>>,
 
+    pub write_cm_ids: HashMap<u64, Vec<Mutex<u64>>>,
+    pub wait_write_idx: Mutex<usize>,
+
+    pub read_cm_ids: HashMap<u64, Vec<Mutex<u64>>>,
+    pub wait_read_idx: Mutex<usize>,
+
     pub init_flag: bool,
 }
 lazy_static! {
@@ -338,6 +347,10 @@ impl StaticContext {
                     .unwrap(),
             ),
             event_channel: null_mut() as *mut rdma_event_channel as u64,
+            write_cm_ids: HashMap::new(),
+            wait_write_idx: Mutex::new(0),
+            read_cm_ids: HashMap::new(),
+            wait_read_idx: Mutex::new(0),
             handle: None
             
         }
@@ -424,6 +437,66 @@ impl StaticContext {
     pub fn get_event_channel(&self) -> *mut rdma_event_channel{
         self.event_channel as *mut rdma_event_channel
     }
+    pub fn get_write_cm_id(&'static self, host_id: u64) -> Option<MutexGuard<'static, u64>>{
+        assert_eq!(self.write_cm_ids.get(&host_id).unwrap().len(), CLIENT_CM_IDS);
+        for lock in self.write_cm_ids.get(&host_id).unwrap().iter(){
+            if let Ok(guard) = lock.try_lock(){
+                return Some(guard);
+            }
+        }
+        let mut idx_guard = self.wait_write_idx.lock().unwrap();
+        let idx = *idx_guard;
+        (*idx_guard) = idx + 1;
+        if (*idx_guard) >= CLIENT_CM_IDS{
+            (*idx_guard) = 0;
+        }
+        drop(idx_guard);
+        return Some(self.write_cm_ids.get(&host_id).unwrap().get(idx).unwrap().lock().unwrap());
+    }
+    pub fn get_read_cm_id(&'static self, host_id: u64) -> Option<MutexGuard<'static, u64>>{
+        assert_eq!(self.read_cm_ids.get(&host_id).unwrap().len(), CLIENT_CM_IDS);
+        for lock in self.read_cm_ids.get(&host_id).unwrap().iter(){
+            if let Ok(guard) = lock.try_lock(){
+                return Some(guard);
+            }
+        }
+        let mut idx_guard = self.wait_read_idx.lock().unwrap();
+        let idx = *idx_guard;
+        (*idx_guard) = idx + 1;
+        if (*idx_guard) >= CLIENT_CM_IDS{
+            (*idx_guard) = 0;
+        }
+        drop(idx_guard);
+        return Some(self.read_cm_ids.get(&host_id).unwrap().get(idx).unwrap().lock().unwrap());
+    }
     pub fn protect_user_fds() {}
     pub fn unprotect_user_fds() {}
+}
+impl Drop for StaticContext{
+    fn drop(&mut self) {
+        let handle = self.handle.take().unwrap();
+        drop(handle);
+        for (_host_id, cm_ids) in self.write_cm_ids.iter(){
+            for lock in cm_ids{
+                let cm_id = *lock.lock().unwrap() as *mut rdma_cm_id;
+                unsafe{
+                    rdma_disconnect(cm_id);
+                    
+                    let ctx = (*cm_id).context as *mut RDMACMContext;
+                    ((*ctx).on_disconnect)(cm_id);
+                }
+            }
+        }
+        for (_host_id, cm_ids) in self.read_cm_ids.iter(){
+            for lock in cm_ids{
+                let cm_id = *lock.lock().unwrap() as *mut rdma_cm_id;
+                unsafe{
+                    rdma_disconnect(cm_id);
+                
+                    let ctx = (*cm_id).context as *mut RDMACMContext;
+                    ((*ctx).on_disconnect)(cm_id);
+                }
+            }
+        }
+    }
 }

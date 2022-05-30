@@ -173,6 +173,7 @@ pub(crate) fn recver_server(addr: &String, op: ChunkOp, nthreads: u32) {
                     send_message(cm_id);
                 }
                 RDMA_CM_EVENT_DISCONNECTED => {
+                    println!("disconnected");
                     let cm_id = (*cm_event).id;
                     rdma_ack_cm_event(cm_event);
                     let ctx: *mut ReceiverServerContext = (*cm_id).context.cast();
@@ -222,10 +223,13 @@ fn on_completion(wc: *mut ibv_wc, _pd: *mut ibv_pd, op: &ChunkOp) -> Result<i64,
         if (*wc).opcode == IBV_WC_RECV_RDMA_WITH_IMM {
             let chunk_id = u32::from_be((*wc).imm_data_invalidated_rkey_union.imm_data);
             if chunk_id == u32::MAX {
+                (*ctx).metadata = ChunkMetadata::default();
+                post_receive(id);
                 (*(*ctx).msg).mtype = MessageType::MSG_DONE;
                 (*(*ctx).msg).data = (*ctx).data_receive;
+                (*ctx).data_receive = 0;
                 send_message(id);
-                return Err(0);
+                return Ok(0);
             } else if (*ctx).metadata.size != 0 {
                 post_receive(id);
                 (*(*ctx).msg).mtype = MessageType::MSG_READY;

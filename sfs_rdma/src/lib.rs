@@ -22,7 +22,7 @@ pub mod transfer;
 
 pub static CQ_CAPACITY: i32 = 16;
 pub static MAX_SGE: u32 = 2;
-pub static MAX_WR: u32 = 8;
+pub static MAX_WR: u32 = 16;
 
 const CHUNK_SIZE: u64 = sfs_global::global::network::config::CHUNK_SIZE;
 pub static RDMA_WRITE_PORT: u16 = 8084;
@@ -89,7 +89,8 @@ pub fn process_rdma_cm_event(
 pub fn build_params(params: &mut rdma_conn_param) {
     params.initiator_depth = 3;
     params.responder_resources = 3;
-    params.rnr_retry_count = 3;
+    params.rnr_retry_count = 4;
+    params.retry_count = 4;
 }
 pub fn build_qp_attr(attr: &mut ibv_qp_init_attr, s_ctx: *mut RDMA) {
     unsafe {

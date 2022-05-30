@@ -1,10 +1,11 @@
-use std::{ptr::null_mut, sync::Arc};
+use std::{ptr::null_mut, collections::HashMap};
 
-use crate::{
+use sfs_global::global::network::config::CHUNK_SIZE;
+use sfs_rdma::{
     chunk_operation::ChunkInfo,
     rdma::RDMAContext,
     transfer::{ChunkMetadata, MessageType, TransferMetadata},
-    CHUNK_SIZE, RDMA_READ_PORT,
+    RDMA_READ_PORT,
 };
 use libc::{c_void, calloc, in_addr, sockaddr, sockaddr_in, AF_INET, INADDR_LOOPBACK};
 use rdma_sys::{
@@ -23,13 +24,15 @@ use rdma_sys::{
     rdma_cm_id, rdma_conn_param, rdma_create_event_channel, rdma_create_id, rdma_create_qp,
     rdma_destroy_event_channel, rdma_destroy_id, rdma_destroy_qp, rdma_event_str,
     rdma_get_cm_event, rdma_listen,
-    rdma_port_space::RDMA_PS_TCP, rdma_disconnect,
+    rdma_port_space::RDMA_PS_TCP, 
 };
 
-use crate::{
+use sfs_rdma::{
     build_params, chunk_operation::ChunkOp, get_addr, rdma::CQPoller, transfer::Message,
     CQ_CAPACITY, MAX_SGE, MAX_WR,
 };
+
+use crate::server::filesystem::storage_context::StorageContext;
 
 struct SenderServerContext {
     pub buffer: *mut u8,
@@ -41,13 +44,14 @@ struct SenderServerContext {
     pub metadata: ChunkMetadata,
     pub s_ctx: *mut RDMAContext,
 }
-pub(crate) fn sender_server(addr: &String, op: ChunkOp, nthreads: u32) {
+pub(crate) fn sender_server(addr: &String, op: ChunkOp, _nthreads: u32) {
     unsafe {
         let port = RDMA_READ_PORT; //portpicker::pick_unused_port().expect("no port available");
         let mut listener: *mut rdma_cm_id = null_mut();
         let ec = rdma_create_event_channel();
         rdma_create_id(ec, &mut listener, null_mut(), RDMA_PS_TCP);
-        let workers = Arc::new(threadpool::ThreadPool::new(nthreads as usize));
+        let runtime = StorageContext::get_instance().get_runtime();
+        let mut handles = HashMap::new();
 
         let mut server_sockaddr = sockaddr_in {
             sin_family: AF_INET as u16,
@@ -76,7 +80,7 @@ pub(crate) fn sender_server(addr: &String, op: ChunkOp, nthreads: u32) {
         while rdma_get_cm_event(ec, &mut cm_event) == 0 {
             let ret = (*cm_event).status;
             if ret != 0 {
-                println!("CM event has non zero status: {}", ret);
+                println!("CM event {} has non zero status: {}", std::ffi::CStr::from_ptr(rdma_sys::rdma_event_str((*cm_event).event)).to_string_lossy().into_owned(), ret);
                 rdma_ack_cm_event(cm_event);
                 break;
             }
@@ -97,9 +101,9 @@ pub(crate) fn sender_server(addr: &String, op: ChunkOp, nthreads: u32) {
                     assert_eq!(ibv_req_notify_cq(cq, 0), 0);
 
                     let poll_cq = CQPoller::new(comp_channel, pd, on_completion, op.clone());
-                    workers.execute(move || {
+                    handles.insert(cm_id as u64, runtime.spawn_blocking(move || {
                         poll_cq.poll().unwrap();
-                    });
+                    }));
 
                     let mut attr: ibv_qp_init_attr = std::mem::zeroed();
                     attr.send_cq = cq;
@@ -168,6 +172,9 @@ pub(crate) fn sender_server(addr: &String, op: ChunkOp, nthreads: u32) {
                 }
                 RDMA_CM_EVENT_DISCONNECTED => {
                     let cm_id = (*cm_event).id;
+                    let handle = handles.remove(&(cm_id as u64)).unwrap();
+                    handle.abort();
+
                     rdma_ack_cm_event(cm_event);
                     let ctx: *mut SenderServerContext = (*cm_id).context.cast();
                     let s_ctx: *mut RDMAContext = (*ctx).s_ctx;
@@ -213,6 +220,7 @@ fn on_completion(wc: *mut ibv_wc, _pd: *mut ibv_pd, op: &ChunkOp) -> Result<i64,
         let ctx: *mut SenderServerContext = (*id).context.cast();
 
         if (*wc).opcode == IBV_WC_RECV_RDMA_WITH_IMM {
+            post_receive_msg(id);
             let len = u32::from_be((*wc).imm_data_invalidated_rkey_union.imm_data);
             let mut transfer_md = TransferMetadata::default();
             libc::memcpy(
@@ -227,15 +235,14 @@ fn on_completion(wc: *mut ibv_wc, _pd: *mut ibv_pd, op: &ChunkOp) -> Result<i64,
             (*ctx).metadata.offset = transfer_md.offset;
             (*ctx).metadata.size = transfer_md.size;
 
-            post_receive_msg(id);
             (*(*ctx).msg).mtype = MessageType::MSG_READY;
             send_message(id);
             return Ok(0);
         } else if (*wc).opcode & IBV_WC_RECV != 0 {
             if matches!((*(*ctx).msg).mtype, MessageType::MSG_DONE){
-                rdma_disconnect(id);
-                //post_receive_meta(id);
-                return Err(0);
+                //rdma_disconnect(id);
+                post_receive_meta(id);
+                return Ok(0);
             }
             let info = ChunkInfo {
                 chunk_id: (*(*ctx).msg).data,
