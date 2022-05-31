@@ -13,7 +13,7 @@ use sfs_global::global::{
         serde_util::serialize,
     },
 };
-use sfs_rpc::{proto::server::PostResult, post_result};
+use sfs_rpc::{post_result, proto::server::PostResult};
 /*
 pub fn handle_write(input: &WriteData, data: &[u8]) -> PostResult {
     let write_tot = if let Ok(nwrite) = ChunkStorage::write_chunk(

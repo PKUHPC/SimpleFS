@@ -6,7 +6,7 @@ pub struct ServerConfig {
     pub metadir: String,
     pub hosts_file: String,
     pub listen: String,
-    pub output: bool
+    pub output: bool,
 }
 pub const STUFF_WITH_ROCKSDB: bool = true;
 pub const IGNORE_IF_EXISTS: bool = true;

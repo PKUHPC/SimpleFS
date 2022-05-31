@@ -419,11 +419,14 @@ pub fn on_route_resolved(cm_id: *mut rdma_cm_id){
 
         // pre-post receive buffer
         post_receive_msg(cm_id);
-        (*cm_ctx).tx.take().unwrap().send(1).unwrap();
     }
 
 }
-pub fn on_established(_cm_id: *mut rdma_cm_id){
+pub fn on_established(cm_id: *mut rdma_cm_id){
+    unsafe{
+        let cm_ctx = (*cm_id).context as *mut RDMACMContext;
+        (*cm_ctx).tx.take().unwrap().send(1).unwrap(); 
+    }
 }
 pub fn on_disconnect(cm_id: *mut rdma_cm_id){
     unsafe{

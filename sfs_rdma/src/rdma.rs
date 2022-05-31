@@ -3,7 +3,7 @@ use std::{ffi::CStr, ptr::null_mut, thread::JoinHandle};
 use libc::{c_void, calloc, memcpy};
 use rdma_sys::{
     ibv_ack_cq_events, ibv_comp_channel, ibv_context, ibv_cq, ibv_get_cq_event, ibv_pd,
-    ibv_poll_cq, ibv_req_notify_cq, ibv_wc, ibv_wc_status::IBV_WC_SUCCESS, ibv_wc_status_str,
+    ibv_poll_cq, ibv_req_notify_cq, ibv_wc, ibv_wc_status::IBV_WC_SUCCESS, ibv_wc_status_str, ibv_destroy_cq,
 };
 
 use crate::{chunk_operation::ChunkOp, transfer::ChunkTransferTask};
@@ -68,6 +68,7 @@ impl CQPoller {
                     result += ok;
                 }
                 if let Some(res) = done{
+                    ibv_destroy_cq(cq);
                     return res;
                 }
             }

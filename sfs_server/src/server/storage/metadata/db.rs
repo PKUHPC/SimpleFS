@@ -1,7 +1,13 @@
-use std::{path::Path, time::{self, UNIX_EPOCH}};
+use std::{
+    path::Path,
+    time::{self, UNIX_EPOCH},
+};
 
+use futures::SinkExt;
+use grpcio::WriteFlags;
 use libc::{EEXIST, EINVAL};
 use rocksdb::{Options, WriteOptions, DB};
+use sfs_rpc::post_result;
 
 use crate::{
     config::USE_WRITE_AHEAD_LOG,
@@ -155,7 +161,10 @@ impl MetadataDB {
         let op_s = Operand::IncreaseSize {
             size,
             append,
-            time: time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64,
+            time: time::SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64,
         };
         let v = serialize(&op_s);
         if let Err(_e) = self.db.merge_opt(key, v, &self.write_opts) {
@@ -168,7 +177,10 @@ impl MetadataDB {
     pub fn decrease_size(&self, key: &String, size: usize) {
         let op_s = Operand::DecreaseSize {
             size,
-            time: time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs() as i64,
+            time: time::SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64,
         };
         let v = serialize(&op_s);
         if let Err(_e) = self.db.merge_opt(key, v, &self.write_opts) {
@@ -178,20 +190,23 @@ impl MetadataDB {
             );
         }
     }
-    pub fn get_dirents(&self, dir: &String) -> Vec<(String, bool)> {
+    pub async fn get_dirents(
+        &self,
+        dir: &String,
+        sink: &mut grpcio::ServerStreamingSink<sfs_rpc::proto::server::PostResult>,
+    ) {
         let mut root_path = dir.clone();
         if !is_absolute(&root_path) {
             error_msg(
                 "server::storage::metadata::db::get_dirents".to_string(),
                 "dir is not absolute".to_string(),
             );
-            return Vec::new();
+            return;
         }
         if !has_trailing_slash(&root_path) && root_path.len() != 1 {
             root_path.push('/');
         }
         let iter = self.db.prefix_iterator(root_path.as_bytes());
-        let mut entries: Vec<(String, bool)> = Vec::new();
         for (k, v) in iter {
             let s = String::from_utf8(k.to_vec()).unwrap();
             if !s.starts_with(&root_path) || s.len() == root_path.len() {
@@ -205,9 +220,14 @@ impl MetadataDB {
                 continue;
             }
             let md = Metadata::deserialize(&v.to_vec());
-            entries.push((name, S_ISDIR(md.get_mode())));
+            let entry = (name, S_ISDIR(md.get_mode()));
+            sink.send((
+                post_result(0, serialize(entry), vec![0; 0]),
+                WriteFlags::default(),
+            ))
+            .await
+            .unwrap();
         }
-        entries
     }
     #[allow(unused_variables)]
     #[allow(unused_assignments)]

@@ -1,12 +1,5 @@
-use std::{ptr::null_mut, collections::HashMap};
+use std::{collections::HashMap, ptr::null_mut};
 
-use sfs_global::global::network::config::CHUNK_SIZE;
-use sfs_rdma::{
-    chunk_operation::ChunkInfo,
-    rdma::RDMAContext,
-    transfer::{ChunkMetadata, MessageType, TransferMetadata},
-    RDMA_READ_PORT,
-};
 use libc::{c_void, calloc, in_addr, sockaddr, sockaddr_in, AF_INET, INADDR_LOOPBACK};
 use rdma_sys::{
     ibv_access_flags, ibv_alloc_pd, ibv_create_comp_channel, ibv_create_cq, ibv_dealloc_pd,
@@ -24,7 +17,14 @@ use rdma_sys::{
     rdma_cm_id, rdma_conn_param, rdma_create_event_channel, rdma_create_id, rdma_create_qp,
     rdma_destroy_event_channel, rdma_destroy_id, rdma_destroy_qp, rdma_event_str,
     rdma_get_cm_event, rdma_listen,
-    rdma_port_space::RDMA_PS_TCP, 
+    rdma_port_space::RDMA_PS_TCP,
+};
+use sfs_global::global::network::config::CHUNK_SIZE;
+use sfs_rdma::{
+    chunk_operation::ChunkInfo,
+    rdma::RDMAContext,
+    transfer::{ChunkMetadata, MessageType, TransferMetadata},
+    RDMA_READ_PORT,
 };
 
 use sfs_rdma::{
@@ -80,7 +80,13 @@ pub(crate) fn sender_server(addr: &String, op: ChunkOp, _nthreads: u32) {
         while rdma_get_cm_event(ec, &mut cm_event) == 0 {
             let ret = (*cm_event).status;
             if ret != 0 {
-                println!("CM event {} has non zero status: {}", std::ffi::CStr::from_ptr(rdma_sys::rdma_event_str((*cm_event).event)).to_string_lossy().into_owned(), ret);
+                println!(
+                    "CM event {} has non zero status: {}",
+                    std::ffi::CStr::from_ptr(rdma_sys::rdma_event_str((*cm_event).event))
+                        .to_string_lossy()
+                        .into_owned(),
+                    ret
+                );
                 rdma_ack_cm_event(cm_event);
                 continue;
             }
@@ -102,9 +108,12 @@ pub(crate) fn sender_server(addr: &String, op: ChunkOp, _nthreads: u32) {
                     assert_eq!(ibv_req_notify_cq(cq, 0), 0);
 
                     let poll_cq = CQPoller::new(comp_channel, pd, on_completion, op.clone());
-                    handles.insert(cm_id as u64, runtime.spawn_blocking(move || {
-                        poll_cq.poll().unwrap();
-                    }));
+                    handles.insert(
+                        cm_id as u64,
+                        runtime.spawn_blocking(move || {
+                            poll_cq.poll().unwrap();
+                        }),
+                    );
 
                     let mut attr: ibv_qp_init_attr = std::mem::zeroed();
                     attr.send_cq = cq;
@@ -241,7 +250,7 @@ fn on_completion(wc: *mut ibv_wc, _pd: *mut ibv_pd, op: &ChunkOp) -> Result<i64,
             send_message(id);
             return Ok(0);
         } else if (*wc).opcode & IBV_WC_RECV != 0 {
-            if matches!((*(*ctx).msg).mtype, MessageType::MSG_DONE){
+            if matches!((*(*ctx).msg).mtype, MessageType::MSG_DONE) {
                 //rdma_disconnect(id);
                 post_receive_meta(id);
                 return Ok(0);

@@ -352,14 +352,7 @@ impl SfsHandle for ServerHandler {
                     if StorageContext::get_instance().output() {
                         println!("handling get dirents of '{}'....", path);
                     }
-                    let entries = MetadataDB::get_instance().get_dirents(&path.to_string());
-                    for entry in entries {
-                        sink.send((
-                            post_result(0, serialize(entry), vec![0; 0]),
-                            WriteFlags::default(),
-                        ))
-                        .await?
-                    }
+                    MetadataDB::get_instance().get_dirents(&path.to_string(), &mut sink).await;
                 }
                 _ => {
                     println!("invalid option on 'handle_dirents': {:?}", option);

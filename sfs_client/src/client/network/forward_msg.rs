@@ -13,7 +13,6 @@ use sfs_global::global::util::serde_util::{deserialize, serialize};
 use sfs_rdma::chunk_operation::ChunkOp;
 use sfs_rdma::transfer::{ChunkTransferTask, ChunkMetadata};
 use sfs_rpc::post;
-use sfs_rpc::proto::server::PostResult;
 
 #[allow(unused)]
 use crate::client::context::{DynamicContext, StaticContext};
@@ -506,49 +505,37 @@ pub async fn forward_get_dirents(path: &String) -> (i32, Arc<Mutex<OpenFile>>) {
             ),
         ));
     }
-    let mut handles = Vec::new();
-    for (client, post) in posts {
-        handles.push(tokio::spawn(async move {
-            let mut post_results = Vec::new();
-            let mut receiver = client.handle_dirents(&post).unwrap();
-            while let Some(res) = receiver.try_next().await.unwrap() {
-                post_results.push(res);
-            }
-            Ok(post_results) as Result<Vec<PostResult>, i32>
-        }));
-    }
-    let mut open_dir = OpenFile::new(
+    let open_dir = Arc::new(Mutex::new(OpenFile::new(
         path,
         O_RDONLY,
         crate::client::openfile::FileType::SFS_DIRECTORY,
-    );
-    for handle in handles{
-        let post_results = handle.await.unwrap();
-        if let Err(_e) = post_results {
-            println!("fail to get dirents: {} {:?}", path, _e);
-            return (
-                EBUSY,
-                Arc::new(Mutex::new(OpenFile::new(
-                    &"".to_string(),
-                    0,
-                    crate::client::openfile::FileType::SFS_REGULAR,
-                ))),
-            );
-        }
-        let results = post_results.unwrap();
-        for result in results {
-            let entry: (String, bool) = deserialize::<(String, bool)>(&result.data);
-            open_dir.add(
-                entry.0,
-                if entry.1 {
-                    FileType::SFS_DIRECTORY
-                } else {
-                    FileType::SFS_REGULAR
-                },
-            );
-        }
+    )));
+    let mut handles = Vec::new();
+    for (client, post) in posts {
+        let dir = open_dir.clone();
+        handles.push(tokio::spawn(async move {
+            let mut receiver = client.handle_dirents(&post).unwrap();
+            while let Some(res) = receiver.try_next().await.unwrap() {
+                if res.err != 0{
+                    continue;
+                }
+                let entry: (String, bool) = deserialize::<(String, bool)>(&res.data);
+                dir.lock().unwrap().add(
+                    entry.0,
+                    if entry.1 {
+                        FileType::SFS_DIRECTORY
+                    } else {
+                        FileType::SFS_REGULAR
+                    },
+                );
+
+            }
+        }));
     }
-    (0, Arc::new(Mutex::new(open_dir)))
+    for handle in handles{
+        handle.await.unwrap();
+    }
+    (0, open_dir)
 }
 
 pub fn forward_get_fs_config(context: &mut StaticContext) -> bool {

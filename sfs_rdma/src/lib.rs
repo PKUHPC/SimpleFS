@@ -90,7 +90,7 @@ pub fn build_params(params: &mut rdma_conn_param) {
     params.initiator_depth = 3;
     params.responder_resources = 3;
     params.rnr_retry_count = 4;
-    params.retry_count = 4;
+    params.retry_count = 0;
 }
 pub fn build_qp_attr(attr: &mut ibv_qp_init_attr, s_ctx: *mut RDMA) {
     unsafe {

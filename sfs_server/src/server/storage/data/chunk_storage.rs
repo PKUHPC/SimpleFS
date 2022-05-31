@@ -128,7 +128,7 @@ impl ChunkStorage {
         size: u64,
         offset: u64,
     ) -> Result<i64, i32> {
-        let buf = unsafe{std::slice::from_raw_parts(buf.cast(), size as usize)};
+        let buf = unsafe { std::slice::from_raw_parts(buf.cast(), size as usize) };
         if size + offset > CNK.get_chunk_size() {
             error_msg(
                 "server::storage::chunk_storage::write_chunk".to_string(),
@@ -193,7 +193,7 @@ impl ChunkStorage {
             } else {
                 return Err(-1);
             }
-        } 
+        }
         */
         ChunkStorage::init_chunk_space(file_path);
         let chunk_path =
@@ -208,7 +208,7 @@ impl ChunkStorage {
         }
         let f = open_res.unwrap();
         let mut read_tot: u64 = 0;
-        let mut buf = unsafe{std::slice::from_raw_parts_mut(buf, size as usize)};
+        let mut buf = unsafe { std::slice::from_raw_parts_mut(buf, size as usize) };
         while !buf.is_empty() {
             match f.read_at(buf, offset) {
                 Ok(0) => break,

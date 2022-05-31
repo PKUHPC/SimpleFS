@@ -1,12 +1,5 @@
-use std::{ptr::null_mut, collections::HashMap};
+use std::{collections::HashMap, ptr::null_mut};
 
-use sfs_global::global::network::config::CHUNK_SIZE;
-use sfs_rdma::{
-    chunk_operation::ChunkInfo,
-    rdma::RDMAContext,
-    transfer::{ChunkMetadata, TransferMetadata},
-    RDMA_WRITE_PORT,
-};
 use libc::{c_void, calloc, in_addr, sockaddr, sockaddr_in, AF_INET, INADDR_LOOPBACK};
 use rdma_sys::{
     ibv_access_flags, ibv_alloc_pd, ibv_create_comp_channel, ibv_create_cq, ibv_dealloc_pd,
@@ -24,6 +17,13 @@ use rdma_sys::{
     rdma_destroy_event_channel, rdma_destroy_id, rdma_destroy_qp, rdma_event_str,
     rdma_get_cm_event, rdma_listen,
     rdma_port_space::RDMA_PS_TCP,
+};
+use sfs_global::global::network::config::CHUNK_SIZE;
+use sfs_rdma::{
+    chunk_operation::ChunkInfo,
+    rdma::RDMAContext,
+    transfer::{ChunkMetadata, TransferMetadata},
+    RDMA_WRITE_PORT,
 };
 
 use sfs_rdma::{
@@ -47,7 +47,7 @@ struct ReceiverServerContext {
     pub metadata: ChunkMetadata,
     pub s_ctx: *mut RDMAContext,
 
-    pub data_receive: u64
+    pub data_receive: u64,
 }
 pub(crate) fn recver_server(addr: &String, op: ChunkOp, _nthreads: usize) {
     unsafe {
@@ -85,7 +85,13 @@ pub(crate) fn recver_server(addr: &String, op: ChunkOp, _nthreads: usize) {
         while rdma_get_cm_event(ec, &mut cm_event) == 0 {
             let ret = (*cm_event).status;
             if ret != 0 {
-                println!("CM event {} has non zero status: {}", std::ffi::CStr::from_ptr(rdma_sys::rdma_event_str((*cm_event).event)).to_string_lossy().into_owned(), ret);
+                println!(
+                    "CM event {} has non zero status: {}",
+                    std::ffi::CStr::from_ptr(rdma_sys::rdma_event_str((*cm_event).event))
+                        .to_string_lossy()
+                        .into_owned(),
+                    ret
+                );
                 continue;
             }
             match (*cm_event).event {
@@ -106,9 +112,12 @@ pub(crate) fn recver_server(addr: &String, op: ChunkOp, _nthreads: usize) {
                     assert_eq!(ibv_req_notify_cq(cq, 0), 0);
 
                     let poll_cq = CQPoller::new(comp_channel, pd, on_completion, op.clone());
-                    handles.insert(cm_id as u64, runtime.spawn_blocking(move || {
-                        poll_cq.poll().unwrap();
-                    }));
+                    handles.insert(
+                        cm_id as u64,
+                        runtime.spawn_blocking(move || {
+                            poll_cq.poll().unwrap();
+                        }),
+                    );
 
                     let mut attr: ibv_qp_init_attr = std::mem::zeroed();
                     attr.send_cq = cq;

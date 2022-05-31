@@ -1,5 +1,5 @@
 use std::ptr::null_mut;
-use rdma_sys::{rdma_event_channel, rdma_cm_event, rdma_get_cm_event, rdma_ack_cm_event, rdma_event_str, rdma_cm_event_type::{RDMA_CM_EVENT_ESTABLISHED, RDMA_CM_EVENT_DISCONNECTED, RDMA_CM_EVENT_ADDR_RESOLVED, RDMA_CM_EVENT_ROUTE_RESOLVED}, rdma_resolve_route, rdma_conn_param, rdma_connect, rdma_cm_id};
+use rdma_sys::{rdma_event_channel, rdma_cm_event, rdma_get_cm_event, rdma_ack_cm_event, rdma_event_str, rdma_cm_event_type::{RDMA_CM_EVENT_ESTABLISHED, RDMA_CM_EVENT_DISCONNECTED, RDMA_CM_EVENT_ADDR_RESOLVED, RDMA_CM_EVENT_ROUTE_RESOLVED}, rdma_resolve_route, rdma_conn_param, rdma_connect, rdma_cm_id, rdma_destroy_event_channel};
 use sfs_rdma::{build_params, rdma::RDMAContext};
 use tokio::sync::oneshot::{Sender};
 
@@ -17,6 +17,7 @@ pub fn process_cm_event(ec: u64){
     unsafe{
         let ec = ec as *mut rdma_event_channel;
         let mut cm_event: *mut rdma_cm_event = null_mut();
+        let mut connected_id = 0;
         
         while rdma_get_cm_event(ec, &mut cm_event) == 0 {
             let ret = (*cm_event).status;
@@ -46,6 +47,8 @@ pub fn process_cm_event(ec: u64){
                 RDMA_CM_EVENT_ESTABLISHED => {
                     let cm_id = (*cm_event).id;
                     rdma_ack_cm_event(cm_event);
+
+                    connected_id += 1;
                     
                     let ctx = (*cm_id).context as *mut RDMACMContext;
                     ((*ctx).on_established)(cm_id);
@@ -56,6 +59,11 @@ pub fn process_cm_event(ec: u64){
                     
                     let ctx = (*cm_id).context as *mut RDMACMContext;
                     ((*ctx).on_disconnect)(cm_id);
+
+                    connected_id -= 1;
+                    if connected_id == 0{
+                        break;
+                    }
                 }
                 _ => {
                     println!(
@@ -68,5 +76,6 @@ pub fn process_cm_event(ec: u64){
                 }
             }
         }
+        rdma_destroy_event_channel(ec);
     }
 }

@@ -2,7 +2,6 @@
 use futures::Future;
 #[allow(unused)]
 use lazy_static::*;
-use tokio::runtime::{Runtime, Builder};
 #[allow(unused)]
 use std::{
     collections::HashMap,
@@ -12,6 +11,7 @@ use std::{
     sync::{Arc, Mutex},
     task::Poll,
 };
+use tokio::runtime::{Builder, Runtime};
 
 #[allow(unused)]
 use crate::{
@@ -124,7 +124,7 @@ impl StorageContext {
                 .thread_stack_size(12 * 1024 * 1024)
                 .build()
                 .unwrap(),
-            output: false
+            output: false,
         }
     }
     pub fn get_rootdir(&self) -> &String {
@@ -212,13 +212,13 @@ impl StorageContext {
     pub fn get_host_id(&self) -> u64 {
         self.host_id_
     }
-    pub fn set_output(&mut self, v: bool){
+    pub fn set_output(&mut self, v: bool) {
         self.output = v;
     }
-    pub fn output(&self) -> bool{
+    pub fn output(&self) -> bool {
         self.output
     }
-    pub fn get_runtime(&self) -> &Runtime{
+    pub fn get_runtime(&self) -> &Runtime {
         &self.rdma_runtime
     }
 }
