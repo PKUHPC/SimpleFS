@@ -93,7 +93,7 @@ pub(crate) fn sender_server(addr: &String, op: ChunkOp, _nthreads: u32) {
             match (*cm_event).event {
                 RDMA_CM_EVENT_CONNECT_REQUEST => {
                     let cm_id = (*cm_event).id;
-                    println!("connecting: {}", cm_id as u64);
+                    //println!("connecting: {}", cm_id as u64);
                     rdma_ack_cm_event(cm_event);
 
                     let mut s_ctx: *mut RDMAContext = RDMAContext::new_ptr();
@@ -182,7 +182,7 @@ pub(crate) fn sender_server(addr: &String, op: ChunkOp, _nthreads: u32) {
                 }
                 RDMA_CM_EVENT_DISCONNECTED => {
                     let cm_id = (*cm_event).id;
-                    println!("disconnected: {}", cm_id as u64);
+                    //println!("disconnected: {}", cm_id as u64);
                     let handle = handles.remove(&(cm_id as u64)).unwrap();
                     handle.abort();
 
@@ -261,8 +261,9 @@ fn on_completion(wc: *mut ibv_wc, _pd: *mut ibv_pd, op: &ChunkOp) -> Result<i64,
                 data: (*ctx).buffer,
             };
             // read chunk
-            let len = op.submit(info).unwrap();
+            let res = op.submit(info);
 
+            let len = if let Err(_e) = res {0} else {res.unwrap()};
             // send to receiver client
             let mut wr: ibv_send_wr = std::mem::zeroed();
             wr.wr_id = id as u64;

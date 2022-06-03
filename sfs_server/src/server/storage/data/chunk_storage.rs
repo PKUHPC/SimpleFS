@@ -198,13 +198,13 @@ impl ChunkStorage {
         ChunkStorage::init_chunk_space(file_path);
         let chunk_path =
             ChunkStorage::absolute(&ChunkStorage::get_chunks_path(file_path, chunk_id));
-        let open_res = std::fs::OpenOptions::new().read(true).open(chunk_path);
+        let open_res = std::fs::OpenOptions::new().read(true).open(chunk_path.as_str());
         if let Err(_e) = open_res {
             error_msg(
                 "server::storage::chunk_storage::read_chunk".to_string(),
-                "fail to open chunk file".to_string(),
+                format!("fail to open chunk file {}", chunk_path),
             );
-            return Err(-1);
+            return Err(-2);
         }
         let f = open_res.unwrap();
         let mut read_tot: u64 = 0;

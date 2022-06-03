@@ -9,7 +9,7 @@
 /sfs_rdma/target
 /sfs_rdma/cargo.lock
 /.vscode
-/wrapper/libsfs_client.a
+
 /wrapper/call_rust
 /wrapper/hostfile
 /sfs_server/hostfile
@@ -20,6 +20,11 @@
 /wrapper/test.cpp
 /wrapper/a.out
 /wrapper/build_test.sh
+/wrapper/build
+/wrapper/libsyscall_intercept.a
+/wrapper/libsyscall_intercept.so
+/wrapper/libsyscall_intercept.so.0
+/wrapper/libsyscall_intercept.so.0.1.0
 
 /arch.sh
 /sfs_1.tar

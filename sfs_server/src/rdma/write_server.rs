@@ -97,7 +97,7 @@ pub(crate) fn recver_server(addr: &String, op: ChunkOp, _nthreads: usize) {
             match (*cm_event).event {
                 RDMA_CM_EVENT_CONNECT_REQUEST => {
                     let cm_id = (*cm_event).id;
-                    println!("connecting: {}", cm_id as u64);
+                    //println!("connecting: {}", cm_id as u64);
                     rdma_ack_cm_event(cm_event);
 
                     let mut s_ctx: *mut RDMAContext = RDMAContext::new_ptr();
@@ -187,7 +187,7 @@ pub(crate) fn recver_server(addr: &String, op: ChunkOp, _nthreads: usize) {
                 }
                 RDMA_CM_EVENT_DISCONNECTED => {
                     let cm_id = (*cm_event).id;
-                    println!("disconnected: {}", cm_id as u64);
+                    //println!("disconnected: {}", cm_id as u64);
                     let handle = handles.remove(&(cm_id as u64)).unwrap();
                     handle.abort();
 
