@@ -30,11 +30,7 @@ extern "C" {
 }
 */
 
-#[allow(dead_code)]
-pub static MAX_OPEN_FDS: u32 = 10000000;
 pub static MIN_INTERNAL_FD: i32 = 1000000;
-#[allow(dead_code)]
-pub static MAX_USER_FDS: i32 = MIN_INTERNAL_FD;
 pub static MAX_INTERNAL_FDS: i32 = 15000000;
 
 static AT_FDCWD: i32 = -100;
@@ -468,8 +464,6 @@ impl StaticContext {
         drop(idx_guard);
         return Some(self.read_cm_ids.get(&host_id).unwrap().get(idx).unwrap().lock().unwrap());
     }
-    pub fn protect_user_fds() {}
-    pub fn unprotect_user_fds() {}
 }
 impl Drop for StaticContext{
     fn drop(&mut self) {

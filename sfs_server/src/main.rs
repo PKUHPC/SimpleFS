@@ -144,6 +144,7 @@ fn handle_request(post: &Post) -> PostResult {
                 update_data.append,
             );
             let extra = vec![0; 0];
+            // stuffing is disabled due to that RDMA is added to this project
             if ENABLE_STUFFING {
                 /*
                 let md = Metadata::deserialize(&MetadataDB::get_instance().get(&path).unwrap());

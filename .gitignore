@@ -36,3 +36,5 @@
 /sfs_global/vendor
 /sfs_rpc/vendor
 /sfs_rdma/vendor
+
+/delete

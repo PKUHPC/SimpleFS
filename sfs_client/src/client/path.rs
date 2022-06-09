@@ -162,42 +162,13 @@ pub fn get_sys_cwd() -> String {
         );
     }
     return path;
-    /*
-    let temp = [0; max_length as usize];
-    unsafe { syscall_no_intercept(SYS_getcwd, temp.as_ptr() as *mut c_char, max_length) };
-    if temp[0] as char != SEPERATOR {
-        error_msg(
-            "client::path::get_sys_cwd".to_string(),
-            "current directory is unreachable".to_string(),
-        );
-        return "".to_string();
-    }
-    return String::from_utf8(temp.to_vec()).unwrap();
-    */
 }
 pub fn set_cwd(path: &String, internal: bool) -> i32 {
     if internal {
-        //let sys_res = set_sys_cwd(StaticContext::get_instance().get_mountdir());
-        //if sys_res != 0 {
-        //    return sys_res;
-        //}
         set_env_cwd(path);
     } else {
-        //let sys_res = set_sys_cwd(path);
-        //if sys_res != 0 {
-        //    return sys_res;
-        //}
         unset_env_cwd();
     }
     DynamicContext::get_instance().set_cwd(path.clone());
     return 0;
 }
-/*
-#[link(name = "syscall_intercept", kind = "static")]
-extern "C" {
-    pub fn syscall_no_intercept(
-        syscall_number: ::std::os::raw::c_long,
-        ...
-    ) -> ::std::os::raw::c_long;
-}
-*/

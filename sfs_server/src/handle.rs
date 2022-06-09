@@ -14,57 +14,6 @@ use sfs_global::global::{
     },
 };
 use sfs_rpc::{post_result, proto::server::PostResult};
-/*
-pub fn handle_write(input: &WriteData, data: &[u8]) -> PostResult {
-    let write_tot = if let Ok(nwrite) = ChunkStorage::write_chunk(
-        &input.path.to_string(),
-        input.chunk_id,
-        data,
-        input.write_size,
-        input.offset as u64,
-    ) {
-        nwrite
-    } else {
-        0
-    };
-    let post_res = post_result(0, serialize(write_tot), vec![0; 0]);
-    return post_res;
-}
-*/
-/*
-
-#[allow(unused_variables)]
-#[allow(unused_assignments)]
-pub fn handle_read(input: &ReadData) -> PostResult {
-    let read_res = read_file(&input);
-    let post_res = post_result(
-        0,
-        serialize(&ReadResult {
-            nreads: read_res.1,
-            chunk_id: read_res.0,
-        }),
-        read_res.2,
-    );
-    return post_res;
-}
-
-fn read_file(args: &ReadData<'_>) -> (u64, u64, Vec<u8>) {
-    //println!("{:?}", args);
-    //println!("reading...");
-    let mut buf = vec![0; CHUNK_SIZE as usize];
-    if let Ok(nreads) = ChunkStorage::read_chunk(
-        &args.path.to_string(),
-        args.chunk_id,
-        &mut buf,
-        args.read_size,
-        args.offset as u64,
-    ) {
-        (args.chunk_id, nreads, buf[0..(nreads as usize)].to_vec())
-    } else {
-        (args.chunk_id, 0, vec![0; 1])
-    }
-}
-*/
 
 pub fn handle_trunc(input: TruncData<'_>) -> PostResult {
     let path = input.path;

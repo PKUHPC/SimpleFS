@@ -15,10 +15,11 @@ use rdma_sys::{
     rdma_event_str, rdma_get_cm_event,
 };
 pub mod chunk_operation;
-mod rc_ss;
 pub mod rdma;
-mod sc_rs;
 pub mod transfer;
+// these implementation is not used in system, and is only used for debugging and testing
+mod sc_rs;
+mod rc_ss;
 
 pub static CQ_CAPACITY: i32 = 16;
 pub static MAX_SGE: u32 = 2;

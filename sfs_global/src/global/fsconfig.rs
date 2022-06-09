@@ -46,4 +46,5 @@ impl Clone for SFSConfig {
 pub static ZERO_BUF_BEFORE_READ: bool = false;
 pub static CWD: &str = "SFS_CWD";
 pub static ENABLE_OUTPUT: bool = false;
+// stuffing is disabled due to that RDMA is added to this project
 pub static ENABLE_STUFFING: bool = false;
