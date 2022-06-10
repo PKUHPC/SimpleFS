@@ -1,92 +1,119 @@
-# SimpleFS
+# SimpFS
 
-An implementation for parallel file system with rust
+An simplified implementation for parallel file system with Rust which still remains in development.
 
-## Getting started
+## Introduction
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+---
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+This project is based on GekkoFS, an open source burst buffer file system.
 
-## Add your files
+Solution to modules in this project:
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/ee/gitlab-basics/add-file.html#add-a-file-using-the-command-line) or push an existing Git repository with the following command:
+- System call interception: syscall_intercept
+- Async framework: Tokio
+- RPC: grpc-rs (grpcio)
+- RDMA: custom implementation based on libibverbs and rdmacm (used Rust wrapper provided by rdma-sys)
+- Metadata storage: RocksDB
+- Data chunk storage: Local filesystem with std file IO
+
+Some information about development environment:
+
+- Operating system: Ubuntu 20.04 LTS (with kernel 5.4.0-109-generic)
+- InfiniBand Adapter: Mellanox Technologies MT27800 Family [ConnectX-5]
+- RDMA Driver: MLNX_OFED_LINUX-5.6-1.0.3.3-ubuntu20.04-x86_64
+
+## Dependencies (apt package name)
+
+----
+
+- protobuf-compiler
+- libssl-dev
+- libcapstone-dev
+- (RDMA library installed by your RDMA adapter driver, including libibverbs, librdmacm, .etc)
+
+## Todo
+
+---
+
+- combine RDMA with Rust async
+- optimize metadata read
+- apply RDMA to other operation
+- stuffing and some optimization
+- ...
+
+## How to use
+
+----
+
+This project use vendor source in development, so 'cargo build' and 'cargo run' will fail on default. To make cargo work properly, there are 2 options: delete .cargo directory in each folder (sfs_client, sfs_server, sfs_rdma, sfs_rpc and sfs_global) or run './vendor.sh' in folders mentioned above to get dependencies before running build command.
+
+#### Client:
+
+I. Execute command below:
+
+```shell
+cd wrapper
+./build.sh # if shell script (clean.sh, build_intercept.sh, build.sh) can not get executed, use 'chmod 777 $name_of_script$' to fix that
+```
+
+II. Then if build is successfully finished, these dynamic library will be added to wrapper folder
+
+- libsfs_client.so
+- libsyscall_intercept.so
+- libsyscall_intercept.so.0
+- libsyscall_intercept.so.1.0
+
+III. You need to copy these file to the folder you want to install the client.
+
+IV. To use the client, a 'hostfile' needs to be place in the working directory, which should contain the address of all server nodes. Content in 'hostfile' should be like:
 
 ```
-cd existing_repo
-git remote add origin https://cccode.pku.edu.cn/lizirui/simplefs.git
-git branch -M master
-git push -uf origin master
+localhost 127.0.0.1
+servername 192.168.1.2
+$node_hostname$ $node_ipv4_address$
 ```
 
-## Integrate with your tools
+V. If you want to execute a command with client enabled, you need to set up 'LD_PRELOAD' and 'LD_LIBRARY_PATH' environment variable.
 
-- [ ] [Set up project integrations](https://cccode.pku.edu.cn/lizirui/simplefs/-/settings/integrations)
+``` shell
+LD_LIBRARY_PATH=$path_to_syscall_intercept$ LD_PRELOAD=$path_to_libsfs_client$ ./your_application
+```
 
-## Collaborate with your team
+#### Server:
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Automatically merge when pipeline succeeds](https://docs.gitlab.com/ee/user/project/merge_requests/merge_when_pipeline_succeeds.html)
+I. Execute command below:
 
-## Test and Deploy
+```shell
+cd sfs_server
+cargo build
+```
 
-Use the built-in continuous integration in GitLab.
+II. Then you have 2 methods to start server
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/index.html)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing(SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+- method 1: use cargo
 
-***
+  ```shell
+  cargo run
+  ```
 
-# Editing this README
+- method 2: use executable binary
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!).  Thank you to [makeareadme.com](https://www.makeareadme.com/) for this template.
+  After 'cargo build' a executable file named 'sfs_server' will be generated in "sfs_server/target/debug", you can just run the executable file to start server
 
-## Suggestions for a good README
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+III. To make sure that server can work properly, a 'hostfile' and a 'config.json' are needed to be placed in the working directory. The 'hostfile' is just like what is needed in client. The 'config.json' should be something like this:
 
-## Name
-Choose a self-explaining name for your project.
+```json
+{
+    "mountdir": "$mountdir",
+    "rootdir": "$rootdir",
+    "metadir": "$metadir",
+    "hosts_file": "$hostfile_path",
+    "listen": "$server_listen_address",
+    "output": true // or false
+}
+```
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+"rootdir" is the position that server store data chunks and "metadir" points to the folder of metadata database. "hosts_file" describes the location of 'hostfile'. And the server will listen on the address from "listen" field. If "output" is set to "true", debug info will be printed on standard output.
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
-
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
-
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
-
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
-
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
-
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
-
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
-
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
-
-## License
-For open source projects, say how it is licensed.
-
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+"moutdir" is the mount directory of client, this should be set by client. But for the convenience in development, client will fetch this location from server. This may get changed in the future.

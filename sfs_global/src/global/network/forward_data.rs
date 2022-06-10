@@ -65,12 +65,10 @@ pub struct TruncData<'a> {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DirentData<'a> {
     pub path: &'a str,
-    // RDMA buffer?
 }
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct PreCreateData<'a> {
     pub path: &'a str,
     pub chunks: Vec<u64>
-    // RDMA buffer?
 }

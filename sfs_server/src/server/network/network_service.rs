@@ -8,6 +8,7 @@ use sfs_rpc::{
 
 use sfs_global::global::network::post::{option2i, PostOption};
 
+// This module is for pre-create, but it is currently disabled
 pub struct NetworkService {}
 impl NetworkService {
     pub fn post<T: Serialize>(

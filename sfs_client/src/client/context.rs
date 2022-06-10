@@ -23,13 +23,6 @@ use sfs_global::global::util::path_util::{
 
 use super::path::resolve;
 
-/*
-#[link(name = "syscall_no_intercept", kind = "static")]
-extern "C" {
-    pub fn syscall_no_intercept(syscall_number: i64, ...) -> i32;
-}
-*/
-
 pub static MIN_INTERNAL_FD: i32 = 1000000;
 pub static MAX_INTERNAL_FDS: i32 = 15000000;
 

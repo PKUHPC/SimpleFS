@@ -11,7 +11,7 @@ use regex::Regex;
 use sfs_global::global::{
     distributor::SimpleHashDistributor,
     endpoint::SFSEndpoint,
-    fsconfig::{ENABLE_OUTPUT, HOSTFILE_PATH},
+    fsconfig::{HOSTFILE_PATH},
     util::env_util::{get_hostname, get_var},
 };
 use sfs_rpc::proto::server_grpc::SfsHandleClient;
@@ -50,7 +50,7 @@ fn load_host_file(path: &String) -> Result<Vec<(String, String)>, Error> {
 // no connect actually
 fn connect_hosts(hosts: &mut Vec<(String, String)>, context: &mut NetworkContext) -> bool {
     let local_hostname = get_hostname(true);
-    if ENABLE_OUTPUT {
+    if StorageContext::get_instance().output() {
         println!("localhost name: {}", local_hostname);
     }
     let mut local_host_found = false;
@@ -110,7 +110,7 @@ fn init_network() -> NetworkContext {
     let mut hosts = read_host_file();
 
     let mut context = NetworkContext::new();
-    if ENABLE_OUTPUT {
+    if StorageContext::get_instance().output() {
         println!("found hosts: {:?}", hosts);
     }
     if !connect_hosts(&mut hosts, &mut context) {

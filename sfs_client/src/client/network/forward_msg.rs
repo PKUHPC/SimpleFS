@@ -51,7 +51,6 @@ pub fn forward_stat(path: &String) -> Result<Vec<u8>, i32> {
             "client::network::forward_stat".to_string(),
             format!("error {} occurs while fetching file stat", e),
         );
-        println!("{:?}", e);
         return Err(EBUSY);
     }
     let result = post_res.unwrap();
@@ -409,7 +408,7 @@ pub async fn forward_write(
             );
         }
         else{
-            println!("no available pre-created cm id");
+            error_msg("error::client::forward_write".to_string(), "no available pre-created cm id".to_string());
             return (EBUSY, 0);
         }
     }
@@ -470,7 +469,7 @@ pub async fn forward_read(
             )
         }
         else{
-            println!("no available pre-created cm id");
+            error_msg("error::client::forward_read".to_string(), "no available pre-created cm id".to_string());
             return (EBUSY, 0);
         }
     }

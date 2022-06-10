@@ -65,16 +65,3 @@ pub fn option2i(option: &PostOption) -> i32 {
         PostOption::Unknown => -1,
     }
 }
-/*
-#[derive(Serialize, Deserialize, Debug)]
-pub struct Post{
-    pub option: PostOption,
-    pub data: Vec<u8>
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct PostResult{
-    pub err: i32,
-    pub data: Vec<u8>
-}
-*/

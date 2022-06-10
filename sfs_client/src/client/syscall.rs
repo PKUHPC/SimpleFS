@@ -305,73 +305,6 @@ pub extern "C" fn sfs_stat(path: *const c_char, buf: *mut stat, _follow_links: b
     metadata_to_stat(&path, md, buf);
     return 0;
 }
-/*
-#[no_mangle]
-pub extern "C" fn sfs_statx(
-    _dirfs: i32,
-    path: *const c_char,
-    _flags: i32,
-    _mask: u32,
-    buf: *mut statx,
-    follow_links: bool,
-) -> i32 {
-    let path = unsafe { CStr::from_ptr(path).to_string_lossy().into_owned() };
-    if interception_enabled() {
-        println!("{}", path);
-    }
-    let md_res = get_metadata(&path, follow_links);
-    if let Err(_e) = md_res {
-        return -1;
-    }
-    let md = md_res.unwrap();
-    let mut stat: stat = stat {
-        st_dev: 0,
-        st_ino: 0,
-        st_nlink: 0,
-        st_mode: 0,
-        st_uid: 0,
-        st_gid: 0,
-        __pad0: 0,
-        st_rdev: 0,
-        st_size: 0,
-        st_blksize: 0,
-        st_blocks: 0,
-        st_atime: 0,
-        st_mtime: 0,
-        st_ctime: 0,
-        st_atime_nsec: 0,
-        st_mtime_nsec: 0,
-        st_ctime_nsec: 0,
-    };
-
-    metadata_to_stat(&path, md, &mut stat);
-    unsafe {
-        (*buf).stx_mask = 0;
-        (*buf).stx_blksize = stat.st_blksize as u32;
-        (*buf).stx_attributes = 0;
-        (*buf).stx_nlink = stat.st_nlink as u32;
-        (*buf).stx_uid = stat.st_uid;
-        (*buf).stx_gid = stat.st_gid;
-        (*buf).stx_mode = stat.st_mode as u16;
-        (*buf).stx_ino = stat.st_ino;
-        (*buf).stx_size = stat.st_size as u64;
-        (*buf).stx_blocks = stat.st_blocks as u64;
-        (*buf).stx_attributes_mask = 0;
-
-        (*buf).stx_atime.tv_sec = stat.st_atime;
-        (*buf).stx_atime.tv_nsec = stat.st_atime as u32;
-
-        (*buf).stx_mtime.tv_sec = stat.st_mtime;
-        (*buf).stx_mtime.tv_nsec = stat.st_mtime as u32;
-
-        (*buf).stx_ctime.tv_sec = stat.st_ctime;
-        (*buf).stx_ctime.tv_nsec = stat.st_ctime as u32;
-
-        (*buf).stx_btime = (*buf).stx_atime;
-    }
-    return 0;
-}
-*/
 #[no_mangle]
 pub extern "C" fn sfs_statfs(buf: *mut statfs) -> i32 {
     let ret = forward_get_chunk_stat();
@@ -669,9 +602,7 @@ fn internal_pread(
         }
     }
     let path = f.get_path();
-    let read_res = //forward_read(path, buf, offset, count);
-        StaticContext::get_instance().get_runtime().block_on(forward_read(path, buf, offset, count));
-    //println!("finish: {}", read_res.0);
+    let read_res = StaticContext::get_instance().get_runtime().block_on(forward_read(path, buf, offset, count));
     if read_res.0 != 0 {
         error_msg(
             "client::sfs_pread".to_string(),

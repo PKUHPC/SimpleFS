@@ -144,6 +144,7 @@ fn handle_request(post: &Post) -> PostResult {
                 update_data.append,
             );
             let extra = vec![0; 0];
+            // stuffing the first chunk
             // stuffing is disabled due to that RDMA is added to this project
             if ENABLE_STUFFING {
                 /*
@@ -216,27 +217,6 @@ fn handle_request(post: &Post) -> PostResult {
             handle_precreate(&data);
             return post_result(0, vec![0; 0], vec![0; 0]);
         }
-        /*
-        Write => {
-            let write_data: WriteData = deserialize::<WriteData>(&post.data);
-            if StorageContext::get_instance().output() {
-                println!("handling stream write of '{}'....", write_data.path);
-                println!("  - {:?}", write_data);
-            }
-            let op = ChunkOp{
-                path: write_data.path.to_string(),
-                offset: write_data.offset as u64 % CHUNK_SIZE,
-                chunk_start: offset_to_chunk_id(write_data.offset, CHUNK_SIZE),
-                size: write_data.write_size,
-                op: ChunkStorage::write_chunk,
-            };
-            let result = RDMA::recver_client(&write_data.rdma_addr.to_string(), write_data.rdma_port, op);
-            if let Err(e) = result{
-                return post_result(e, vec![0; 0], vec![0; 0]);
-            }
-            let write_tot = result.unwrap();
-            return post_result(0, serialize(write_tot), vec![0; 0]);
-        }*/
         _ => {
             println!("invalid option on 'handle': {:?}", option);
             return post_result(EINVAL, vec![0; 0], vec![0; 0]);
@@ -299,6 +279,7 @@ impl SfsHandle for ServerHandler {
         ctx.spawn(f);
     }
 
+    // This function used to handle streamed write and read request, currently it's replaced by RDMA
     fn handle_stream(
         &mut self,
         ctx: grpcio::RpcContext,
@@ -309,15 +290,6 @@ impl SfsHandle for ServerHandler {
             while let Some(post) = stream.try_next().await? {
                 let option = i2option(post.option);
                 match option {
-                    /*
-                    Read => {
-                        let read_args: ReadData = deserialize::<ReadData>(&post.data);
-                        if StorageContext::get_instance().output() {
-                            println!("handling stream read of '{}'....", read_args.path);
-                        }
-                        sink.send((handle_read(&read_args), WriteFlags::default()))
-                            .await?;
-                    }*/
                     _ => {
                         println!("invalid option on 'handle_stream': {:?}", option);
                         sink.send((

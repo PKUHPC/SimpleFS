@@ -54,6 +54,5 @@ pub fn partial_merge(
     existing_val: Option<&[u8]>,
     operands: &MergeOperands,
 ) -> Option<Vec<u8>> {
-    //println!("partial merging ...");
     None
 }

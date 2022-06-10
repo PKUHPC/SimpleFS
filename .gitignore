@@ -1,13 +1,13 @@
 /sfs_client/target
-/sfs_client/cargo.lock
+/sfs_client/Cargo.lock
 /sfs_server/target
-/sfs_server/cargo.lock
+/sfs_server/Cargo.lock
 /sfs_rpc/target
-/sfs_rpc/cargo.lock
+/sfs_rpc/Cargo.lock
 /sfs_global/target
-/sfs_global/cargo.lock
+/sfs_global/Cargo.lock
 /sfs_rdma/target
-/sfs_rdma/cargo.lock
+/sfs_rdma/Cargo.lock
 /.vscode
 
 /wrapper/call_rust
@@ -25,6 +25,8 @@
 /wrapper/libsyscall_intercept.so
 /wrapper/libsyscall_intercept.so.0
 /wrapper/libsyscall_intercept.so.0.1.0
+/wrapper/config.json
+/wrapper/hostfile
 
 /arch.sh
 /sfs_1.tar
@@ -36,5 +38,3 @@
 /sfs_global/vendor
 /sfs_rpc/vendor
 /sfs_rdma/vendor
-
-/delete
