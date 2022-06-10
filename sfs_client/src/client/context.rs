@@ -298,8 +298,6 @@ pub struct StaticContext {
     internal_fds_must_relocate_: bool,
     runtime_: Arc<Runtime>,
 
-    pub rdma_addr: String,
-
     pub event_channel: u64,
     pub handle: Option<JoinHandle<()>>,
 
@@ -333,7 +331,6 @@ impl StaticContext {
             auto_sm_: false,
             internal_fds_must_relocate_: true,
             init_flag: false,
-            rdma_addr: "127.0.0.1".to_string(),
             runtime_: Arc::new(
                 Builder::new_current_thread()
                     .enable_all()
@@ -425,9 +422,6 @@ impl StaticContext {
     }
     pub fn get_runtime(&self) -> Arc<Runtime> {
         Arc::clone(&self.runtime_)
-    }
-    pub fn get_rdma_addr(&self) -> &String {
-        &self.rdma_addr
     }
     pub fn get_event_channel(&self) -> *mut rdma_event_channel{
         self.event_channel as *mut rdma_event_channel
