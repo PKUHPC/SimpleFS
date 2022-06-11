@@ -1,6 +1,6 @@
 # SimpleFS
 
-An implementation for parallel file system with rust
+An simplified implementation for parallel file system with Rust
 
 ## Introduction
 
@@ -17,6 +17,12 @@ Solution to modules in this project:
 - Metadata storage: RocksDB
 - Data chunk storage: Local filesystem with std file IO
 
+Some information about development environment:
+
+- Operating system: Ubuntu 20.04 LTS (with kernel 5.4.0-109-generic)
+- InfiniBand Adapter: Mellanox Technologies MT27800 Family [ConnectX-5]
+- RDMA Driver: MLNX_OFED_LINUX-5.6-1.0.3.3-ubuntu20.04-x86_64
+
 ## Dependencies (apt package name)
 
 ----
@@ -24,7 +30,7 @@ Solution to modules in this project:
 - protobuf-compiler
 - libssl-dev
 - libcapstone-dev
-- (RDMA library installed by your ib adapter driver, including libibverbs, librdmacm, .etc)
+- (RDMA library installed by your RDMA adapter driver, including libibverbs, librdmacm, .etc)
 
 ## Todo
 
@@ -39,6 +45,8 @@ Solution to modules in this project:
 
 ----
 
+This project use vendor source in development, so 'cargo build' and 'cargo run' will fail on default. To make cargo work properly, there are 2 options: delete .cargo directory in each folder (sfs_client, sfs_server, sfs_rdma, sfs_rpc and sfs_global) or run './vendor.sh' in folders mentioned above to get dependencies before running build command.
+
 #### Client:
 
 I. Execute command below:
@@ -48,7 +56,7 @@ cd wrapper
 ./build.sh # if shell script (clean.sh, build_intercept.sh, build.sh) can not get executed, use 'chmod 777 $name_of_script$' to fix that
 ```
 
-II. Then if build is successfully finished, these file will be added to wrapper folder
+II. Then if build is successfully finished, these dynamic library will be added to wrapper folder
 
 - libsfs_client.so
 - libsyscall_intercept.so
@@ -105,6 +113,6 @@ III. To make sure that server can work properly, a 'hostfile' and a 'config.json
 }
 ```
 
-"rootdir" is the position that server store data chunks and "metadir" points to the folder of metadata database. "hosts_file" describes the location of 'hostfile'. And the server will listen on the address from "listen" field. If "output" is set to "true", debug info will be printed on std output.
+"rootdir" is the position that server store data chunks and "metadir" points to the folder of metadata database. "hosts_file" describes the location of 'hostfile'. And the server will listen on the address from "listen" field. If "output" is set to "true", debug info will be printed on standard output.
 
 "moutdir" is the mount directory of client, this should be set by client. But for the convenience in development, client will fetch this location from server. This may get changed in the future.
