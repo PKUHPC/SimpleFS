@@ -1,4 +1,4 @@
-# SimpFS
+# SimpleFS
 
 A simplified implementation for parallel file system with Rust which still remains in development.
 
