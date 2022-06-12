@@ -1,6 +1,6 @@
 # SimpFS
 
-An simplified implementation for parallel file system with Rust which still remains in development.
+A simplified implementation for parallel file system with Rust which still remains in development.
 
 ## Introduction
 
